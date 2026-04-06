@@ -187,7 +187,7 @@ async function handleTool(name, args) {
       if (args.page_num !== undefined) params.set("page_num", args.page_num);
       if (args.page_size !== undefined) params.set("page_size", args.page_size);
       const query = params.toString() ? `?${params}` : "";
-      return await airwallexRequest("GET", `/api/v1/invoices/list${query}`);
+      return await airwallexRequest("GET", `/api/v1/invoices${query}`);
     }
 
     case "airwallex_get_invoice": {
@@ -222,7 +222,7 @@ async function handleTool(name, args) {
       if (args.name) params.set("name", args.name);
       if (args.page_size) params.set("page_size", args.page_size);
       const query = params.toString() ? `?${params}` : "";
-      return await airwallexRequest("GET", `/api/v1/billing/customers/list${query}`);
+      return await airwallexRequest("GET", `/api/v1/billing/customers${query}`);
     }
 
     case "airwallex_list_bills": {
@@ -231,7 +231,7 @@ async function handleTool(name, args) {
       if (args.page_num !== undefined) params.set("page_num", args.page_num);
       if (args.page_size !== undefined) params.set("page_size", args.page_size);
       const query = params.toString() ? `?${params}` : "";
-      return await airwallexRequest("GET", `/api/v1/bills/list${query}`);
+      return await airwallexRequest("GET", `/api/v1/bills${query}`);
     }
 
     case "airwallex_get_bill": {

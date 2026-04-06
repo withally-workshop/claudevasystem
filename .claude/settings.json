@@ -9,8 +9,8 @@
       }
     },
     "gmail": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@gongrzhe/server-gmail-autoauth-mcp"],
+      "command": "C:\\Program Files\\nodejs\\npx.cmd",
+      "args": ["-y", "@gongrzhe/server-gmail-autoauth-mcp"],
       "env": {}
     }
   }

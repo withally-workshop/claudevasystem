@@ -50,6 +50,7 @@ For each invoice submission extract:
 - Client / campaign
 - Amount + currency
 - Invoice source: [email sent | Slack only | Google Drive link]
+- Invoice number (from PDF if available — if not provided, generate as: `DD-MM-YYYY-[First Initial][Last Name]`, e.g. `01-04-2026-MTan`)
 - Date
 - Payout terms (14 day / 30 day if stated — if not stated, due date = submission date)
 - Any flags noted by the strategist

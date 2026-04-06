@@ -31,6 +31,8 @@ Fields required:
 - Vendor name (creator name)
 - Description (e.g. 'UGC Video — Casetify Campaign')
 - Invoice number, date, due date (if no due date stated, use submission date)
+  - **If no invoice number provided**, generate using format: `DD-MM-YYYY-[First Initial][Last Name]`
+  - Example: `01-04-2026-MTan` for Megan Tan on April 1 2026
 - Amount and currency
 - Attach original invoice PDF/image
 - Save as draft — do not submit until currency confirmed
