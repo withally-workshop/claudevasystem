@@ -106,6 +106,21 @@ const TOOLS = [
     },
   },
   {
+    name: "sheets_list_sheets",
+    description:
+      "List all sheet tab names in a Google Sheets spreadsheet. Use this at the start of any workflow to discover available tabs before reading them.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        spreadsheet_id: {
+          type: "string",
+          description: "The Google Sheets spreadsheet ID (from the URL)",
+        },
+      },
+      required: ["spreadsheet_id"],
+    },
+  },
+  {
     name: "sheets_find_row",
     description:
       "Search a column for a value and return the matching row number. Use to locate an existing invoice entry before updating it.",
@@ -181,6 +196,18 @@ async function handleTool(name, args) {
         updatedRange: response.data.updatedRange,
         updatedCells: response.data.updatedCells,
       };
+    }
+
+    case "sheets_list_sheets": {
+      const response = await sheets.spreadsheets.get({
+        spreadsheetId: args.spreadsheet_id,
+        fields: "sheets.properties.title,sheets.properties.hidden",
+      });
+      const allSheets = response.data.sheets || [];
+      const visibleSheets = allSheets
+        .filter((s) => !s.properties.hidden)
+        .map((s) => s.properties.title);
+      return { sheets: visibleSheets, count: visibleSheets.length };
     }
 
     case "sheets_find_row": {

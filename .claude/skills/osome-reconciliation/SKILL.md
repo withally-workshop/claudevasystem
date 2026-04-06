@@ -1,10 +1,12 @@
 # Skill: Osome Reconciliation
 
-**Purpose:** Work through Osome's "documents needed" flagged transactions — auto-generate PDFs from Airwallex, stage in Google Drive, and surface anything unresolvable for Noa.
+**SOP Reference:** `references/sops/osome-reconciliation.md` (FIN-001)
+**Purpose:** Work through Eclipse Ventures' flagged "documents needed" transactions in Osome — triage each one, locate the PDF, and compile anything unresolvable for Noa.
+**Invoke when:** Running a reconciliation session against Osome's Documents needed queue.
 
-**Invoke when:** Osome flags transactions as "documents needed."
-
-**Note on Osome API:** Osome has no public API or ingestion email. The upload step remains manual. This skill eliminates the PDF hunt — the only remaining manual step is dragging files from the staging Drive folder into Osome (~2 min).
+**Company:** Eclipse Ventures Pte. Ltd.
+**Deadline:** End of April 2026 (tax submission)
+**Remaining:** ~700 of original 1,489 transactions
 
 ---
 
@@ -12,106 +14,105 @@
 
 When this skill is invoked:
 
-### Step 1 — Get the flagged transactions
-Ask the user to paste all transactions currently flagged in Osome as "documents needed."
+### Step 1 — Get today's batch
+Ask: "How many transactions are you working through today, and what's the current highest amount in the queue?"
 
-Capture per transaction:
-- Date
-- Vendor / Description
-- Amount + Currency
-- Account (e.g., Airwal...USD·5725, SGD·7476)
+Confirm sort order before starting: **Osome → Transactions → Documents needed → Sort: Amount, largest first.**
 
-### Step 2 — Triage each transaction by source
+### Step 2 — For each transaction, ask for the details
+User provides: date, description/vendor, amount, card (e.g. **5435).
 
-| Type | Where to look |
-|------|--------------|
-| Payout to individual (name visible) | Airwallex API → confirmation letter PDF |
-| SaaS / subscription (ClickUp, Typeform, Notion, etc.) | Gmail — auto-saved to Drive via Zapier |
-| Supplier / transfer payment | Airwallex API → confirmation letter PDF |
-| PayPal payment | Airwallex receipt or PayPal email |
-| Grocery / personal (e.g., FairPrice) | Flag for Noa — likely not a business expense |
-| Unknown | Flag for Noa |
+Classify immediately using this decision tree:
 
-### Step 3 — Airwallex API: Generate confirmation letter PDFs
-For each Airwallex payout transaction:
+| Type | Indicator | Action |
+|------|-----------|--------|
+| Creator / Contractor | Person name or company name (e.g. "Janvenice Cruz", "Samsotza Enterprise") | Step 3A — Airwallex |
+| SaaS / Subscription | Tool name (HeyGen, Magicbrief, Canva, ClickUp, Typeform, etc.) | Step 3B — Gmail |
+| Insense | "Insense" in description | Step 3C — Email template |
+| Payroll / Internal | Amanda, Joshua, team members | Step 3A — Airwallex |
+| Unknown / Ambiguous | Cannot classify | Try Airwallex first, then Gmail |
 
-**Step 3a — Authenticate**
+### Step 3A — Airwallex path
+Output exact search instructions:
+> Go to app.airwallex.com → Bills > Paid → search: **[vendor name]**
+> Match by: amount **[amount]** + date near **[date]**
+> Download invoice PDF from left panel of Bill Details
+> Upload to Osome transaction
+
+### Step 3B — Gmail path
+Output ready-to-run Gmail search string for noa@kravemedia.co:
+> Search: `[vendor name] has:attachment`
+> Look for: "Your receipt from..." or "Invoice #..." near [date]
+> Download PDF attachment → upload to Osome
+
+If not found in work Gmail:
+> Repeat search in takhelnoa@gmail.com
+
+HeyGen note: Two PDFs attached — upload the **Invoice PDF**, not the Receipt PDF.
+
+### Step 3C — Insense path
+Output a pre-filled email draft:
+
 ```
-POST https://api.airwallex.com/api/v1/authentication/login
-Headers: x-client-id: [CLIENT_ID], x-api-key: [API_KEY]
-Returns: access_token (valid 30 min)
+To: support@insense.pro
+Subject: Invoice Request — Eclipse Ventures Pte. Ltd.
+
+Hi Insense Support,
+
+Could you please provide an invoice or payment receipt for the
+following transaction for our accounting records?
+
+  Account: Eclipse Ventures Pte. Ltd.
+  Transaction Date: [DATE]
+  Amount: [AMOUNT] USD
+  Reference: [TRANSACTION REF]
+
+Thank you,
+Noa Nederpelt / Eclipse Ventures Pte. Ltd.
 ```
 
-**Step 3b — Find the transaction ID**
+### Step 4 — Cannot find (escalate to Noa)
+Only after checking: Airwallex + noa@kravemedia.co + takhelnoa@gmail.com + card number search.
+
+Accumulate all unresolvable transactions during the session. At end of session, compile and send to Noa via Slack:
+
 ```
-GET https://api.airwallex.com/api/v1/transfers?page_num=0&page_size=20
-Headers: Authorization: Bearer [access_token]
-Filter by: created_at (date), amount, beneficiary name
-Returns: transfer.id
-```
-
-**Step 3c — Generate confirmation letter PDF**
-```
-POST https://api.airwallex.com/api/v1/confirmation_letters/create
-Headers: Authorization: Bearer [access_token]
-Body: { "transaction_id": "[transfer.id]", "format": "STANDARD" }
-Returns: PDF binary stream
-```
-
-**Step 3d — Save to Google Drive**
-Save each PDF to: `Osome Uploads / [YYYY-MM] / [Date]_[Vendor]_[Amount].pdf`
-
-### Step 4 — Gmail receipts (SaaS transactions)
-These are handled automatically by Zapier (see Automation section below). If the Zapier zap is running, the PDF will already be in the Drive folder. If not, output Gmail search strings:
-
-> `from:[vendor] subject:receipt OR invoice after:[YYYY/MM/DD] before:[YYYY/MM/DD]`
-
-### Step 5 — Compile the unresolved list
-Any transaction not found in Airwallex or Gmail gets escalated.
-
-Output a Slack message:
-
----
-
 *Osome Reconciliation — [DATE]*
+*Unresolvable Transactions — Need Your Input*
 
-*Staged for Upload ([N] transactions)*
-- PDFs ready in Google Drive → `Osome Uploads / [YYYY-MM]`
+The following [N] transactions could not be located in Airwallex or either Gmail inbox.
+All sources checked before escalating.
 
-*Needs Your Input ([N] transactions)*
-- [Date] [Vendor] [Amount] — not found in Airwallex or Gmail. Please advise.
+| # | Date | Description | Amount | Card | Sources Checked |
+|---|------|-------------|--------|------|----------------|
+| 1 | [date] | [vendor] | [amount] | [**XXXX] | Airwallex, both Gmails |
+...
+
+Please advise on each one.
+```
+
+Send via `mcp__slack__slack_post_message` to Noa's DM (look up via `mcp__slack__slack_get_users`).
+If Slack MCP not connected, output formatted message for manual send.
+
+### Step 5 — Track progress
+After each batch, output an updated progress log row:
+
+| Date | Resolved | Remaining | Sources Used | Escalations |
+|------|----------|-----------|--------------|-------------|
+| [today] | [+N] | [~XXX] | Airwallex / Gmail / Insense | [N to Noa] |
 
 ---
 
-After user confirms the message, send via `mcp__slack__slack_post_message` to Noa's DM channel (look up her user ID via `mcp__slack__slack_get_users` if needed). If Slack MCP is not connected, output the formatted message for manual send as fallback.
-
-### Step 6 — Manual upload (final step)
-Instruct the user:
-1. Open Google Drive → `Osome Uploads / [YYYY-MM]`
-2. Open Osome → find each flagged transaction by date + amount
-3. Drag the matching PDF from Drive into Osome
+## Exception Rules
+- Amount doesn't match → do NOT upload. Flag for Noa with both amounts noted.
+- Multiple bills, same vendor + date → match amount first, then date. If still ambiguous, flag for Noa.
+- Osome shows "Processing data from X files" → normal, up to 24h. Keep working.
+- Card **5435 = Airwallex USD account. Card **7476 = Airwallex SGD account. Use to narrow search.
 
 ---
 
-## Automation Setup
-
-### Workflow A — Airwallex payout PDFs (n8n)
-**Status:** Not yet built — use Steps 3a–3d above manually or build in n8n:
-- Trigger: Manual or scheduled (monthly)
-- Steps: Auth → GET transfers (filter by date range) → POST confirmation_letters/create → save to Google Drive
-- Credentials needed: Airwallex production API key + Client ID (Settings → Developers in Airwallex)
-
-### Workflow B — Gmail SaaS receipts (Zapier)
-**Status:** Not yet built
-- Trigger: New email in noa@kravemedia.co matching "receipt OR invoice OR order confirmation"
-- Filter: Exclude personal/non-business senders
-- Action: Save attachment (or generate PDF of email) → Google Drive → `Osome Uploads / [YYYY-MM]`
-
-### Phase 2 — Browser automation for Osome upload (if Osome API never materialises)
-Use Playwright to automate the Osome upload step:
-- Script logs into Osome, finds each flagged transaction by amount + date, uploads the matching PDF from Drive
-- Runs as an n8n "Execute Command" node or standalone Node.js script
-- Risk: brittle if Osome changes their UI — acceptable as a fallback
-
-### Osome API (pending)
-Email sent to dev@osome.com asking about API/ingestion email access. If they respond with an endpoint, this skill will be updated to fully automate the upload step.
+## Automation Target (Post-Deadline)
+Once the 700-transaction backlog is cleared:
+- n8n workflow: Airwallex API → generate confirmation letter PDFs → save to Google Drive (john@kravemedia.co) → `Osome Uploads / [YYYY-MM]`
+- Reduces future reconciliation to upload-only (no PDF hunt)
+- Requires: Airwallex API key + Google Workspace OAuth whitelist

@@ -1,86 +1,182 @@
 # Skill: IM8 Brief Extraction
 
-**Purpose:** Process incoming IM8 ad briefs from #ad-production-internal and populate the Master Tracker with structured rows + editor assignment comments.
+**Purpose:** Extract IM8 ad briefs from #ad-production-internal, look up codes from the Naming Convention sheet, populate the Master Tracker with a complete row per brief, and notify the assigned editor.
 
-**Invoke when:** A new brief drops in #ad-production-internal and needs to be processed.
+**Invoke when:** Running the Monday IM8 brief extraction workflow.
 
-**Master Tracker:** https://docs.google.com/spreadsheets/d/1UoOw8x5QMZwPxldWPTDWGiPzQjGWt7gyf7H93QIKEXQ/edit
-**Naming Convention Sheet:** https://docs.google.com/spreadsheets/d/1AIFmurmdH8SYtlQKl3HwtK-BuP5mlUZ9x-nCSbRmIhM/edit
+**SOP reference:** `references/sops/im8-brief-extraction.md`
+
+**Fixed resources:**
+- Master Tracker: `https://docs.google.com/spreadsheets/d/1UoOw8x5QMZwPxldWPTDWGiPzQjGWt7gyf7H93QIKEXQ/edit`
+- Naming Convention Sheet: `https://docs.google.com/spreadsheets/d/1AIFmurmdH8SYtlQKl3HwtK-BuP5mlUZ9x-nCSbRmIhM/edit`
 
 ---
 
 ## Instructions
 
-When this skill is invoked:
+When this skill is invoked, execute all steps below in sequence.
 
-### Step 1 — Get the brief
-Fetch the latest brief from Slack via MCP:
-- Use `mcp__slack__slack_get_channel_history` on `#ad-production-internal`
-- Filter for messages matching "Ad Script Brief Complete"
-- If multiple unprocessed briefs exist, ask the user which sprint/campaign to process first
-- If no recent brief is found, or if Slack MCP is not connected, ask the user to paste the message manually as fallback
+---
 
-### Step 2 — Parse the brief
-Extract:
-- Campaign name (e.g., "IM8 Health High Cortisol")
-- Problem / health concern
-- ICP (target persona, if identifiable)
-- Script count and types (S = Swipe, R = Research)
-- Script Google Sheet link (if in message)
-- Product page URL (if in message)
-- Sprint number (if stated; default to current sprint)
+### Step 1 — Get inputs from the user
 
-### Step 3 — Map to Naming Convention
-Using the Naming Convention Sheet, generate the Name field for each script.
+`#ad-production-internal` is a Slack Connect channel — bots cannot be added. Ask the user to provide:
 
-Format: `_VID_{ADTYPE}_{ICP}_{PROBLEM}__{AGENCY}_SPRINT{N}_{CREATORTYPE}_{CREATORNAME}__{HOOK}_{LDP}`
+1. **Brief sheet URL** — paste the link from the Slack bot post
+2. **Sprint number** — e.g., `SPRINT3` (or confirm current sprint)
 
-- Agency for internal briefs: `INT`
-- Creator fields: `NA` if not applicable
-- If ICP or Problem codes are ambiguous, ask the user to confirm before proceeding.
+Only process visible briefs. If the user mentions hidden briefs, skip those.
 
-### Step 4 — Generate tracker rows
-Output a table with one row per script, ready to add to the Master Tracker:
+---
 
-| Column | Value |
-|--------|-------|
-| Name | Generated from naming convention |
-| Description | "Swipe Script" or "Research Script" |
-| Problem | From brief |
-| ICP / Persona | From brief |
-| Type | VID |
-| Ad Type | Match from brief |
-| Agency | INT |
-| Script/Concept Link | From brief outputs |
-| Current Status | Script Ready |
-| Creative Number | S1–S10 or R1–R10 |
-| Format | VID |
+### Step 2 — List all visible tabs in the brief sheet
 
-### Step 5 — Editor assignment
-Ask the user to assign editors from the current list. Once assigned, output a Google Sheets comment for each row:
+- Call `mcp__google-sheets__sheets_list_sheets` on the brief sheet spreadsheet ID
+- The tool returns **only visible (unhidden) tabs** — hidden tabs are automatically excluded
+- **Never process hidden tabs. Hidden = not approved by Noa. Adding unapproved scripts to the tracker is not permitted.**
+- Filter the returned tabs for script tabs (starting with `S` or `R`) — skip any non-script tabs (e.g., `TikTok Organic`, index tabs)
+- Process each visible script tab in order
 
-> @[EditorName] — [S1 / R1 / etc.] is ready for editing. Please review the script link and begin production.
+### Step 3 — Read each script tab
 
-### Step 6 — Deliver output
-- Table of tracker rows (copy-paste ready for Google Sheets)
-- List of comments to post in Google Sheets (one per assigned editor)
-- Reply in the `#ad-production-internal` thread via `mcp__slack__slack_reply_to_thread` (use the brief message's `ts` as `thread_ts`): "[N] scripts added to Master Tracker. Editor assignments: [list]."
-  - If Slack MCP is not connected, output the reply text for manual posting as fallback
+- Call `mcp__google-sheets__sheets_get_rows` on each tab from Step 2
+- Extract:
+  - Campaign name
+  - Problem / health concern being addressed
+  - ICP (target persona — use only what is explicitly stated; never guess)
+  - Number of hooks required (= # of videos)
+  - Reference video URL
+  - Script/concept tab name (for the Script/Concept Link field)
+  - Creator type (HeyGen AI avatar → `AVA`)
+
+---
+
+### Step 3 — Look up codes in the Naming Convention Sheet
+
+- Call `mcp__google-sheets__sheets_get_rows` on the Naming Convention Sheet
+- Map the following:
+  - Problem → code (e.g., `FATIGUE`, `CORTISOL`)
+  - ICP → code
+  - Landing Page → code matched to the ICP
+- If any code is ambiguous, surface the options to the user and request confirmation before proceeding.
+
+---
+
+### Step 4 — Read editor availability
+
+- Call `mcp__google-sheets__sheets_get_rows` on the Master Tracker, targeting the **Krave Capacity** section (top of sheet)
+- Identify the available editor to assign to this brief
+
+---
+
+### Step 5 — Write row to Master Tracker
+
+Use `mcp__google-sheets__sheets_update_row` to write to the next available row after the Sprint header, starting at column B.
+
+**Do NOT use `sheets_append_row` — it places data at the wrong position.**
+
+**Column mapping (columns B through AJ):**
+
+| Col | Header | Value |
+|-----|--------|-------|
+| B | Name | Ad name string (see naming convention below) |
+| C | Concept Reference | Reference video URL from brief |
+| D | Execution | `Internal Editing Only` |
+| E | Script/Concept Link | `=HYPERLINK("brief_sheet_url","Tab Name")` — clickable link using the exact tab name |
+| F | Description | One-line summary from script + reference video |
+| G | Problem | Code from Step 3 |
+| H | Persona | ICP code from Step 3 |
+| I | Raw Footage Link | `Use Master & B-Roll` |
+| J | Comments | `Copy concept reference for editing style` |
+| K | Type | `100% Net New` (or `IM8 Winner Iteration` / `Competitor Winner Copy` if applicable) |
+| L | Winner Iteration Ref | *(blank unless iteration)* |
+| M | Editing Style | Style that matches the concept reference video |
+| N | PIC | `Noa` *(always)* |
+| O | Editor | Assigned editor |
+| P | DD Draft | *(blank)* |
+| Q | DD Final | *(blank)* |
+| R | Current Status | `Ready to Start` |
+| S | Frame IO Link | *(blank)* |
+| T | # Of Videos | Hook count from brief |
+| U | Landing Page | LDP code from Step 3 |
+| V | Uploaded? | `FALSE` |
+| W–Z | Week Completed / Reported / Handover / YYMMDD | *(blank)* |
+| AA | Format | `VID` |
+| AB | Ad Type | Code based on execution style (see Ad Type guide below) |
+| AC | ICP | ICP code (same as col H) |
+| AD | Problem (Concept) | Problem code (same as col G) |
+| AE | Creative Number | *(leave blank)* |
+| AF | Agency | `INT` |
+| AG | Batch Name | `SPRINT{N}` |
+| AH | Creator Type | See Creator Type guide below |
+| AI | Creator Name | `NA` |
+| AJ | Hook Message | *(blank)* |
+
+---
+
+**Ad Type codes:**
+
+| Code | When to use |
+|------|-------------|
+| `WOTXT` | B-Roll + VO with text overlays on screen |
+| `TALKH` | Talking head — creator speaking to camera |
+| `PODCT` | Podcast style |
+| `ANIMT` | Animation / AI-generated visuals |
+| `VSL` | Video Sales Letter (long-form educational) |
+| `TREND` | TikTok trend format |
+| `VLOG` | Vlog style |
+| `CALLC` | Customer call / interview |
+
+When ambiguous, cross-reference the concept reference video and existing tracker rows for precedent.
+
+---
+
+**Creator Type codes:**
+
+| Code | When to use |
+|------|-------------|
+| `NA` | No creator featured (B-Roll, VO only, AI-generated without HeyGen avatar) |
+| `AVA` | AI avatar generated via HeyGen or Creatify |
+| `ATH` | Athlete |
+| `DOC` | Doctor / medical professional |
+| `KOL` | Key Opinion Leader |
+| `AFF` | Affiliate |
+| `SAB` | Science Advisory Board member |
+| `FND` | Founder |
+| `AMB` | Ambassador |
+
+---
+
+### Step 6 — Output editor comment for manual posting
+
+Google Sheets comments cannot be posted via MCP. Output the following for manual posting:
+
+> **Action required:** Right-click the new row in the Master Tracker → Comment → post:
+>
+> `@[Editor Name] — Hey [Editor Name], this is ready for you to start.`
+
+---
+
+### Step 7 — Output Slack reply for manual posting
+
+`#ad-production-internal` is a Slack Connect channel — bots cannot post here. Output the following text for the user to paste manually as a thread reply:
+
+> `[N] brief(s) added to Master Tracker. Assigned to [Editor Name].`
 
 ---
 
 ## N8n Automation Target
 
-This entire process should be automated via n8n. Use this spec when building:
+This skill currently operates in manual-invoke mode (Mondays). When ready to automate:
 
-**Trigger:** Slack — message in #ad-production-internal matching "Ad Script Brief Complete"
+**Trigger:** Slack — message in `#ad-production-internal` matching bot brief post pattern
 
 **Workflow:**
-1. Parse message → extract campaign, problem, ICP, script count, script sheet URL
-2. Look up Problem + ICP codes in Naming Convention Sheet (Google Sheets node, read rows)
-3. Generate one row per script using naming convention formula
-4. Append rows to Master Tracker (Google Sheets node, append)
-5. Post Google Sheets comment per row tagging assigned editor (manual assignment step until auto-assignment logic is defined)
-6. Reply in #ad-production-internal thread: "[N] scripts added to Master Tracker."
+1. Parse message → extract brief sheet URL, sprint number
+2. Read brief sheet → campaign, problem, ICP, hook count, reference video
+3. Look up codes in Naming Convention Sheet
+4. Read Krave Capacity → assign editor
+5. Append row to Master Tracker
+6. Reply in `#ad-production-internal` thread
 
-**Status:** Not yet built. Skill currently operates in manual-assist mode (Steps 1–6 above).
+**Status:** Not yet built. Skill operates in manual-invoke mode.

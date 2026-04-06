@@ -12,6 +12,26 @@ Reads #payments-invoices-updates, extracts all pending creator payment submissio
 
 ## Execution Steps
 
+### 0a. Scan Gmail Inbox (john@kravemedia.co)
+Call `gmail_search_messages` with query:
+```
+subject:invoice OR subject:payment OR has:attachment newer_than:7d
+```
+For each result, call `gmail_get_message` to extract:
+- Sender name / creator name
+- Invoice amount + currency
+- Attachment filename (PDF invoice)
+- Date received
+
+Tag these as **Source: "Email (Direct)"**
+
+### 0b. Deduplicate Against Invoice Tracker
+Before processing ANY submission (from Slack or Gmail):
+1. Call `sheets_get_rows` on Invoice Tracker — range `Sheet1!A:F` (last 30 rows)
+2. For each pending submission, check if **creator name + amount** already exists within the last 7 days
+3. If match found → mark as **DUPLICATE — SKIP**. Do not draft in Airwallex. Do not log again.
+4. If both Slack and Gmail have the same invoice → process the **Slack** version (already has thread context), tag source as "Email + Slack (deduped)"
+
 ### 1. Pull Channel History
 - Read the last 50 messages from C09HN2EBPR7
 - Filter for messages containing invoice submissions (look for: Creator, Amount, SGD/USD/HKD, invoice links, "please process")
@@ -71,6 +91,9 @@ Format the output as:
 
 **ALREADY PROCESSED** (✅ reacted — skip)
 - [list]
+
+**DUPLICATES SKIPPED** (same invoice via both Slack + Email — processed once only)
+- [Creator] — [Amount] — first seen [date] via [source]
 
 **NEXT STEPS**
 1. Forward email invoices to kravemedia@bills.airwallex.com
