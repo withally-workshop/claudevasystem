@@ -52,3 +52,11 @@ Use this format exactly:
 
 ### Step 5 — Confirm before sending
 Ask: "Anything to add or adjust before this goes to Noa?"
+
+### Step 5a — Send via Slack MCP
+Once confirmed, post the message directly via Slack MCP:
+- Look up Noa's user ID via `mcp__slack__slack_get_users` (search for "Noa")
+- Open a DM channel via `mcp__slack__slack_open_channel` with her user ID
+- Post via `mcp__slack__slack_post_message` to that DM channel
+- Confirm the `ts` (timestamp) returned by Slack — this confirms delivery
+- If Slack MCP is not connected, output the formatted message for manual send as fallback

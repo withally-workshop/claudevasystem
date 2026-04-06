@@ -14,7 +14,11 @@
 When this skill is invoked:
 
 ### Step 1 — Get the brief
-Ask the user to paste the full Slack bot message from #ad-production-internal.
+Fetch the latest brief from Slack via MCP:
+- Use `mcp__slack__slack_get_channel_history` on `#ad-production-internal`
+- Filter for messages matching "Ad Script Brief Complete"
+- If multiple unprocessed briefs exist, ask the user which sprint/campaign to process first
+- If no recent brief is found, or if Slack MCP is not connected, ask the user to paste the message manually as fallback
 
 ### Step 2 — Parse the brief
 Extract:
@@ -60,6 +64,8 @@ Ask the user to assign editors from the current list. Once assigned, output a Go
 ### Step 6 — Deliver output
 - Table of tracker rows (copy-paste ready for Google Sheets)
 - List of comments to post in Google Sheets (one per assigned editor)
+- Reply in the `#ad-production-internal` thread via `mcp__slack__slack_reply_to_thread` (use the brief message's `ts` as `thread_ts`): "[N] scripts added to Master Tracker. Editor assignments: [list]."
+  - If Slack MCP is not connected, output the reply text for manual posting as fallback
 
 ---
 
