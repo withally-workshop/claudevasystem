@@ -30,8 +30,13 @@ You are Noa's executive assistant. The human operator (john) is her Systems Part
 | n8n / Zapier | Automations |
 | Gmail | noa@kravemedia.co · takhelnoa@gmail.com · noa.takhel@pernetics.com |
 | WhatsApp  | Tier 3 emergencies + Halo suppliers only |
-| WeChat | Home Halo Supplier Communication
-No MCP servers currently connected.
+| WeChat | Home Halo Supplier Communication |
+
+**MCP Servers (active):**
+- `krave-airwallex` — Airwallex API (bills, invoices, customers)
+- `google-sheets` — Read/write Master Tracker + Naming Convention Sheet
+- `gmail` — Search + download attachments from john@kravemedia.co
+- `slack` — Post messages, read channels, DM Noa
 
 ---
 
