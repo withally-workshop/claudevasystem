@@ -19,15 +19,17 @@ When this skill is invoked, execute all steps below in sequence.
 
 ---
 
-### Step 1 — Fetch the brief from Slack
+### Step 1 — Detect the trigger in Slack
 
 - Call `mcp__slack__slack_get_channel_history` on `#ad-production-internal`
-- Find the most recent message matching `"Ad Script Brief Complete"` that has not yet been processed
-- Extract from the message:
+- Scan recent messages for the **trigger signal**: a message from Noa that tags `@john` (or the bot) in the context of an "Ad Script Brief Complete" post
+  - Noa will tag `@john` (or the bot) directly in the brief thread/message when it is approved and ready to process
+  - **Do not process any brief that has NOT been tagged by Noa** — untagged briefs are not yet approved for extraction
+- Once the trigger message is found, locate the associated brief post (same thread or linked) and extract:
   - **Brief sheet URL** (Google Sheets link)
-  - **Thread timestamp (`ts`)** — save this for Step 7
+  - **Thread timestamp (`ts`)** — save this for Step 9
   - **Campaign name** (e.g., "IM8 Health PCOS")
-- If multiple unprocessed briefs exist, ask the user which to process first
+- If multiple tagged briefs exist, process them in chronological order
 - If Slack MCP is unavailable, ask the user to paste the brief message as fallback
 
 ---
@@ -76,7 +78,19 @@ When this skill is invoked, execute all steps below in sequence.
 
 ---
 
-### Step 6 — Find next available row in the tracker
+### Step 6 — Determine editor assignment
+
+- Call `mcp__google-sheets__sheets_get_rows` on the active tracker tab rows 1–4 (Krave Capacity section)
+- The three eligible editors for IM8 briefs are: **Amanda A**, **Joshua**, **CEO**
+- Read current assignments in the tracker to determine who has the lightest current load
+- Distribute evenly across the batch — do not assign all scripts to one editor
+- Default rotation: Amanda A → Joshua → CEO → Amanda A → Joshua → CEO...
+- Example: 9 scripts = 3 each. 7 scripts = 3 / 2 / 2
+- User can override at invocation time by specifying an editor
+
+---
+
+### Step 6b — Find next available row in the tracker
 
 - Call `mcp__google-sheets__sheets_get_rows` on the active tracker tab, column B, from row 7 downward
 - Find the first empty row after the sprint header
@@ -166,9 +180,9 @@ When ambiguous, cross-reference the concept reference video and existing tracker
 
 Google Sheets comments cannot be posted via MCP — this is a permanent API limitation.
 
-Output for each row:
+Output one comment block per editor with their assigned rows grouped:
 
-> **Manual action:** Right-click row in Master Tracker → Comment → post:
+> **Manual action — [Editor Name]:** Right-click each assigned row → Comment → post:
 > `@[Editor Name] — Hey [Editor Name], this is ready for you to start.`
 
 ---
@@ -177,4 +191,4 @@ Output for each row:
 
 - Call `mcp__slack__slack_reply_to_thread` using the `ts` from Step 1
 - Channel: `#ad-production-internal`
-- Message: `[N] brief(s) added to April Ad Pipeline 2026 (SPRINT [N]). All assigned to [Editor Name].`
+- Message: `[N] briefs added to [Month] Ad Pipeline 2026 (SPRINT [N]). Assigned to: Amanda A ([X]), Joshua ([Y]), CEO ([Z]).`
