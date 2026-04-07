@@ -10,11 +10,11 @@
 - **n8n + Zapier:** Osome reconciliation — Airwallex API generates PDFs, Zapier saves Gmail receipts, all staged to Google Drive for fast manual upload into Osome
 - **Zapier:** Airwallex AR alerts + auto-generate $200 late fee notices
 
-**Osome reconciliation workaround (active):**
-- Osome has no public API or ingestion email — upload step remains manual
+**Osome reconciliation — full automation now unblocked:**
+- Osome ingestion email confirmed: `977e06fe7c21-628067@my.osome.com`
 - Airwallex API confirmed: `POST /confirmation_letters/create` returns PDF stream
-- Workflow: n8n pulls + generates PDFs → Google Drive staging folder → jopso drags into Osome
-- Email sent to dev@osome.com re: API access — pending response
-- Phase 2 fallback: Playwright browser automation for the upload if Osome never responds
+- Full pipeline: Airwallex API → generate PDF → email to Osome ingestion address. Zero manual uploads.
+- Gmail SaaS receipts: n8n Gmail node → download attachment → email to Osome ingestion address
+- Blockers remaining: Airwallex API key (Admin access) + Google Workspace OAuth whitelist for n8n
 
 **Key dates:** Q2 2026 — automation build-out supporting founder autonomy goal.

@@ -1,8 +1,11 @@
 # Skill: Osome Reconciliation
 
 **SOP Reference:** `references/sops/osome-reconciliation.md` (FIN-001)
-**Purpose:** Work through Eclipse Ventures' flagged "documents needed" transactions in Osome — triage each one, locate the PDF, and compile anything unresolvable for Noa.
+**Purpose:** Work through Eclipse Ventures' flagged "documents needed" transactions in Osome — triage each one, locate the PDF, email it to Osome's ingestion address, and compile anything unresolvable for Noa.
 **Invoke when:** Running a reconciliation session against Osome's Documents needed queue.
+
+**Osome ingestion email:** `977e06fe7c21-628067@my.osome.com`
+Send any PDF here — Osome auto-attaches it to the matching transaction. No manual upload needed.
 
 **Company:** Eclipse Ventures Pte. Ltd.
 **Deadline:** End of April 2026 (tax submission)
@@ -37,18 +40,19 @@ Output exact search instructions:
 > Go to app.airwallex.com → Bills > Paid → search: **[vendor name]**
 > Match by: amount **[amount]** + date near **[date]**
 > Download invoice PDF from left panel of Bill Details
-> Upload to Osome transaction
+> Forward PDF to `977e06fe7c21-628067@my.osome.com` (no manual upload needed)
 
 ### Step 3B — Gmail path
-Output ready-to-run Gmail search string for noa@kravemedia.co:
-> Search: `[vendor name] has:attachment`
-> Look for: "Your receipt from..." or "Invoice #..." near [date]
-> Download PDF attachment → upload to Osome
+Use `mcp__gmail__search_emails` on noa@kravemedia.co:
+> Query: `from:[vendor] has:attachment subject:receipt OR invoice`
 
-If not found in work Gmail:
-> Repeat search in takhelnoa@gmail.com
+- Find matching email by date + amount
+- Use `mcp__gmail__download_attachment` to save the PDF
+- Forward/email the PDF to `977e06fe7c21-628067@my.osome.com`
 
-HeyGen note: Two PDFs attached — upload the **Invoice PDF**, not the Receipt PDF.
+If not found in work Gmail, search takhelnoa@gmail.com with the same query.
+
+HeyGen note: Two PDFs attached — send the **Invoice PDF**, not the Receipt PDF.
 
 ### Step 3C — Insense path
 Output a pre-filled email draft:
@@ -111,8 +115,25 @@ After each batch, output an updated progress log row:
 
 ---
 
-## Automation Target (Post-Deadline)
-Once the 700-transaction backlog is cleared:
-- n8n workflow: Airwallex API → generate confirmation letter PDFs → save to Google Drive (john@kravemedia.co) → `Osome Uploads / [YYYY-MM]`
-- Reduces future reconciliation to upload-only (no PDF hunt)
-- Requires: Airwallex API key + Google Workspace OAuth whitelist
+## Automation Target (Full Pipeline — Now Buildable)
+
+Osome ingestion email confirmed: `977e06fe7c21-628067@my.osome.com`
+Full hands-off automation is now achievable.
+
+**n8n workflow (build once 700-transaction backlog is cleared):**
+
+1. **Trigger:** Manual or monthly schedule
+2. **Airwallex payouts:**
+   - Authenticate → `GET /transfers` (filter by date range)
+   - `POST /confirmation_letters/create` → PDF binary
+   - Email PDF to `977e06fe7c21-628067@my.osome.com`
+3. **Gmail SaaS receipts:**
+   - Gmail node: poll john@kravemedia.co for "receipt OR invoice" emails
+   - Download attachment
+   - Forward to `977e06fe7c21-628067@my.osome.com`
+4. **Unresolvables:** batch Slack message to Noa
+5. **Zero manual uploads.**
+
+**Blockers before building:**
+- Airwallex API key + Client ID (Admin access required)
+- Google Workspace OAuth whitelist (for n8n Gmail node)

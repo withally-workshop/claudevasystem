@@ -10,9 +10,10 @@ Originally 1,489 flagged transactions. Est. ~2 weeks to complete.
 
 ## Tools
 
-| Tool | URL | Purpose |
-|------|-----|---------|
+| Tool | URL / Detail | Purpose |
+|------|-------------|---------|
 | Osome | app.osome.com | View flagged transactions, upload documents |
+| Osome ingestion email | 977e06fe7c21-628067@my.osome.com | Email documents directly — Osome auto-attaches to matching transaction |
 | Airwallex | app.airwallex.com | Download paid contractor/creator invoices |
 | Gmail — Work | noa@kravemedia.co | Find SaaS invoices (HeyGen, Magicbrief, etc.) |
 | Gmail — Personal | takhelnoa@gmail.com | Backup inbox for SaaS invoices |
@@ -86,12 +87,16 @@ Exhaust ALL options before escalating:
 
 ⚠ Only escalate AFTER checking Airwallex + noa@kravemedia.co + takhelnoa@gmail.com.
 
-### Step 5 — Upload to Osome
+### Step 5 — Send Document to Osome
+
+**Option A (Automated — preferred):** Email the PDF to `977e06fe7c21-628067@my.osome.com`. Osome auto-attaches it to the matching transaction. No manual upload required.
+
+**Option B (Manual fallback):** 
 1. Click flagged transaction in Osome
 2. Click upload icon (upward arrow) or drag and drop PDF
 3. Confirm file name visible and upload complete
-4. Transaction should disappear from Documents needed filter
-5. "Processing data from X files..." = normal. Can take up to 24 hours.
+
+"Processing data from X files..." = normal. Can take up to 24 hours.
 
 ## Exception Rules
 
