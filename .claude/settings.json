@@ -9,9 +9,12 @@
       }
     },
     "gmail": {
-      "command": "C:\\Program Files\\nodejs\\npx.cmd",
-      "args": ["-y", "@gongrzhe/server-gmail-autoauth-mcp"],
-      "env": {}
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": ["C:\\Users\\jopso\\AppData\\Roaming\\npm\\node_modules\\@gongrzhe\\server-gmail-autoauth-mcp\\dist\\index.js"],
+      "env": {
+        "GMAIL_OAUTH_PATH": "C:\\Users\\jopso\\.gmail-mcp\\gcp-oauth.keys.json",
+        "GMAIL_CREDENTIALS_PATH": "C:\\Users\\jopso\\.gmail-mcp\\credentials.json"
+      }
     }
   }
 }
