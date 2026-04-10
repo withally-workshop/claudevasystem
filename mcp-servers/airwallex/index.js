@@ -8,6 +8,7 @@ import {
 const BASE_URL = "https://api.airwallex.com";
 const CLIENT_ID = process.env.AIRWALLEX_CLIENT_ID;
 const API_KEY = process.env.AIRWALLEX_API_KEY;
+const ACCOUNT_ID = process.env.AIRWALLEX_ACCOUNT_ID || "";
 
 if (!CLIENT_ID || !API_KEY) {
   console.error("Missing AIRWALLEX_CLIENT_ID or AIRWALLEX_API_KEY");
@@ -41,14 +42,21 @@ async function getToken() {
   return tokenCache.token;
 }
 
+// Billing API paths that do NOT support x-on-behalf-of
+const BILLING_PATHS = ["/api/v1/invoices", "/api/v1/billing", "/api/v1/bills"];
+
 async function airwallexRequest(method, path, body) {
   const token = await getToken();
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+  const isBillingPath = BILLING_PATHS.some((p) => path.startsWith(p));
+  if (ACCOUNT_ID && !isBillingPath) headers["x-on-behalf-of"] = ACCOUNT_ID;
+
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -95,7 +103,11 @@ const TOOLS = [
       properties: {
         billing_customer_id: {
           type: "string",
-          description: "Airwallex billing customer ID. Use airwallex_list_customers to find it.",
+          description: "Airwallex billing customer ID. Use airwallex_list_customers to find it. Optional if customer_name is provided.",
+        },
+        customer_name: {
+          type: "string",
+          description: "Customer name — used as fallback if billing_customer_id is not available.",
         },
         currency: { type: "string", description: "Invoice currency e.g. USD, SGD" },
         line_items: {
@@ -121,7 +133,7 @@ const TOOLS = [
           default: "OUT_OF_BAND",
         },
       },
-      required: ["billing_customer_id", "currency", "line_items"],
+      required: ["currency", "line_items"],
     },
   },
   {
@@ -175,6 +187,36 @@ const TOOLS = [
       required: ["bill_id"],
     },
   },
+  {
+    name: "airwallex_create_customer",
+    description:
+      "Create a new billing customer in Airwallex. Use this when a client doesn't exist yet. Returns the billing_customer_id needed for invoice creation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Customer/company name" },
+        email: { type: "string", description: "Billing email address" },
+        country_code: { type: "string", description: "ISO country code e.g. SG, US, GB" },
+        address: { type: "string", description: "Street address (optional)" },
+        city: { type: "string", description: "City (optional)" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "airwallex_upload_bill_document",
+    description:
+      "Upload a PDF or image file and attach it to an Airwallex bill. Use this to attach invoice PDFs to creator bills for record-keeping.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bill_id: { type: "string", description: "The bill ID to attach the document to" },
+        file_path: { type: "string", description: "Absolute local path to the file to upload (PDF, PNG, JPG)" },
+        file_name: { type: "string", description: "Display name for the file, e.g. 'invoice-creator-apr2026.pdf'" },
+      },
+      required: ["bill_id", "file_path", "file_name"],
+    },
+  },
 ];
 
 // ─── Tool Handlers ───────────────────────────────────────────────────────────
@@ -196,7 +238,6 @@ async function handleTool(name, args) {
 
     case "airwallex_create_invoice": {
       const body = {
-        billing_customer_id: args.billing_customer_id,
         currency: args.currency,
         collection_method: args.collection_method || "OUT_OF_BAND",
         items: args.line_items.map((item) => ({
@@ -205,8 +246,10 @@ async function handleTool(name, args) {
           quantity: item.quantity || 1,
         })),
       };
+      if (args.billing_customer_id) body.billing_customer_id = args.billing_customer_id;
+      if (args.customer_name) body.customer_name = args.customer_name;
       if (args.due_date) body.due_date = args.due_date;
-      return await airwallexRequest("POST", "/api/v1/invoices/create", body);
+      return await airwallexRequest("POST", "/api/v1/billing/invoices", body);
     }
 
     case "airwallex_finalize_invoice": {
@@ -215,6 +258,17 @@ async function handleTool(name, args) {
         `/api/v1/invoices/${args.invoice_id}/finalize`,
         {}
       );
+    }
+
+    case "airwallex_create_customer": {
+      const body = { name: args.name };
+      if (args.email) body.email = args.email;
+      const address = {};
+      if (args.country_code) address.country_code = args.country_code;
+      if (args.address) address.line1 = args.address;
+      if (args.city) address.city = args.city;
+      if (Object.keys(address).length) body.address = address;
+      return await airwallexRequest("POST", "/api/v1/billing/customers/create", body);
     }
 
     case "airwallex_list_customers": {
@@ -236,6 +290,38 @@ async function handleTool(name, args) {
 
     case "airwallex_get_bill": {
       return await airwallexRequest("GET", `/api/v1/bills/${args.bill_id}`);
+    }
+
+    case "airwallex_upload_bill_document": {
+      const fs = await import("fs");
+      const path = await import("path");
+      const token = await getToken();
+
+      const fileBuffer = fs.default.readFileSync(args.file_path);
+      const ext = path.default.extname(args.file_name).toLowerCase();
+      const mimeTypes = { ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg" };
+      const mimeType = mimeTypes[ext] || "application/octet-stream";
+
+      // Build multipart form data manually
+      const boundary = `----FormBoundary${Date.now()}`;
+      const parts = [
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${args.file_name}"\r\nContent-Type: ${mimeType}\r\n\r\n`,
+        fileBuffer,
+        `\r\n--${boundary}--\r\n`,
+      ];
+      const body = Buffer.concat(parts.map((p) => (Buffer.isBuffer(p) ? p : Buffer.from(p))));
+
+      const res = await fetch(`${BASE_URL}/api/v1/bills/${args.bill_id}/documents`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        },
+        body,
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`Airwallex API error ${res.status}: ${text}`);
+      return JSON.parse(text);
     }
 
     default:

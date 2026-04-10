@@ -2,7 +2,7 @@
 
 **Purpose:** Extract IM8 ad briefs from #ad-production-internal, look up codes from the Naming Convention sheet, populate the Master Tracker with a complete row per script, and notify the assigned editor.
 
-**Invoke when:** A new brief drops in #ad-production-internal, or running the Monday IM8 brief extraction workflow.
+**Invoke when:** A new brief drops in #ad-production-internal, or when Noa tags @john or @Claude EA on any day of the week to signal a brief is ready for processing.
 
 **SOP reference:** `references/sops/im8-brief-extraction.md`
 
@@ -34,16 +34,27 @@ When this skill is invoked, execute all steps below in sequence.
 
 ---
 
-### Step 2 — Detect current sprint
+### Step 2 — Find the active tracker tab
 
-- Call `mcp__google-sheets__sheets_get_rows` on the active tracker tab (e.g., `April Ad Pipeline 2026!A1:C10`)
-- Find the most recent sprint header row (e.g., `SPRINT 5 - APRIL WEEK 1`)
+- Call `mcp__google-sheets__sheets_list_sheets` on the Master Tracker spreadsheet
+- The tool returns only visible (unhidden) tabs
+- Identify the active month tab by matching the current calendar month to the tab name (e.g., current month = April → look for a tab containing "April"; May → "May", etc.)
+- Tab names follow the pattern: `[Month] Ad Pipeline [Year]` (e.g., `April Ad Pipeline 2026`)
+- If multiple month tabs exist, use the one matching the current month. If none matches the current month, use the most recently created visible tab and flag it to the user
+- Store the exact tab name — use it for all subsequent reads and writes in this run. Never hardcode a month name.
+
+---
+
+### Step 3 — Detect current sprint
+
+- Call `mcp__google-sheets__sheets_get_rows` on `[active tab]!A1:C20`
+- Scan for the most recent sprint header row (e.g., `SPRINT 5 - APRIL WEEK 1`)
 - Extract the sprint number (e.g., `SPRINT5`) — use this for all rows in this run
 - If ambiguous, ask the user to confirm
 
 ---
 
-### Step 3 — List all visible tabs in the brief sheet
+### Step 4 — List all visible tabs in the brief sheet
 
 - Call `mcp__google-sheets__sheets_list_sheets` on the brief sheet spreadsheet ID
 - The tool returns **only visible (unhidden) tabs** — hidden tabs are automatically excluded
@@ -53,9 +64,9 @@ When this skill is invoked, execute all steps below in sequence.
 
 ---
 
-### Step 4 — Read all script tabs in parallel
+### Step 5 — Read all script tabs in parallel
 
-- Call `mcp__google-sheets__sheets_get_rows` on each tab from Step 3 simultaneously
+- Call `mcp__google-sheets__sheets_get_rows` on each tab from Step 4 simultaneously
 - For each tab extract:
   - Script/concept tab name
   - Execution type (Creator-Led / B-Roll + VO / Stock+B-Roll / etc.)
@@ -67,7 +78,7 @@ When this skill is invoked, execute all steps below in sequence.
 
 ---
 
-### Step 5 — Look up codes in the Naming Convention Sheet
+### Step 6 — Look up codes in the Naming Convention Sheet
 
 - Call `mcp__google-sheets__sheets_get_rows` on the Naming Convention Sheet (ICP, Problem, Landing Pages tabs)
 - Map for each script:
@@ -78,7 +89,7 @@ When this skill is invoked, execute all steps below in sequence.
 
 ---
 
-### Step 6 — Determine editor assignment
+### Step 7 — Determine editor assignment
 
 - Call `mcp__google-sheets__sheets_get_rows` on the active tracker tab rows 1–4 (Krave Capacity section)
 - The three eligible editors for IM8 briefs are: **Amanda A**, **Joshua**, **CEO**
@@ -90,19 +101,21 @@ When this skill is invoked, execute all steps below in sequence.
 
 ---
 
-### Step 6b — Find next available row in the tracker
+### Step 8 — Find next available row in the tracker
 
-- Call `mcp__google-sheets__sheets_get_rows` on the active tracker tab, column B, from row 7 downward
-- Find the first empty row after the sprint header
-- All scripts from this brief write sequentially from that row
+- Call `mcp__google-sheets__sheets_get_rows` on `[active tab]!B1:B200`
+- Scan downward from row 7 to find the **first completely empty row in column B**
+- Do NOT assume row 7 is free — it may already be populated from earlier extractions this month
+- All scripts from this brief write sequentially starting from that first empty row
+- If the empty row falls in a different sprint block than expected, flag it to the user before writing
 
 ---
 
-### Step 7 — Write all rows to the Master Tracker
+### Step 9 — Write all rows to the Master Tracker
 
 Use `mcp__google-sheets__sheets_update_row` for each script row. **Do NOT use `sheets_append_row`.**
 
-Write all rows in parallel where possible.
+Write all rows in parallel where possible. Use the active tab name found in Step 2 — never hardcode a month.
 
 **Column mapping (B through AJ):**
 
@@ -176,7 +189,7 @@ When ambiguous, cross-reference the concept reference video and existing tracker
 
 ---
 
-### Step 8 — Output editor comment for manual posting
+### Step 10 — Output editor comment for manual posting
 
 Google Sheets comments cannot be posted via MCP — this is a permanent API limitation.
 
@@ -187,8 +200,9 @@ Output one comment block per editor with their assigned rows grouped:
 
 ---
 
-### Step 9 — Post Slack thread reply
+### Step 11 — Post Slack thread reply
 
 - Call `mcp__slack__slack_reply_to_thread` using the `ts` from Step 1
 - Channel: `#ad-production-internal`
 - Message: `[N] briefs added to [Month] Ad Pipeline 2026 (SPRINT [N]). Assigned to: Amanda A ([X]), Joshua ([Y]), CEO ([Z]).`
+- The month in this message should match the active tab found in Step 2 — never hardcode a month name.

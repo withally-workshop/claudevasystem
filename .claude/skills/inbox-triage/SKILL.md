@@ -139,9 +139,9 @@ For each email in these tiers:
 - Remove from inbox via `removeLabelIds: ["INBOX"]` for all tiers except `EA/Unsure`
 - `EA/Unsure` emails: label applied, remain in inbox
 
-### Step 5 — Post Slack DM summary to Noa
-Look up Noa's Slack user ID via `mcp__slack__slack_get_users`.
-Post via `mcp__slack__slack_post_message` to her DM.
+### Step 5 — Post Slack summary to John's private channel
+Post via `mcp__slack__slack_post_message` to John's private channel (`C0AQZGJDR38`).
+John reviews and forwards to Noa manually — do NOT post directly to Noa's DM.
 
 **Format:**
 ```
@@ -198,7 +198,7 @@ If Slack MCP is not connected: output for manual send.
 
 ## Notes
 - Noa's Slack handle: @U06TBGX9L93
-- John's private channel: C0AQZGJDR38 (setup reports go here, not to Noa)
+- John's private channel: C0AQZGJDR38 — ALL triage summaries post here (both setup reports and daily triage). John forwards to Noa manually.
 - All drafts saved to Gmail Drafts — Noa reviews and sends herself
 - Never send on Noa's behalf without explicit confirmation
 - If Noa corrects a mis-tier, update classification rules in this skill
