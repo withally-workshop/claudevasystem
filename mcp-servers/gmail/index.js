@@ -16,7 +16,7 @@ if (!KEY_FILE) {
 
 const auth = new google.auth.GoogleAuth({
   keyFile: KEY_FILE,
-  scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+  scopes: ["https://www.googleapis.com/auth/gmail.modify"],
   clientOptions: { subject: IMPERSONATE_EMAIL },
 });
 
