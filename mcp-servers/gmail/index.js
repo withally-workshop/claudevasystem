@@ -61,6 +61,29 @@ const TOOLS = [
       required: ["message_id"],
     },
   },
+  {
+    name: "gmail_download_attachment",
+    description:
+      "Download a specific attachment from a Gmail message. Returns the file content as a base64 string. Use gmail_get_message first to get the attachment_id and filename. Supports PDF invoices.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message_id: {
+          type: "string",
+          description: "The Gmail message ID containing the attachment",
+        },
+        attachment_id: {
+          type: "string",
+          description: "The attachment ID (from gmail_get_message results)",
+        },
+        filename: {
+          type: "string",
+          description: "The attachment filename (for reference in output)",
+        },
+      },
+      required: ["message_id", "attachment_id"],
+    },
+  },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -91,6 +114,7 @@ function extractAttachments(parts) {
         filename: part.filename,
         mimeType: part.mimeType,
         size: part.body?.size || 0,
+        attachment_id: part.body?.attachmentId || null,
       });
     }
     if (part.parts) {
@@ -171,6 +195,20 @@ async function handleTool(name, args) {
         body: bodyText.slice(0, 3000), // cap to avoid huge emails
         attachments,
         labelIds: res.data.labelIds || [],
+      };
+    }
+
+    case "gmail_download_attachment": {
+      const res = await gmail.users.messages.attachments.get({
+        userId: "me",
+        messageId: args.message_id,
+        id: args.attachment_id,
+      });
+      return {
+        filename: args.filename || "attachment",
+        mimeType: res.data.size ? "application/octet-stream" : "unknown",
+        size: res.data.size || 0,
+        data: res.data.data, // base64url-encoded content
       };
     }
 

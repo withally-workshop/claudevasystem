@@ -5,6 +5,13 @@
 
 ---
 
+## Trigger Rules
+- Strategists must **@tag Claude EA** in #payments-invoices-updates to trigger invoice creation
+- Messages without a Claude EA @mention are informational — do NOT process them
+- **No invoice attachment required for client invoices.** As long as the strategist provides client name, amount, currency, and payout terms, draft the invoice. Noa reviews Airwallex drafts before submitting.
+
+---
+
 ## What This Skill Does
 Two modes depending on trigger:
 

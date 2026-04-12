@@ -4,7 +4,10 @@
 ## Overview
 Collect creator invoices from Slack (#payments-invoices-updates) and email, log them into Airwallex as bills, handle currency conversions, and flag exceptions — before any payment round is approved.
 
-**Key Rule:** Never pay without owner approval. Prepare and flag only.
+**Key Rules:**
+- Never pay without owner approval. Prepare and flag only.
+- Strategists must **@tag @Claude EA** in #payments-invoices-updates to trigger invoice processing. Messages without this tag are informational — do not action them.
+- **No invoice = no bill.** If a strategist tags Claude EA but provides no invoice (no attachment, no "sent via email" confirmation), reply asking for the invoice before drafting anything in Airwallex.
 
 ## Tools
 | Tool | Detail |

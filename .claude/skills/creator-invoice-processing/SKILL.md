@@ -10,6 +10,14 @@ Reads #payments-invoices-updates, extracts all pending creator payment submissio
 
 ---
 
+## Trigger Rules
+- Strategists must **@tag Claude EA** in #payments-invoices-updates to trigger invoice processing
+- Messages without an @mention of Claude EA are informational — do NOT process them as invoice requests
+- **Creator invoices: no invoice attached = no bill created.** If a strategist tags Claude EA but attaches no invoice (PDF, image, or confirmed email forward), reply asking for the invoice. Do not draft in Airwallex.
+- Client invoices follow the separate `client-invoice-creation` skill — no invoice attachment required for those, just the billing info.
+
+---
+
 ## Execution Steps
 
 ### 0a. Scan Gmail Inbox (john@kravemedia.co)
@@ -20,8 +28,10 @@ subject:invoice OR subject:payment OR has:attachment newer_than:7d
 For each result, call `gmail_get_message` to extract:
 - Sender name / creator name
 - Invoice amount + currency
-- Attachment filename (PDF invoice)
+- Attachment filename (PDF invoice) + `attachment_id`
 - Date received
+
+If an attachment is present, call `gmail_download_attachment` using the `message_id` and `attachment_id` to retrieve the PDF. This base64 content should be noted for manual upload into Airwallex → Bills → attach file. Flag in the bill prep report: "PDF downloaded — attach to Airwallex bill".
 
 Tag these as **Source: "Email (Direct)"**
 
@@ -67,7 +77,7 @@ For conversions, use xe.com rate or note "verify live rate before entry."
 
 ### 4. Exception Detection
 Auto-flag if any of these are true:
-- No invoice attached and no "sent via email" confirmation
+- **No invoice attached and no "sent via email" confirmation** — HARD STOP. Reply in thread: "No invoice attached — please share the PDF or confirm it's been emailed to john@kravemedia.co before I can process this." Do NOT draft the bill.
 - Payment method is PayPal
 - Currency appears mismatched for creator location
 - Amount doesn't match a known rate card (flag for human review)
