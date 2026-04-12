@@ -43,7 +43,8 @@ async function getToken() {
 }
 
 // Billing API paths that do NOT support x-on-behalf-of
-const BILLING_PATHS = ["/api/v1/invoices", "/api/v1/billing", "/api/v1/bills"];
+// Note: /api/v1/bills (spend module) is intentionally excluded — it needs x-on-behalf-of
+const BILLING_PATHS = ["/api/v1/invoices", "/api/v1/billing"];
 
 async function airwallexRequest(method, path, body) {
   const token = await getToken();
