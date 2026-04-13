@@ -1,62 +1,76 @@
 # Skill: EOD Triage Summary
 
-**Purpose:** Generate Noa's daily End-of-Day Triage Summary — a clean Slack message consolidating everything handled during the day.
+**Purpose:** Generate Noa's daily End-of-Day Triage Summary — a clean Slack DM consolidating everything handled during the day.
 
-**Invoke at:** ~6:30–7:00 PM ICT daily, before sending to Noa on Slack.
+**Automated:** Runs **Monday–Friday at 6:00 PM GMT+8** via scheduled remote agent (trigger ID: `trig_015YZhdGzPQNotUAruRVtSTg`). Sends directly to Noa's DM and posts a copy to `#airwallexdrafts` for SOD carry-over reference. No confirmation step.
+
+**Manual invoke:** Use this skill for off-schedule runs (earlier send, mid-day check-in, testing).
 
 ---
 
-## Instructions
+## Operator Input (Daily)
 
-When this skill is invoked:
+Post task updates to `#airwallexdrafts` throughout the day as things happen — completed tasks, blockers, decisions made. No specific format required. The agent reads everything at 6 PM and synthesizes it.
 
-### Step 1 — Collect today's items
-Ask the user to dump everything handled today. Accept anything: unstructured notes, Slack message snippets, ClickUp task names, email threads, voice-note transcriptions. Don't require a specific format — just get the raw material.
+---
+
+## Instructions (Manual Invoke)
+
+### Step 0 — Pull Slack context proactively
+
+Pull recent messages from these channels using `mcp__slack__slack_get_channel_history` (limit: 50 each):
+
+| Channel | ID | What to look for |
+|---|---|---|
+| `#airwallexdrafts` | `C0AQZGJDR38` | **Primary** — John's daily task dump + bot invoice drafts + inbox triage reports |
+| `#ad-production-internal` | `C0AGEM919QV` | IM8 ad production updates, Frame.io status, blockers |
+| `#payments-invoices-updates` | `C09HN2EBPR7` | Invoice requests, payment confirmations |
+
+**Today-only filter:** Discard any message before midnight today in GMT+8 (UTC+8). Do not surface old content.
+
+### Step 1 — Collect additional items from operator
+
+Present a brief summary of what was pulled. Ask: "Anything to add that's not in the channel? (ClickUp tasks, calls, decisions made offline, etc.)" If nothing to add, proceed directly to Step 2.
 
 ### Step 2 — Categorize
-Sort every item into one of four buckets:
-- **Completed** — done, resolved, sent, closed
-- **Blocked** — waiting on a person or resource (always state who/what)
-- **Next Steps** — requires Noa's decision or direct action
-- **FYI** — Noa should know, no action needed
 
-### Step 3 — Apply communication rules
-- Bullet points only. No paragraphs.
-- No filler language.
-- For any Next Steps item requiring a decision: apply the **3-and-1 Framework** — list 3 options, give 1 explicit recommendation.
-- Flag time-sensitive items with `[URGENT]` or include the deadline inline.
-- Group by business (Krave / IM8 / Halo Home / Skyvane) only if items span multiple businesses and grouping aids clarity. Otherwise keep flat.
+| Bucket | Criteria |
+|---|---|
+| Completed from Focus Goals | Done, resolved, sent, closed |
+| Not Completed / Needs More Work / Planned Next Steps | Unfinished, rolling to tomorrow; apply 3-and-1 for decisions |
+| Blocker / Input Needed | Waiting on Noa, client, or third party — always name who/what |
+| FYIs | Noa should know, no action needed |
 
-### Step 4 — Output the Slack message
+### Step 3 — Format the message
 
-Use this format exactly:
+Use this exact template:
 
----
+```
+### 🏁 Today's Wrap-up
 
-*EOD Triage — [DAY, DATE] (ICT)*
-
-*Completed*
+**✅ Completed from Focus Goals**
 - [item]
 
-*Blocked*
+**🚧 Not Completed / Needs More Work / Planned Next Steps**
+- [item]
+
+**🔎 Blocker / Input Needed**
 - [item] — waiting on [who/what]
 
-*Next Steps*
+**↔️ FYIs**
 - [item]
-  → Rec: [recommendation] *(only include if a decision is needed)*
+```
 
-*FYI*
-- [item]
+Rules:
+- Bullets only. No paragraphs. No filler.
+- Flag time-sensitive items with `[URGENT]` or include deadline inline.
+- Group by business (Krave / IM8 / Halo Home / Skyvane) only if multi-business and grouping aids clarity.
+- Omit any section with zero items.
 
----
+### Step 4 — Send via Slack MCP
 
-### Step 5 — Confirm before sending
-Ask: "Anything to add or adjust before this goes to Noa?"
-
-### Step 5a — Send via Slack MCP
-Once confirmed, post the message directly via Slack MCP:
-- Look up Noa's user ID via `mcp__slack__slack_get_users` (search for "Noa")
-- Open a DM channel via `mcp__slack__slack_open_channel` with her user ID
-- Post via `mcp__slack__slack_post_message` to that DM channel
-- Confirm the `ts` (timestamp) returned by Slack — this confirms delivery
-- If Slack MCP is not connected, output the formatted message for manual send as fallback
+- Noa's user ID: `U06TBGX9L93` (hardcoded)
+- Call `mcp__slack__slack_post_message` with `channel_id: U06TBGX9L93`
+- Confirm `ts` returned — confirms delivery
+- Also post same message to `#airwallexdrafts` (`C0AQZGJDR38`) for SOD carry-over reference
+- If Slack MCP returns an error, output the formatted message for manual send

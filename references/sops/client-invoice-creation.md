@@ -1,8 +1,8 @@
 # KM-SOP-002 — Client Invoice Creation & Payment Tracking
-**Frequency:** Ad Hoc (as requested) | **Owner:** VA / Finance | **Updated:** March 2026
+**Frequency:** Ad Hoc (creation) · Daily automated (reminders + payment detection) | **Owner:** VA / Finance | **Updated:** April 2026
 
 ## Overview
-When a strategist completes a project, they request an invoice via #payments-invoices-updates. Create in Airwallex as a draft, send to client, follow up on overdue invoices, and update ClickUp.
+When a strategist completes a project, they request an invoice via #payments-invoices-updates. Claude EA creates in Airwallex as a draft, logs to the Client Invoice Tracker (Google Sheets), and sends to client after Noa approves. The daily cron handles all reminders and payment detection — no manual follow-up required.
 
 **Key Rules:**
 - Strategists must **@tag @Claude EA** in #payments-invoices-updates to trigger invoice creation. Messages without this tag are informational — do not action them.
@@ -14,8 +14,17 @@ When a strategist completes a project, they request an invoice via #payments-inv
 |------|--------|
 | Slack #payments-invoices-updates | C09HN2EBPR7 — where strategists @tag Claude EA to request invoice creation |
 | Airwallex (Invoices) | Billing → Invoices — create and send invoices |
-| ClickUp | Update project status on payment |
-| Gmail | noa@kravemedia.co — Airwallex payment confirmations arrive here |
+| Client Invoice Tracker | Google Sheet (see skill for Sheet ID) — master source of truth for all client invoice statuses |
+| Gmail (john@kravemedia.co) | Reminder emails sent from here |
+| Gmail (noa@kravemedia.co) | Scanned daily for Airwallex deposit notifications |
+| ClickUp | Update project status on payment confirmed |
+
+## Automated Skills
+| Skill | When it runs |
+|-------|-------------|
+| `client-invoice-creation` | On-demand — when strategist @tags Claude EA |
+| `invoice-reminder-cron` | Daily 9 AM ICT — runs payment detection + sends reminders |
+| `payment-detection` | Called by cron — also runnable manually |
 
 ## Steps
 
@@ -40,49 +49,71 @@ Sample line items (IM8 HookFactory):
 - Add-On Concept Editing - 4 Concepts @ USD $150 each — USD $600
 - Total: USD $3,150
 
-### Step 3 — Send Invoice to Client
-- Find client email in Airwallex customer record or previous sent mail
-- Send from Airwallex using Send/Share on the finalized invoice (Noa must approve draft first)
+### Step 3 — Log to Client Invoice Tracker
+Immediately after drafting in Airwallex, append a row to the Client Invoice Tracker Google Sheet.
+See `client-invoice-creation` skill for exact column mapping.
+Status on creation: `Draft — Pending Noa Review`
+
+### Step 4 — Send Invoice to Client (After Noa Approves)
+- Noa reviews and approves draft in Airwallex
+- Send from Airwallex using Send/Share on the finalized invoice
+- Update tracker row: Status → `Invoice Sent`
 - Note the date sent
 
-### Step 4 — Follow Up on Overdue Invoices (Weekly Check)
-| Status | Action |
-|--------|--------|
-| Due date reached | Send 5-day warning reminder email |
-| 1 week overdue | Add USD $200 late fee as new line item, send updated invoice |
-| 2+ months overdue | Move to Collections in ClickUp, flag owner immediately |
+### Step 5 — Automated Reminders (Daily Cron — no manual action needed)
+The `invoice-reminder-cron` skill runs daily at 9 AM ICT and handles:
 
-Late fee line item format: `Late Payment Fee — [Month Year] — USD $200`
+| Days to/from Due | Action |
+|-----------------|--------|
+| 7 days before | Reminder email from john@ |
+| 5 days before | Reminder email from john@ |
+| 3 days before | Reminder email from john@ |
+| 1 day before | Reminder email from john@ |
+| Due today | Reminder email from john@ |
+| 1–6 days overdue | Overdue notice from john@ |
+| 7 days overdue | Late fee notice + flag to add $200 in Airwallex |
+| 60+ days overdue | Collections flag → tag Noa in Slack |
 
-### Step 5 — Confirm Payment Received
-Check noa@kravemedia.co for Airwallex deposit notifications:
-- **Client payments:** rounded numbers (e.g. $3,400.00 USD, $4,590.00 USD)
-- **Shopify payments:** irregular amounts (e.g. $588.93 SGD), reference says 'Shopify'
-- Match to invoice by **amount + invoice number** (not customer reference — may pay via intermediary)
-- Download deposit confirmation PDF for records
+### Step 6 — Automated Payment Detection (Daily Cron — no manual action needed)
+The `payment-detection` skill scans noa@kravemedia.co daily for Airwallex deposit notification emails.
+On match:
+- Updates Client Invoice Tracker: Status → `Payment Complete`
+- Posts to #payments-invoices-updates with confirmation
+- Flags Airwallex for manual status update (Airwallex does not auto-mark as paid)
 
-### Step 6 — Update ClickUp
-- Payment confirmed → move project: Approved → **Payment Complete**
+Amanda and the team see payment status in #payments-invoices-updates and the Google Sheet — no need to check with Noa.
+
+### Step 7 — Confirm Payment & Update ClickUp
+- Payment detected → move project in ClickUp: Approved → **Payment Complete**
 - 2+ months overdue → move to **Collections**, notify Noa in Slack
 
+### Step 8 — Airwallex Manual Status Update
+Airwallex does not auto-reflect incoming payments. After payment is confirmed:
+- Manually open the invoice in Airwallex → mark as paid
+- This is flagged by the payment detection skill each time it detects a payment
+
 ## Invoice Status Reference
-| Status | Meaning / Action |
-|--------|-----------------|
-| Approved (ClickUp) | Project complete, invoice pending |
-| Invoice sent | Awaiting payment |
-| Due date reached | Send 5-day warning |
-| 1 week overdue | Add $200 late fee, send updated invoice |
-| 2+ months overdue | Collections in ClickUp, flag owner |
-| Payment Complete | Confirmed — update ClickUp |
+| Status (Tracker) | Meaning |
+|-----------------|---------|
+| Draft — Pending Noa Review | Created in Airwallex, not yet sent |
+| Invoice Sent | Sent to client, awaiting payment |
+| 7d Reminder Sent | Reminder sent 7 days before due |
+| Overdue — Reminder Sent | Past due, overdue notice sent |
+| Late Fee Applied | $200 late fee added, notice sent |
+| Payment Complete | Confirmed paid |
+| Collections | 60+ days overdue, escalated |
 
 ## Email Templates
+All reminder emails are auto-generated by the `invoice-reminder-cron` skill and sent from john@kravemedia.co. See the skill file for full templates.
 
-**Payment Reminder (Due Date Reached)**
-> Subject: Payment Reminder — [Invoice Number] — [Client Name]
-> Hi [Client Name], this is a friendly reminder that invoice [Invoice Number] for [Amount] is now due. Please arrange payment within 5 days to avoid late fees. [Airwallex invoice link]
-> Best regards, Krave Media
+## Late Fee
+- **Amount:** USD $200 flat
+- **When applied:** 7 days after due date
+- **Line item format:** `Late Payment Fee — [Month Year] — USD $200`
+- Applied monthly if still unpaid
 
-**Late Fee Notice (1 Week Overdue)**
-> Subject: Updated Invoice with Late Fee — [Invoice Number] — [Client Name]
-> Hi [Client Name], as payment for invoice [Invoice Number] has not been received, a late fee of USD $200 has been applied per our payment terms. Updated total: [New Total]. Please arrange payment at your earliest convenience.
-> Best regards, Krave Media
+## Known Recurring Invoices (auto-create monthly)
+| Invoice | Amount | Send To |
+|---------|--------|---------|
+| Nancy Creative Engine — Krave | SGD $6,877 | Ronald (search "Nancy Creative Engine Krave" in Noa's sent mail for contact) |
+| IM8 Creative Engine — Krave | USD $5,250 | josh.kong@prenetics.com |
