@@ -11,12 +11,30 @@ Scan noa@kravemedia.co for Airwallex deposit notification emails, match each dep
 ---
 
 ## Key Data
-- **Client Invoice Tracker Sheet ID:** `REPLACE_WITH_SHEET_ID` ← update when user provides
+- **Client Invoice Tracker Sheet ID:** `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`
 - **Client Invoice Tracker Tab:** `Invoices`
 - **Noa Gmail MCP:** `mcp__gmail-noa__*` (service account impersonation — noa@kravemedia.co)
   - Fallback if gmail-noa not available: use global OAuth Gmail MCP (`mcp__claude_ai_Gmail__*`) — confirm which account it's authenticated to
 - **Slack notification channel:** #payments-invoices-updates (C09HN2EBPR7)
 - **Noa Slack handle:** @U06TBGX9L93
+
+## Column Map (Client Invoice Tracker)
+| Col | Field | Notes |
+|-----|-------|-------|
+| A | Date Created | |
+| B | Client Name | |
+| C | Email Address | |
+| D | Project Description | |
+| E | Invoice # | Primary match key |
+| F | Airwallex Invoice ID | |
+| G | Amount | |
+| H | Currency | |
+| I | Due Date | |
+| J | Status | Read/write |
+| K | Requested By | |
+| L | Reminders Sent | |
+| M | Payment Confirmed Date | Write date when payment confirmed |
+| N | Status (display) | Formula-driven — **do NOT write to this column** |
 
 ---
 
@@ -47,19 +65,19 @@ For each result, call `gmail_get_message` (or `gmail_read_message`) to extract:
 
 ### Step 2 — Pull Open Invoices from Tracker
 Use `sheets_get_rows` on the Client Invoice Tracker:
-- **Sheet ID:** `REPLACE_WITH_SHEET_ID`
+- **Sheet ID:** `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`
 - **Tab:** `Invoices`
-- **Range:** `A:M`
+- **Range:** `A:N`
 
-Filter for rows where Column I (Status) is NOT `Payment Complete` and NOT `Collections`.
+Filter for rows where Column J (Status) is NOT `Payment Complete` and NOT `Collections`.
 
 Build a lookup map: `{ invoice_number: row, amount: row, client_name: row }`
 
 ### Step 3 — Match Deposits to Invoices
 For each deposit email, attempt to match using this priority order:
 
-1. **Invoice number match** — extract invoice # from email body, find exact match in Column D
-2. **Amount match** — match deposit amount to Column F (amount), cross-check Column B (client name) if possible
+1. **Invoice number match** — extract invoice # from email body, find exact match in Column E
+2. **Amount match** — match deposit amount to Column G (amount), cross-check Column B (client name) if possible
 3. **No match** — flag as unmatched deposit, post to #payments-invoices-updates for manual review
 
 **Match confidence rules:**
@@ -69,13 +87,16 @@ For each deposit email, attempt to match using this priority order:
 - No match at all → Flag — post to Slack for manual review
 
 ### Step 4 — Update Client Invoice Tracker
-For each confirmed match, update the row using `sheets_find_row` (by Invoice #, Column D) then `sheets_update_row`:
+For each confirmed match, update the row using `sheets_update_row`:
 
 | Column | Update |
 |--------|--------|
-| I — Status | `Payment Complete` |
-| L — Payment Confirmed Date | Today (YYYY-MM-DD) |
-| M — Notes | `Auto-detected via Airwallex email [date]` |
+| J — Status | `Payment Complete` |
+| M — Payment Confirmed Date | Today (YYYY-MM-DD) |
+
+**Range format note:** Use bare ranges like `J8` or `J8:M8`, not `Sheet1!J8` or `Invoices!J8`. The MCP server resolves to the correct tab automatically.
+
+**Do NOT write to Column N** — it is formula-driven.
 
 ### Step 5 — Update Airwallex
 Airwallex does not auto-mark invoices as paid. For each matched invoice:
@@ -136,4 +157,4 @@ If `mcp__gmail-noa__gmail_search_messages` returns an auth error:
 - Run daily at 9 AM ICT via cron (see: `.claude/skills/invoice-reminder-cron/SKILL.md`)
 - Can also be triggered manually: "check for payments" or "/payment-detection"
 - Shopify deposits are NOT client invoice payments — always skip for matching purposes
-- If the same deposit email is seen twice across runs, deduplicate by checking if Column I is already `Payment Complete`
+- If the same deposit email is seen twice across runs, deduplicate by checking if Column J is already `Payment Complete`

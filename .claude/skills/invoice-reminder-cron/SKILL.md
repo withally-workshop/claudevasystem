@@ -17,11 +17,42 @@ Replaces all manual payment follow-up. Amanda gets full visibility via Slack. No
 ---
 
 ## Key Data
-- **Client Invoice Tracker Sheet ID:** `REPLACE_WITH_SHEET_ID`
+- **Client Invoice Tracker Sheet ID:** `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`
 - **Client Invoice Tracker Tab:** `Invoices`
 - **Reminder emails sent from:** john@kravemedia.co (via `mcp__gmail__*`)
 - **Slack digest channel:** #payments-invoices-updates (C09HN2EBPR7)
 - **Today's date:** always use current date at runtime — do NOT hardcode
+
+## Column Map
+| Col | Field | Notes |
+|-----|-------|-------|
+| A | Date Created | |
+| B | Client Name | |
+| C | Email Address | Client email — use this directly, no Airwallex lookup needed |
+| D | Project Description | |
+| E | Invoice # | Primary match key |
+| F | Airwallex Invoice ID | |
+| G | Amount | |
+| H | Currency | |
+| I | Due Date | Used to calculate days_diff |
+| J | Status | Read/write — `Invoice Sent`, `Payment Complete`, `Late Fee Applied`, `Collections` |
+| K | Requested By | Strategist assigned — use for CC on all emails |
+| L | Reminders Sent | Append-only log e.g. `7d 2026-04-10 \| overdue 2026-04-15` |
+| M | Payment Confirmed Date | Write date when payment confirmed |
+| N | Status (display) | Formula-driven — **do NOT write to this column** |
+
+## Strategist Email Lookup
+Map Column K values to email addresses for CC:
+
+| Name | Email |
+|------|-------|
+| Amanda | amanda@kravemedia.co |
+| Jeneena | jeneena@kravemedia.co |
+| Sybil | sybil@kravemedia.co |
+| Noa | noa@kravemedia.co |
+| ??? | Skip CC, flag in Slack: `⚠️ Unknown strategist on [Invoice #] — CC not sent` |
+
+**Always CC noa@kravemedia.co on every reminder email, regardless of who the assigned strategist is.**
 
 ---
 
@@ -32,14 +63,14 @@ Run the full `payment-detection` skill first.
 This ensures any payments received overnight are marked before reminder logic runs — prevents sending a reminder to a client who already paid.
 
 ### Phase 2 — Reminder Scan
-Pull all rows from Client Invoice Tracker (Sheet ID above, tab: `Invoices`, range `A:M`).
+Pull all rows from Client Invoice Tracker (Sheet ID above, tab: `Invoices`, range `A:N`).
 
 Skip rows where:
-- Column I (Status) = `Payment Complete`
-- Column I (Status) = `Collections`
-- Column I (Status) = `Draft — Pending Noa Review` (invoice not sent yet — no reminder)
+- Column J (Status) = `Payment Complete`
+- Column J (Status) = `Collections`
+- Column J (Status) = `Draft — Pending Noa Review` (invoice not sent yet — no reminder)
 
-For remaining rows, calculate: `days_diff = due_date (Col H) - today`
+For remaining rows, calculate: `days_diff = due_date (Col I) - today`
 
 ### Phase 3 — Apply Reminder Rules
 
@@ -55,23 +86,27 @@ For remaining rows, calculate: `days_diff = due_date (Col H) - today`
 | -8 to -59 | Send late fee notice (if not already sent this week) | `late-fee` |
 | ≤ -60 | Flag for Collections — post to Slack, tag Noa | `collections` |
 
-**Deduplication rule:** Before sending any reminder, check Column K (Reminders Sent).
+**Deduplication rule:** Before sending any reminder, check Column L (Reminders Sent).
 - If the same reminder type was already sent within the last 2 days → skip
-- Format in Column K: `7d 2026-04-10 | 5d 2026-04-12 | overdue 2026-04-15`
+- Format in Column L: `7d 2026-04-10 | 5d 2026-04-12 | overdue 2026-04-15`
 - Parse this field to determine if reminder already sent
 
 ### Phase 4 — Send Reminder Emails
 Use `mcp__gmail__gmail_create_draft` to create each email draft, then send.
 
 **From:** john@kravemedia.co
-**To:** client email (look up from Airwallex customer record using `airwallex_list_customers` — match by client name in Column B)
+**To:** client email from Column C (Email Address) — no Airwallex lookup needed
+**CC:** strategist email (look up from Strategist Email Lookup table using Column K value) + noa@kravemedia.co
 
-If client email not found in Airwallex → skip email, flag in Slack: `⚠️ No email on file for [Client] — reminder not sent`
+If Column C is empty → skip email, flag in Slack: `⚠️ No email on file for [Client] — reminder not sent. Add email to Column C in tracker.`
+If Column K strategist not in lookup table → still send email but skip that CC, flag in Slack: `⚠️ Unknown strategist "[name]" on [Invoice #] — CC not sent`
 
 **Email templates:**
 
 Pre-Due (7d / 5d / 3d / 1d):
 ```
+To: [Column C — client email]
+CC: [strategist email], noa@kravemedia.co
 Subject: Payment Reminder — [Invoice #] — [Client Name]
 
 Hi [Client Name],
@@ -87,6 +122,8 @@ Krave Media
 
 Due Today:
 ```
+To: [Column C — client email]
+CC: [strategist email], noa@kravemedia.co
 Subject: Invoice Due Today — [Invoice #] — [Client Name]
 
 Hi [Client Name],
@@ -102,6 +139,8 @@ Krave Media
 
 Overdue (1–6 days):
 ```
+To: [Column C — client email]
+CC: [strategist email], noa@kravemedia.co
 Subject: Overdue Invoice — [Invoice #] — [Client Name]
 
 Hi [Client Name],
@@ -117,6 +156,8 @@ Krave Media
 
 Late Fee Notice (7+ days):
 ```
+To: [Column C — client email]
+CC: [strategist email], noa@kravemedia.co
 Subject: Updated Invoice — Late Fee Applied — [Invoice #] — [Client Name]
 
 Hi [Client Name],
@@ -134,18 +175,22 @@ Krave Media
 
 ### Phase 5 — Apply Late Fee in Airwallex (7 days overdue only)
 For invoices exactly at -7 days:
-1. `airwallex_get_invoice` using Column E (Airwallex Invoice ID)
+1. `airwallex_get_invoice` using Column F (Airwallex Invoice ID)
 2. Note the current line items and total
 3. Flag to john via Slack: `⚠️ Late fee needed: [Client] — [Invoice #]. Add "Late Payment Fee — [Month Year] — USD $200" line item in Airwallex → Invoices`
    - Airwallex API may not support direct line item addition — manual step flagged, not auto-applied
-4. Update Column I (Status) → `Late Fee Applied — [date]`
+4. Update Column J (Status) → `Late Fee Applied — [date]`
 
 ### Phase 6 — Update Tracker
 After each action, update the relevant row:
-- Column I (Status): update to current state
-- Column K (Reminders Sent): append new entry (e.g. `| 7d 2026-04-12`)
+- Column J (Status): update to current state
+- Column L (Reminders Sent): append new entry (e.g. `| 7d 2026-04-12`)
 
-Use `sheets_find_row` by Invoice # (Column D), then `sheets_update_row`.
+Use `sheets_update_row` with the known row number.
+
+**Do NOT write to Column N** — it is formula-driven and auto-populates based on Column J.
+
+**Range format note:** Do NOT include a sheet tab prefix. Use bare ranges like `J8` or `J8:L8`, not `Sheet1!J8` or `Invoices!J8`. The MCP server resolves to the correct tab automatically.
 
 ### Phase 7 — Post Daily Digest to Slack
 After all processing, post to #payments-invoices-updates (C09HN2EBPR7):

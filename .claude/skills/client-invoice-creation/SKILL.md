@@ -18,7 +18,7 @@
 - Late fee: always USD $200/month, starting 1 week after due date
 - Line item format: `Late Payment Fee — [Month Year] — USD $200`
 - ClickUp flow: Approved → Payment Complete (or → Collections if 2+ months overdue)
-- **Client Invoice Tracker Sheet ID:** `REPLACE_WITH_SHEET_ID` ← update when user provides
+- **Client Invoice Tracker Sheet ID:** `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`
 - **Client Invoice Tracker Tab:** `Invoices`
 
 ---
@@ -70,7 +70,7 @@ Use Airwallex MCP tools:
 
 ### Step 5 — Log to Client Invoice Tracker (Google Sheets)
 After drafting in Airwallex, append a row to the Client Invoice Tracker:
-**Sheet ID:** `REPLACE_WITH_SHEET_ID`
+**Sheet ID:** `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`
 **Tab:** `Invoices`
 
 Use `sheets_append_row` with values in this exact column order:
