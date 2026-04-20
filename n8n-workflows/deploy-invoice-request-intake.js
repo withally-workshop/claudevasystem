@@ -4,6 +4,7 @@ const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = 'replace-me';
 const FALLBACK_STATUS = 'fallback_manual_required';
 const DRAFT_SUCCESS_NOTE = 'draft invoice created';
+const AIRWALLEX_AUTH_URL = 'https://api.airwallex.com/api/v1/authentication/login';
 
 const NORMALIZE_CODE = `
 const payload = $json.body || $json;
@@ -25,6 +26,7 @@ const baseRequest = {
   request_id: requestId,
   submitted_at: new Date().toISOString(),
   submitted_by_slack_user_id: payload.submitted_by_slack_user_id || '',
+  company_name: payload.company_name || payload.client_name || '',
   client_name: payload.client_name || '',
   client_email: payload.client_email || '',
   currency: payload.currency || '',
@@ -49,6 +51,31 @@ return [{
   json: {
     ...baseRequest,
     status: 'intake_received',
+  }
+}];
+`.trim();
+
+const CUSTOMER_RESOLUTION_CODE = `
+const request = $json;
+const candidates = Array.isArray($json.customer_candidates) ? $json.customer_candidates : [];
+
+// Airwallex customer resolution should prefer company name or client name, not email.
+if (candidates.length > 1) {
+  return [{
+    json: {
+      ...request,
+      status: '${FALLBACK_STATUS}',
+      failure_stage: 'customer_resolution',
+      failure_reason: 'ambiguous customer match',
+    }
+  }];
+}
+
+return [{
+  json: {
+    ...request,
+    customer_lookup_name: request.company_name || request.client_name || '',
+    customer_resolution_status: candidates.length === 1 ? 'matched_existing_customer' : 'create_customer_required',
   }
 }];
 `.trim();
@@ -93,11 +120,53 @@ const workflow = {
       position: [700, 300],
       parameters: {
         method: 'POST',
-        url: 'https://api.airwallex.com/api/v1/authentication/login',
+        url: AIRWALLEX_AUTH_URL,
       },
     },
     {
       id: 'n4',
+      name: 'Find Billing Customer',
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
+      position: [920, 260],
+      parameters: {
+        method: 'GET',
+        url: 'https://api.airwallex.com/api/v1/billing/customers',
+        sendQuery: true,
+        queryParameters: {
+          parameters: [
+            {
+              name: 'name',
+              value: '={{ $json.company_name || $json.client_name }}',
+            },
+          ],
+        },
+      },
+    },
+    {
+      id: 'n5',
+      name: 'Resolve Billing Customer',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1140, 260],
+      parameters: {
+        mode: 'runOnceForEachItem',
+        jsCode: CUSTOMER_RESOLUTION_CODE,
+      },
+    },
+    {
+      id: 'n6',
+      name: 'Create Billing Customer',
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
+      position: [1360, 260],
+      parameters: {
+        method: 'POST',
+        url: 'https://api.airwallex.com/api/v1/billing/customers/create',
+      },
+    },
+    {
+      id: 'n7',
       name: 'Write Tracker Success',
       type: 'n8n-nodes-base.googleSheets',
       typeVersion: 4.5,
@@ -105,7 +174,7 @@ const workflow = {
       parameters: {},
     },
     {
-      id: 'n5',
+      id: 'n8',
       name: 'Write Tracker Fallback',
       type: 'n8n-nodes-base.googleSheets',
       typeVersion: 4.5,
@@ -113,7 +182,7 @@ const workflow = {
       parameters: {},
     },
     {
-      id: 'n6',
+      id: 'n9',
       name: 'Requester Success Confirmation',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
@@ -121,7 +190,7 @@ const workflow = {
       parameters: {},
     },
     {
-      id: 'n7',
+      id: 'n10',
       name: 'DM John Failure Alert',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,

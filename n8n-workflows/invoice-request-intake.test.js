@@ -34,5 +34,10 @@ assert.match(deploySource, /line_items/, 'Expected line_items payload');
 assert.match(deploySource, /failed_validation/, 'Expected validation failure status');
 assert.match(deploySource, /intake_received/, 'Expected intake_received status');
 assert.match(deploySource, /subtotal/, 'Expected subtotal calculation');
+assert.match(deploySource, /authentication\/login/, 'Expected Airwallex auth login endpoint');
+assert.match(deploySource, /Find Billing Customer/, 'Expected customer lookup node');
+assert.match(deploySource, /Create Billing Customer/, 'Expected customer create node');
+assert.match(deploySource, /company name|client name/i, 'Expected name-based lookup comments or code');
+assert.match(deploySource, /ambiguous customer match/i, 'Expected ambiguous customer fallback handling');
 
 console.log('Invoice request intake workflow contract check passed.');
