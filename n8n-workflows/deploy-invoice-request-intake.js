@@ -1,7 +1,7 @@
 const https = require('https');
 
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
-const API_KEY = 'replace-me';
+const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiMTkwMWE5My02ZjJjLTRlNzEtOWI4ZC02ZjlhMzVhMjU4NzUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiZjBlZjk1YTYtYzc2MS00Zjc2LWJkZTgtMWU1Y2FiN2UxMjcxIiwiaWF0IjoxNzc2NjY1NjMxfQ.uBo2H0dzui9S0_MktoRxdodKzzE58vcQtXSlu8VpcEY';
 const FALLBACK_STATUS = 'fallback_manual_required';
 const DRAFT_SUCCESS_NOTE = 'draft invoice created';
 const DRAFT_REVIEW_STATUS = 'Draft - Pending John Review';
@@ -48,8 +48,8 @@ const REQUESTER_FALLBACK_TEXT =
 const LINE_ITEMS_PAYLOAD_LABEL = 'Line Items Payload';
 const JOHN_DM_TEXT =
   "={{ 'Invoice intake fallback\\nRequest ID: ' + $json.request_id + '\\nClient: ' + $json.client_name + '\\nRequester: ' + $json.submitted_by_slack_user_id + '\\nSubtotal: ' + $json.currency + ' ' + $json.subtotal + '\\nFailure stage: ' + $json.failure_stage + '\\nFailure reason: ' + $json.failure_reason + '\\n' + '" + LINE_ITEMS_PAYLOAD_LABEL + ": ' + JSON.stringify($json.line_items) }}";
-const AIRWALLEX_CLIENT_ID = 'replace-me';
-const AIRWALLEX_API_KEY = 'replace-me';
+const AIRWALLEX_CLIENT_ID = 'JaQA4uJ1SDSBkTdFigT9sw';
+const AIRWALLEX_API_KEY = '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af5c91666f50b10ee64fd87fa3db7435e8dc5c07721';
 const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
 const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
 const SHEET_ID = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50';

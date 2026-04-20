@@ -19,6 +19,21 @@ assert.match(deploySource, /api\.airwallex\.com/, 'Expected Airwallex API usage 
 assert.match(deploySource, /googleSheets/i, 'Expected Google Sheets usage in deploy script');
 assert.match(deploySource, /fallback_manual_required/, 'Expected fallback status handling');
 assert.match(deploySource, /draft invoice created/i, 'Expected draft-only success handling');
+assert.doesNotMatch(
+  deploySource,
+  /const API_KEY = 'replace-me'/,
+  'Expected deploy script to stop using placeholder n8n API key'
+);
+assert.doesNotMatch(
+  deploySource,
+  /const AIRWALLEX_CLIENT_ID = 'replace-me'/,
+  'Expected deploy script to stop using placeholder Airwallex client id'
+);
+assert.doesNotMatch(
+  deploySource,
+  /const AIRWALLEX_API_KEY = 'replace-me'/,
+  'Expected deploy script to stop using placeholder Airwallex API key'
+);
 assert.match(
   deploySource,
   /const SHEETS_CRED_ID = '83MQOm78gYDvziTO'/,
