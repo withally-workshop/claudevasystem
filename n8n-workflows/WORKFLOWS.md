@@ -1,18 +1,21 @@
-# Krave Media — n8n Automation Workflows
-**Instance:** `noatakhel.app.n8n.cloud`
-**Last updated:** 2026-04-20
-**Maintained by:** John (Systems Partner) — john@kravemedia.co
+# Krave Media - n8n Automation Workflows
+
+**Instance:** `noatakhel.app.n8n.cloud`  
+**Last updated:** `2026-04-20`  
+**Maintained by:** John (Systems Partner) - `john@kravemedia.co`
 
 ---
 
 ## Table of Contents
+
 1. [Workflow Index](#workflow-index)
 2. [Shared Infrastructure](#shared-infrastructure)
-3. [Workflow 1 — Payment Detection](#workflow-1--payment-detection)
-4. [Workflow 2 — Invoice Reminder Cron](#workflow-2--invoice-reminder-cron)
-5. [Credential Reference](#credential-reference)
-6. [Runbook — Common Scenarios](#runbook--common-scenarios)
-7. [Handover Checklist](#handover-checklist)
+3. [Workflow 1 - Payment Detection](#workflow-1---payment-detection)
+4. [Workflow 2 - Invoice Reminder Cron](#workflow-2---invoice-reminder-cron)
+5. [Workflow 3 - EOD Triage Summary](#workflow-3---eod-triage-summary)
+6. [Credential Reference](#credential-reference)
+7. [Runbook - Common Scenarios](#runbook---common-scenarios)
+8. [Handover Checklist](#handover-checklist)
 
 ---
 
@@ -20,197 +23,281 @@
 
 | # | Name | ID | Status | Schedule | Purpose |
 |---|------|----|--------|----------|---------|
-| 1 | Krave — Payment Detection | `grsXd1VCVIL2F8Cv` | ✅ Active | 10am + 5pm ICT | Detect Airwallex deposits → match invoices → update tracker |
-| 2 | Krave — Invoice Reminder Cron | `QvHzslWExLjrH0mo` | ✅ Active | 10am ICT | Send invoice reminders → alert overdue → update tracker |
+| 1 | Krave - Payment Detection | `grsXd1VCVIL2F8Cv` | Active | 10am + 5pm ICT | Detect Airwallex deposits, match invoices, update tracker |
+| 2 | Krave - Invoice Reminder Cron | `QvHzslWExLjrH0mo` | Active | 10am ICT daily | Send invoice reminders, alert overdue, update tracker |
+| 3 | Krave - EOD Triage Summary | `TBD after deploy` | Planned | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
 
 ---
 
 ## Shared Infrastructure
 
 ### Data Sources
+
 | Resource | Type | ID / Location | Access |
 |----------|------|---------------|--------|
 | Client Invoice Tracker | Google Sheets | `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50` | Tab: `Invoices` |
-| Slack channel | #payments-invoices-updates | `C09HN2EBPR7` | Bot posts only |
-| Gmail inbox (scan) | noa@kravemedia.co | OAuth2 | Read only (payment detection) |
-| Gmail inbox (send) | john@kravemedia.co | OAuth2 | Send + CC |
+| Slack channel | `#payments-invoices-updates` | `C09HN2EBPR7` | Bot posts and reads |
+| Slack channel | `#airwallexdrafts` | `C0AQZGJDR38` | Bot reads and archives EOD |
+| Slack channel | `#ad-production-internal` | `C0AGEM919QV` | Bot reads |
+| Slack DM destination | Noa Takhel | `U06TBGX9L93` | Bot sends EOD DM |
+| Gmail inbox (scan) | `noa@kravemedia.co` | OAuth2 | Read only (payment detection) |
+| Gmail inbox (send) | `john@kravemedia.co` | OAuth2 | Send + CC |
 
 ### Invoice Tracker Column Map
+
 | Col | Header | Used By |
 |-----|--------|---------|
-| A | Date Created | — |
-| B | Client Name | Both workflows |
-| C | Email Address | Reminder Cron (send to) |
-| D | Project Description | — |
-| E | Invoice # | Both workflows (match key) |
-| F | Airwallex Invoice ID | Payment Detection (mark paid) |
-| G | Amount | Both workflows |
-| H | Currency | Both workflows |
-| I | Due Date | Reminder Cron (days_diff calc) |
-| J | Status | Both workflows (read + write) |
-| K | Requested By | Reminder Cron (strategist CC + tag) |
-| L | Reminders Sent | Reminder Cron (dedup log) |
-| M | Payment Confirmed Date | Payment Detection (write) |
-| N | Status Display | Formula-driven — **never write** |
+| A | Date Created | - |
+| B | Client Name | Payment Detection, Invoice Reminder Cron |
+| C | Email Address | Invoice Reminder Cron |
+| D | Project Description | - |
+| E | Invoice # | Payment Detection, Invoice Reminder Cron |
+| F | Airwallex Invoice ID | Payment Detection |
+| G | Amount | Payment Detection, Invoice Reminder Cron |
+| H | Currency | Payment Detection, Invoice Reminder Cron |
+| I | Due Date | Invoice Reminder Cron |
+| J | Status | Payment Detection, Invoice Reminder Cron |
+| K | Requested By | Invoice Reminder Cron |
+| L | Reminders Sent | Invoice Reminder Cron |
+| M | Payment Confirmed Date | Payment Detection |
+| N | Status Display | Formula-driven, never write |
 
 ### Status Value Reference
+
 | Value | Set By | Meaning |
 |-------|--------|---------|
-| `Invoice Sent` | Manual / invoice creation skill | Invoice delivered to client |
-| `Draft — Pending John Review` | Invoice creation skill | Not sent yet — skip reminders |
+| `Invoice Sent` | Manual / invoice creation flow | Invoice delivered to client |
+| `Draft - Pending John Review` | Invoice creation flow | Not sent yet, skip reminders |
 | `Payment Complete` | Payment Detection | Deposit matched and confirmed |
-| `Late Fee Applied — YYYY-MM-DD` | Reminder Cron | 7+ days overdue, fee logged |
-| `Collections` | Reminder Cron | 60+ days overdue, escalated |
+| `Late Fee Applied - YYYY-MM-DD` | Invoice Reminder Cron | 7+ days overdue, fee logged |
+| `Collections` | Invoice Reminder Cron | 60+ days overdue, escalated |
 
 ---
 
-## Workflow 1 — Payment Detection
+## Workflow 1 - Payment Detection
 
-**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/grsXd1VCVIL2F8Cv`
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/grsXd1VCVIL2F8Cv`  
 **Deploy script:** `n8n-workflows/deploy-payment-detection.js`
 
 ### Purpose
-Replaces the manual daily task of checking whether clients have paid. Scans noa@kravemedia.co for Airwallex deposit notification emails, matches each deposit to an open invoice in the tracker, marks the invoice as paid in both Google Sheets and Airwallex, and posts a confirmation to Slack.
+
+Replaces the manual daily task of checking whether clients have paid. It scans `noa@kravemedia.co` for Airwallex deposit emails, matches each deposit to an open invoice in the tracker, marks the invoice paid in both Google Sheets and Airwallex, and posts a confirmation to Slack.
 
 ### Triggers
+
 | Type | Details |
 |------|---------|
-| Schedule | `0 3,10 * * *` — 10:00 AM + 5:00 PM ICT (03:00 + 10:00 UTC) |
+| Schedule | `0 3,10 * * *` - 10:00 AM + 5:00 PM ICT |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-payment-detection` |
 
 ### Node Flow
-```
+
+```text
 [Schedule / Webhook]
-        ↓
-[Search Airwallex Emails]     Gmail — scans noa@ for Airwallex deposit emails (last 2 days)
-        ↓
-[Parse All Emails]            Code — extracts amount, currency, invoice # from each email body
-        ↓                     Shopify filter: skip if contains "shopify", "shop_", "payout", or non-round amount
-[Get Invoice Tracker]         Google Sheets — reads all rows from Invoices tab
-        ↓
-[Match Deposits To Invoices]  Code — matches by Invoice # first, then by exact amount + currency
-        ↓
-[Match Found?]                IF — routes matched vs unmatched
-        ↓ TRUE                ↓ FALSE
-[Airwallex Auth]              [Slack Alert]   Posts to #payments-invoices-updates (silent if no emails found)
-        ↓
-[Airwallex Mark Paid]         HTTP POST /api/v1/invoices/{id}/mark_as_paid
-        ↓
-[Update Invoice Status]       Sheets — Col J → "Payment Complete", Col M → today's date
-        ↓
-[Slack Payment Confirmed]     Posts confirmed payment summary to #payments-invoices-updates
+        |
+[Search Airwallex Emails]
+        |
+[Parse All Emails]
+        |
+[Get Invoice Tracker]
+        |
+[Match Deposits To Invoices]
+        |
+[Match Found?]
+   | true               | false
+   v                    v
+[Airwallex Auth]      [silent exit]
+        |
+[Airwallex Mark Paid]
+        |
+[Update Invoice Status]
+        |
+[Slack Payment Confirmed]
 ```
 
-### Matching Logic (Priority Order)
-1. **High confidence** — Invoice # found in email body matches Col E exactly
-2. **Medium confidence** — Amount + currency matches exactly one open invoice
-3. **Ambiguous** — Amount matches multiple invoices → skipped, no Slack alert
-4. **No match** — Silently skipped (no Slack noise)
+### Matching Logic
 
-### Shopify Filter (3-layer)
-Emails are skipped if they contain: `shopify`, `shop_`, or `payout` in subject/body, OR if the deposit amount has non-zero cents (Shopify payouts are irregular amounts).
+1. Invoice number match against Col E.
+2. Exact amount + currency match against a single open invoice.
+3. Ambiguous matches are skipped silently.
+4. Unmatched deposits are skipped silently.
 
 ### Outputs
+
 | Outcome | Action |
 |---------|--------|
-| Match found | Sheets updated + Airwallex marked paid + Slack confirmed |
-| No emails found | Silent (no Slack post) |
-| Unmatched deposit | Silent (no Slack post) |
-| Shopify email | Skipped silently |
+| Match found | Sheets updated, Airwallex marked paid, Slack confirmation |
+| No emails found | Silent |
+| Unmatched deposit | Silent |
+| Shopify / payout noise | Skipped silently |
 
 ### Error Handling
+
 | Failure | Behaviour |
 |---------|-----------|
-| Airwallex Auth fails | `continueOnFail: true` — still updates Sheets + posts Slack |
-| Airwallex Mark Paid fails | `continueOnFail: true` — Sheets still updated |
-| Gmail auth error | Workflow errors — n8n sends failure email to instance owner |
+| Airwallex auth fails | `continueOnFail: true` - Sheets and Slack still continue |
+| Airwallex mark paid fails | `continueOnFail: true` - Sheets still update |
+| Gmail auth error | Workflow errors and n8n emails the instance owner |
 
 ---
 
-## Workflow 2 — Invoice Reminder Cron
+## Workflow 2 - Invoice Reminder Cron
 
-**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/QvHzslWExLjrH0mo`
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/QvHzslWExLjrH0mo`  
 **Deploy script:** `n8n-workflows/deploy-invoice-reminder-cron.js`
 
 ### Purpose
-Replaces all manual invoice follow-up. Once daily, scans every open invoice in the tracker, calculates days until/since due date, sends tiered reminder emails from john@kravemedia.co with the assigned strategist and Noa on CC, updates the tracker, and posts Slack alerts for overdue and escalated invoices — completely silent when nothing needs action.
+
+Replaces manual invoice follow-up. Once daily, it scans every open invoice in the tracker, calculates days until or since due date, sends tiered reminder emails from `john@kravemedia.co`, updates the tracker, and posts Slack alerts for overdue and escalated invoices.
 
 ### Triggers
+
 | Type | Details |
 |------|---------|
-| Schedule | `0 3 * * *` — 10:00 AM ICT (03:00 UTC) daily |
+| Schedule | `0 3 * * *` - 10:00 AM ICT daily |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder` |
 
 ### Node Flow
-```
+
+```text
 [Schedule / Webhook]
-        ↓
-[Get Invoice Tracker]         Google Sheets — reads all rows from Invoices tab
-        ↓
-[Process Invoices]            Code — filters, classifies, deduplicates all actionable invoices
-        ↓                     Returns 0 items → workflow exits silently
-        ↓                     Returns N items → one item per action needed
-[Has Client Email?]           IF — routes by whether Col C (Email Address) is populated
-        ↓ TRUE                ↓ FALSE
-[Send Reminder Email]         [Slack Missing Email Warning]   Posts ⚠️ to channel
-        ↓
-[Update Tracker Row]          Sheets — Col J (Status) + Col L (Reminders Sent) appended
-        ↓
-[Needs Slack Alert?]          IF — only overdue / late-fee / collections trigger Slack
-        ↓ TRUE
-[Slack Overdue Alert]         Posts to #payments-invoices-updates, tags strategist + Amanda
+        |
+[Get Invoice Tracker]
+        |
+[Process Invoices]
+        |
+[Has Client Email?]
+   | true                     | false
+   v                          v
+[Send Reminder Email]   [Slack Missing Email Warning]
+        |
+[Update Tracker Row]
+        |
+[Needs Slack Alert?]
+   | true
+   v
+[Slack Overdue Alert]
 ```
 
 ### Reminder Schedule
+
 | Days Until/Since Due | Trigger | Email Type | Slack Alert |
-|---------------------|---------|-----------|-------------|
+|----------------------|---------|-----------|-------------|
 | +7 | Pre-due | Payment Reminder | No |
 | +5 | Pre-due | Payment Reminder | No |
 | +3 | Pre-due | Payment Reminder | No |
 | +1 | Pre-due | Payment Reminder | No |
-| 0 | Due today | Invoice Due Today | Yes — tags strategist + Amanda |
-| -1 to -6 | Overdue | Overdue Invoice | Yes — tags strategist + Amanda |
-| -7 | Late fee | Late Fee Applied | Yes — tags strategist + Amanda |
-| -8 to -59 | Late fee follow-up | Late Fee Applied | Yes — tags strategist + Amanda |
-| ≤ -60 | Collections | FINAL NOTICE | Yes — tags strategist + Amanda + Noa |
+| 0 | Due today | Invoice Due Today | Yes |
+| -1 to -6 | Overdue | Overdue Invoice | Yes |
+| -7 | Late fee | Late Fee Applied | Yes |
+| -8 to -59 | Late fee follow-up | Late Fee Applied | Yes |
+| <= -60 | Collections | FINAL NOTICE | Yes |
 
 ### Deduplication
-Before sending any reminder, the workflow checks Col L (Reminders Sent). Format: `7d 2026-04-10 | overdue 2026-04-15`.
-- Same reminder type sent within **2 days** → skip
-- `late-fee-followup` sent within **7 days** → skip
 
-### Email Format
-- **From:** john@kravemedia.co
-- **To:** Col C (Email Address)
-- **CC:** Col K strategist email + noa@kravemedia.co
-- **Subject:** varies by reminder type (see templates in `SKILL.md`)
-
-### Strategist Slack ID Map
-| Name | Email | Slack ID |
-|------|-------|----------|
-| Amanda | amanda@kravemedia.co | `U07J8SRCPGU` |
-| Jeneena | jeneena@kravemedia.co | `U07R7FU4WBV` |
-| Sybil | sybil@kravemedia.co | `U0A2HLNV8NM` |
-| Noa | noa@kravemedia.co | `U06TBGX9L93` |
-| John | john@kravemedia.co | `U0AM5EGRVTP` |
-
-### Rows Skipped (Never Processed)
-- Status = `Payment Complete`
-- Status = `Collections`
-- Status = `Draft — Pending John Review`
-- Missing Invoice # or Due Date
-- Unparseable Due Date
+- Same reminder type sent within 2 days -> skip
+- `late-fee-followup` sent within 7 days -> skip
 
 ### Outputs
+
 | Scenario | Email | Slack |
 |----------|-------|-------|
-| Pre-due (7d/5d/3d/1d) | Sent | Silent |
-| Due today / Overdue | Sent | Alert with strategist + Amanda tag |
-| Late fee (-7d+) | Sent | Alert with strategist + Amanda tag |
-| Collections (-60d+) | Sent | Alert with strategist + Amanda + Noa tag |
-| Missing client email | Skipped | Warning posted to channel |
-| Unknown strategist (Col K) | Sent (CC skipped) | Warning appended to alert |
-| Nothing to action | — | Silent — workflow exits |
+| Pre-due | Sent | Silent |
+| Due today / Overdue | Sent | Alert |
+| Late fee | Sent | Alert |
+| Collections | Sent | Alert |
+| Missing client email | Skipped | Warning |
+| Unknown strategist | Sent, CC skipped | Warning appended |
+| Nothing to action | - | Silent |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| Gmail send error | `continueOnFail: true`, downstream Slack path can still run |
+| Missing client email | Warning posted, no send |
+| Bad due date / missing invoice key | Row skipped |
+
+---
+
+## Workflow 3 - EOD Triage Summary
+
+**n8n URL:** `TBD after deploy`  
+**Deploy script:** `n8n-workflows/deploy-eod-triage-summary.js`
+
+### Purpose
+
+Replaces the scheduled Claude-based EOD summary. Every weekday at 6:00 PM ICT, the workflow reads same-day Slack activity from the three operating channels, compacts the activity into an AI-ready context block, generates Noa's final EOD wrap-up with OpenAI, sends it to Noa via Slack DM, and posts the exact same message to `#airwallexdrafts` for next-day SOD carry-over.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Schedule | `0 10 * * 1-5` - 6:00 PM ICT weekdays |
+| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-eod-triage-summary` |
+
+### Node Flow
+
+```text
+[Schedule / Webhook]
+        |
+[Get Airwallex Drafts History]
+        |
+[Get Ad Production History]
+        |
+[Get Payments History]
+        |
+[Build EOD Context]
+        |
+[Generate EOD Summary]
+        |
+[Send EOD to Noa]
+        |
+[Did Noa Send Fail?]
+   | false                  | true
+   v                        v
+[Post Archive Copy]    [Retry Send to Noa]
+                              |
+                        [Did Retry Fail?]
+                         | false          | true
+                         v                v
+                  [Post Archive Copy] [Post Failure Alert]
+```
+
+### Source Channels
+
+| Channel | ID | Used For |
+|---------|----|----------|
+| `#airwallexdrafts` | `C0AQZGJDR38` | John's task dump, invoice drafts, inbox triage |
+| `#ad-production-internal` | `C0AGEM919QV` | IM8 production updates, blockers, Frame.io status |
+| `#payments-invoices-updates` | `C09HN2EBPR7` | Invoice requests, payment confirmations |
+
+### AI Output Rules
+
+- Uses the EOD template headed by `### 🏁 Today's Wrap-up`
+- Bullets only, no paragraphs or filler
+- Empty sections omitted
+- Blockers must name who or what is blocking
+- Quiet days still send a short summary
+- Only same-day GMT+8 Slack activity is included
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| Normal day | DM Noa and archive same message to `#airwallexdrafts` |
+| Quiet day | DM Noa a short quiet-day summary and archive same message |
+| First Slack DM fails | Retry once |
+| Retry succeeds | Archive same message |
+| Retry fails | Post failure alert plus formatted summary to `#airwallexdrafts` |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| One Slack DM failure | Retry once automatically |
+| Two Slack DM failures | Post manual-send fallback to `#airwallexdrafts` |
+| OpenAI node error | Workflow errors and n8n emails the instance owner |
 
 ---
 
@@ -218,73 +305,87 @@ Before sending any reminder, the workflow checks Col L (Reminders Sent). Format:
 
 | Credential Name | Type | ID | Used By | Account |
 |----------------|------|----|---------|---------|
-| Gmail account | Gmail OAuth2 | `vxHex5lFrkakcsPi` | Payment Detection | noa@kravemedia.co |
-| Gmail account (john) | Gmail OAuth2 | `vsDW3WpKXqS9HUs3` | Invoice Reminder Cron | john@kravemedia.co |
-| Google Sheets account | Sheets OAuth2 | `83MQOm78gYDvziTO` | Both | noa@kravemedia.co |
-| Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | Both | Krave Slack workspace |
+| Gmail account | Gmail OAuth2 | `vxHex5lFrkakcsPi` | Payment Detection | `noa@kravemedia.co` |
+| Gmail account (john) | Gmail OAuth2 | `vsDW3WpKXqS9HUs3` | Invoice Reminder Cron | `john@kravemedia.co` |
+| Google Sheets account | Google Sheets OAuth2 | `83MQOm78gYDvziTO` | Payment Detection, Invoice Reminder Cron | `noa@kravemedia.co` |
+| Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | All three workflows | Krave Slack workspace |
+| OpenAI account | OpenAI API | `TBD in n8n` | EOD Triage Summary | OpenAI API |
 
-### Airwallex (hardcoded in HTTP Request nodes)
+### Airwallex
+
+Hardcoded in the Payment Detection HTTP Request nodes:
+
 | Field | Value |
 |-------|-------|
-| x-client-id | `JaQA4uJ1SDSBkTdFigT9sw` |
-| x-api-key | `5611f8e1...` (see deploy script) |
+| `x-client-id` | `JaQA4uJ1SDSBkTdFigT9sw` |
+| `x-api-key` | `5611f8e1...` |
 | Auth endpoint | `POST https://api.airwallex.com/api/v1/authentication/login` |
 | Mark paid endpoint | `POST https://api.airwallex.com/api/v1/invoices/{id}/mark_as_paid` |
 
-> **Note:** Airwallex credentials are hardcoded as HTTP Request headers — not stored as n8n credentials. If the API key rotates, update both the deploy script and the live workflow node directly.
+> Airwallex credentials are hardcoded in the workflow deploy logic, not stored in n8n credentials. If the API key rotates, update both the deploy script and the live workflow nodes.
 
 ---
 
-## Runbook — Common Scenarios
+## Runbook - Common Scenarios
 
-### Trigger a payment check manually
+### Trigger payment detection manually
+
 ```bash
 curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-payment-detection" \
   -H "Content-Type: application/json" -d '{}'
 ```
-Or via Claude Code: say **"run payment detection"** or **"/payment-detection-trigger"**
 
 ### Trigger invoice reminders manually
+
 ```bash
 curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder" \
   -H "Content-Type: application/json" -d '{}'
 ```
-Or via Claude Code: say **"run invoice reminders"** or **"/invoice-reminder-trigger"**
 
-### A payment was matched but Airwallex mark_paid failed
-The Sheets row will still show `Payment Complete` and Slack will have posted confirmation. Log into Airwallex and manually mark the invoice as paid. The `continueOnFail` flag on the Airwallex node prevents this from blocking Sheets/Slack.
+### Trigger EOD triage manually
 
-### A client's email is missing from the tracker
-The reminder cron will post a ⚠️ warning to #payments-invoices-updates: `No client email on file for [Client] ([Invoice #])`. Add the email to Col C in the tracker — it will be picked up on the next run.
+```bash
+curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-eod-triage-summary" \
+  -H "Content-Type: application/json" -d '{}'
+```
 
-### A strategist name in Col K doesn't match the lookup table
-The email will still send but the CC will be skipped and a warning will appear in Slack: `⚠️ Unknown strategist "[name]"`. Check the Col K value — it must be one of: `Amanda`, `Jeneena`, `Sybil`, `Noa`, `John` (exact match, case-sensitive).
+### Payment matched but Airwallex mark paid failed
 
-### Reminder was sent twice / deduplication not working
-Check Col L (Reminders Sent) for the row. If the entry is malformed or missing, the dedup check will fail. Correct format: `7d 2026-04-10 | overdue 2026-04-15`. Add/fix the entry manually.
+The Sheets row still shows `Payment Complete` and Slack still shows the confirmation. Log into Airwallex and mark the invoice paid manually.
 
-### Redeploy a workflow from scratch
+### Missing client email in tracker
+
+The reminder workflow posts a warning to `#payments-invoices-updates`. Add the client email to Col C and it will be picked up on the next run.
+
+### Strategist name in Col K does not match the lookup table
+
+The email still sends, but strategist CC is skipped and Slack includes a warning. Valid names are `Amanda`, `Jeneena`, `Sybil`, `Noa`, and `John`.
+
+### EOD DM to Noa fails
+
+The workflow retries once. If the retry also fails, it posts the formatted summary to `#airwallexdrafts` for manual sending.
+
+### Redeploy workflows from scratch
+
 ```bash
 node n8n-workflows/deploy-payment-detection.js
 node n8n-workflows/deploy-invoice-reminder-cron.js
+node n8n-workflows/deploy-eod-triage-summary.js
 ```
-This creates a **new** workflow — you'll get a new ID and need to activate it and deactivate the old one.
 
-### Update an existing workflow
-Use the n8n API directly (PUT `/api/v1/workflows/{id}`) as done in the deploy scripts, or edit in the n8n canvas and save.
+Each deploy script creates a new workflow. Activate the new workflow in n8n and deactivate the old one if replacing an existing live version.
 
 ---
 
 ## Handover Checklist
 
-For anyone inheriting or maintaining these workflows:
-
-- [ ] Access to `noatakhel.app.n8n.cloud` (ask Noa for login or create a new member account)
-- [ ] Access to Client Invoice Tracker Google Sheet (`1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`)
-- [ ] Understand the Status values in Col J — never manually write to Col N
-- [ ] Know that Airwallex credentials are hardcoded (not in n8n credential store) — keep the deploy scripts safe
-- [ ] Both workflows should remain **Active** in n8n at all times
-- [ ] Gmail OAuth2 tokens expire — if emails stop sending, re-authorize the credential in n8n (Credentials → open → reconnect OAuth)
-- [ ] Slack bot token (`Krave Slack Bot`) does not expire unless revoked
-- [ ] All code changes should be committed to `github.com/withally-workshop/claudevasystem` — the deploy scripts are the source of truth
-- [ ] Test after any change by triggering the webhook and checking #payments-invoices-updates
+- [ ] Access to `noatakhel.app.n8n.cloud`
+- [ ] Access to the Client Invoice Tracker Google Sheet
+- [ ] Understand the tracker status values in Col J and never write to Col N
+- [ ] Keep Airwallex API credentials secure
+- [ ] Keep all active workflows enabled in n8n
+- [ ] Re-authorize Gmail OAuth2 credentials if email reads or sends stop working
+- [ ] Ensure the Slack bot retains access to all required channels and Noa DM delivery
+- [ ] Add or confirm an `OpenAI account` credential in n8n before deploying EOD Triage Summary
+- [ ] Treat repo deploy scripts as the source of truth
+- [ ] Test by webhook after any workflow change

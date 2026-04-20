@@ -6,56 +6,77 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 
 | Workflow | Status | Schedule | File |
 |----------|--------|----------|------|
-| Payment Detection | ✅ Active | 10am + 5pm ICT | [payment-detection.workflow.json](payment-detection.workflow.json) |
-| Invoice Reminder Cron | ✅ Active | 10am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
+| Payment Detection | Active | 10am + 5pm ICT | [payment-detection.workflow.json](payment-detection.workflow.json) |
+| Invoice Reminder Cron | Active | 10am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
+| EOD Triage Summary | Planned | 6pm ICT weekdays | [deploy-eod-triage-summary.js](deploy-eod-triage-summary.js) |
 
 ---
 
 ## Payment Detection
 
-Scans noa@kravemedia.co for Airwallex deposit emails → matches to open invoices → updates Client Invoice Tracker → posts to #payments-invoices-updates.
+Scans `noa@kravemedia.co` for Airwallex deposit emails, matches them to open invoices, updates the Client Invoice Tracker, and posts confirmations to `#payments-invoices-updates`.
 
 **Webhook (manual trigger):**
-```
+```text
 POST https://noatakhel.app.n8n.cloud/webhook/krave-payment-detection
 ```
 
 **Deploy from scratch:**
-```
+```bash
 node n8n-workflows/deploy-payment-detection.js
 ```
 
 **Credentials required in n8n:**
-- `Gmail account` — noa@kravemedia.co OAuth2
-- `Google Sheets account` — access to Client Invoice Tracker
-- `Krave Slack Bot` — bot token for #payments-invoices-updates
+- `Gmail account` - `noa@kravemedia.co` OAuth2
+- `Google Sheets account` - access to Client Invoice Tracker
+- `Krave Slack Bot` - bot token for `#payments-invoices-updates`
 
 ---
 
 ## Invoice Reminder Cron
 
-Scans Client Invoice Tracker daily at 10am ICT → sends pre-due and overdue reminder emails from john@kravemedia.co → tags the correct strategist + Amanda in #payments-invoices-updates for overdue/late-fee/collections → updates the tracker (Status + Reminders Sent).
+Scans the Client Invoice Tracker daily at 10am ICT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker.
 
-**Silent when nothing to do.** Slack alerts only fire for: due-today, overdue, late-fee, collections, or missing client email.
+**Silent when nothing to do.** Slack alerts only fire for `due-today`, `overdue`, `late-fee`, `collections`, or missing client email.
 
-**Strategist tagging:** Reads Col K (Requested By) → maps to Slack user ID → tags in overdue alerts.
+**Strategist tagging:** Reads Col K (`Requested By`) and maps it to the Slack user ID used in overdue alerts.
 
 **Webhook (manual trigger):**
-```
+```text
 POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder
 ```
 
 **Deploy from scratch:**
-```
+```bash
 node n8n-workflows/deploy-invoice-reminder-cron.js
 ```
 
 **Credentials required in n8n:**
-- `Gmail account` — john@kravemedia.co OAuth2
-- `Google Sheets account` — access to Client Invoice Tracker
-- `Krave Slack Bot` — bot token for #payments-invoices-updates
+- `Gmail account` - `john@kravemedia.co` OAuth2
+- `Google Sheets account` - access to Client Invoice Tracker
+- `Krave Slack Bot` - bot token for `#payments-invoices-updates`
 
 **Workflow ID:** `QvHzslWExLjrH0mo`
+
+---
+
+## EOD Triage Summary
+
+Reads same-day Slack activity from `#airwallexdrafts`, `#ad-production-internal`, and `#payments-invoices-updates`, builds a compact AI prompt, uses OpenAI to generate Noa's EOD summary, sends Noa a Slack DM, and posts the same summary to `#airwallexdrafts` for SOD carry-over.
+
+**Webhook (manual trigger):**
+```text
+POST https://noatakhel.app.n8n.cloud/webhook/krave-eod-triage-summary
+```
+
+**Deploy from scratch:**
+```bash
+node n8n-workflows/deploy-eod-triage-summary.js
+```
+
+**Credentials required in n8n:**
+- `Krave Slack Bot` - read/post access for the three source channels and Noa DM
+- `OpenAI account` - OpenAI API credential for the summary node
 
 ---
 
