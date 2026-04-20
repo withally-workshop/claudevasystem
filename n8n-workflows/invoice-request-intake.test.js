@@ -54,5 +54,15 @@ assert.match(
   /Airwallex draft invoice was created/i,
   'Expected requester success confirmation text'
 );
+assert.match(deploySource, /failure_stage/, 'Expected failure_stage persistence');
+assert.match(deploySource, /failure_reason/, 'Expected failure_reason persistence');
+assert.match(deploySource, /Line Items Payload/, 'Expected line item payload persistence');
+assert.match(
+  deploySource,
+  /manual Airwallex creation required/i,
+  'Expected requester fallback text'
+);
+assert.match(deploySource, /DM John Failure Alert/, 'Expected John DM alert node');
+assert.match(deploySource, /fallback_manual_required/, 'Expected fallback status value');
 
 console.log('Invoice request intake workflow contract check passed.');

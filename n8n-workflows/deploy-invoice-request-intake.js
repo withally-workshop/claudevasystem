@@ -17,6 +17,20 @@ const SUCCESS_TRACKER_COLUMNS = {
 };
 const REQUESTER_SUCCESS_TEXT =
   "={{ 'Invoice request received. Airwallex draft invoice was created for ' + $json.client_name + ' (' + $json.currency + ' ' + $json.subtotal + '). Request ID: ' + $json.request_id }}";
+const FALLBACK_TRACKER_COLUMNS = {
+  'Request ID': '={{ $json.request_id }}',
+  Source: 'Slack Modal',
+  'Creation Status': FALLBACK_STATUS,
+  'Failure Stage': '={{ $json.failure_stage }}',
+  'Failure Reason': '={{ $json.failure_reason }}',
+  'Airwallex Customer ID': '={{ $json.airwallex_customer_id || "" }}',
+  'Airwallex Invoice ID': '={{ $json.airwallex_invoice_id || "" }}',
+  'Line Items Payload': '={{ JSON.stringify($json.line_items) }}',
+};
+const REQUESTER_FALLBACK_TEXT =
+  "={{ 'Invoice request received for ' + $json.client_name + '. Manual Airwallex creation required. Request ID: ' + $json.request_id }}";
+const JOHN_DM_TEXT =
+  "={{ 'Invoice intake fallback\\nRequest ID: ' + $json.request_id + '\\nClient: ' + $json.client_name + '\\nRequester: ' + $json.submitted_by_slack_user_id + '\\nSubtotal: ' + $json.currency + ' ' + $json.subtotal + '\\nFailure stage: ' + $json.failure_stage + '\\nFailure reason: ' + $json.failure_reason + '\\nLine items: ' + JSON.stringify($json.line_items) }}";
 
 const NORMALIZE_CODE = `
 const payload = $json.body || $json;
@@ -274,7 +288,9 @@ const workflow = {
       type: 'n8n-nodes-base.googleSheets',
       typeVersion: 4.5,
       position: [920, 420],
-      parameters: {},
+      parameters: {
+        columns: FALLBACK_TRACKER_COLUMNS,
+      },
     },
     {
       id: 'n13',
@@ -292,7 +308,10 @@ const workflow = {
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
       position: [1140, 420],
-      parameters: {},
+      parameters: {
+        text: JOHN_DM_TEXT,
+        fallbackText: REQUESTER_FALLBACK_TEXT,
+      },
     },
   ],
   connections: {
