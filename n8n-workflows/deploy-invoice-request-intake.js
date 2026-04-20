@@ -198,10 +198,10 @@ return [{
     airwallex_customer_id: resolvedCustomerId,
     invoice_payload: {
       billing_customer_id: resolvedCustomerId,
-      days_until_due: 14,
-      memo: $json.memo || '',
       currency: $json.currency,
       collection_method: 'OUT_OF_BAND',
+      days_until_due: 14,
+      memo: $json.memo || '',
       request_id: $json.request_id,
     }
   }
@@ -351,7 +351,8 @@ const workflow = {
         },
         sendBody: true,
         specifyBody: 'json',
-        jsonBody: '={{ { company_name: $json.company_name || $json.client_name, email: $json.client_email || undefined } }}',
+        jsonBody:
+          '={{ { name: $json.company_name || $json.client_name, default_billing_currency: $json.currency, email: $json.client_email || undefined, request_id: $json.request_id } }}',
       },
     },
     {

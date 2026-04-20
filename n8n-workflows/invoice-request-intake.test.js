@@ -220,5 +220,30 @@ assert.match(
   /api\/v1\/invoices\/"\s*\+\s*\$json\.airwallex_invoice_id\s*\+\s*"\/add_line_items/,
   'Expected invoice line item endpoint naming aligned with docs'
 );
+assert.match(
+  deploySource,
+  /jsonBody:\s*'=\{\{\s*\{\s*name:\s*\$json\.(company_name|client_name)/,
+  'Expected billing customer create payload to use name'
+);
+assert.match(
+  deploySource,
+  /default_billing_currency:\s*\$json\.currency/,
+  'Expected billing customer create payload to include default_billing_currency'
+);
+assert.match(
+  deploySource,
+  /price_payload:[\s\S]*product_id:[\s\S]*currency:/,
+  'Expected price payload to include product_id and currency'
+);
+assert.match(
+  deploySource,
+  /invoice_payload:[\s\S]*billing_customer_id:[\s\S]*currency:[\s\S]*collection_method:[\s\S]*days_until_due:/,
+  'Expected invoice payload to include billing_customer_id, currency, collection_method, and days_until_due'
+);
+assert.match(
+  deploySource,
+  /add_line_items_payload:[\s\S]*price_id:[\s\S]*quantity:/,
+  'Expected line item payload to use price_id and quantity'
+);
 
 console.log('Invoice request intake workflow contract check passed.');
