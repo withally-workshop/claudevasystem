@@ -69,6 +69,7 @@ assert.match(
 );
 assert.match(deploySource, /request_id/, 'Expected request_id in normalization code');
 assert.match(deploySource, /submitted_by_slack_user_id/, 'Expected Slack submitter field');
+assert.match(deploySource, /submitted_by_slack_user_name/, 'Expected Slack submitter name field');
 assert.match(deploySource, /client_name_or_company_name/, 'Expected combined client/company input support');
 assert.match(deploySource, /billing_address/, 'Expected billing address input support');
 assert.match(deploySource, /payout_raw/, 'Expected payout raw input support');
@@ -113,14 +114,17 @@ assert.match(deploySource, /subtotal/, 'Expected subtotal calculation');
 assert.match(deploySource, /unparseable payout/i, 'Expected explicit payout parse failures');
 assert.match(deploySource, /unparseable invoice_date/i, 'Expected explicit invoice date parse failures');
 assert.match(deploySource, /authentication\/login/, 'Expected Airwallex auth login endpoint');
-assert.match(deploySource, /Find Billing Customer/, 'Expected customer lookup node');
 assert.match(deploySource, /Create Billing Customer/, 'Expected customer create node');
-assert.match(deploySource, /company name|client name/i, 'Expected name-based lookup comments or code');
-assert.match(deploySource, /ambiguous customer match/i, 'Expected ambiguous customer fallback handling');
+assert.match(deploySource, /Route Customer Create Outcome/, 'Expected customer create outcome route');
+assert.match(deploySource, /company name|client name/i, 'Expected customer naming comments or code');
 assert.match(deploySource, /Create Products/, 'Expected product creation node');
+assert.match(deploySource, /Route Product Create Outcome/, 'Expected product create outcome route');
 assert.match(deploySource, /Create Prices/, 'Expected price creation node');
+assert.match(deploySource, /Route Price Create Outcome/, 'Expected price create outcome route');
 assert.match(deploySource, /Create Draft Invoice/, 'Expected draft invoice node');
 assert.match(deploySource, /Attach Invoice Line Items/, 'Expected line item attachment node');
+assert.match(deploySource, /Route Line Item Outcome/, 'Expected line item outcome route');
+assert.match(deploySource, /Hydrate Fallback Context/, 'Expected fallback hydration node');
 assert.match(deploySource, /Products are request-specific|request-specific/i, 'Expected dynamic product handling');
 assert.doesNotMatch(deploySource, /finalize the invoice/i, 'Should not auto-finalize in v1');
 assert.match(deploySource, /Airwallex Customer ID/, 'Expected Airwallex customer ID mapping');
@@ -132,6 +136,11 @@ assert.match(deploySource, /Currency/, 'Expected Currency tracker mapping');
 assert.match(deploySource, /Due Date/, 'Expected Due Date tracker mapping');
 assert.match(deploySource, /Status/, 'Expected Status tracker mapping');
 assert.match(deploySource, /Requested By/, 'Expected Requested By tracker mapping');
+assert.match(
+  deploySource,
+  /'Requested By':\s*'=\{\{\s*\$json\.submitted_by_slack_user_name\s*\|\|\s*\$json\.submitted_by_slack_user_id\s*\}\}'/,
+  'Expected Requested By tracker mapping to prefer requester name over Slack id'
+);
 assert.match(
   deploySource,
   /Draft - Pending John Review/,
@@ -162,6 +171,11 @@ assert.match(
 );
 assert.match(deploySource, /DM John Failure Alert/, 'Expected John DM alert node');
 assert.match(deploySource, /fallback_manual_required/, 'Expected fallback status value');
+assert.match(
+  deploySource,
+  /Requester: '\s*\+\s*\(\$json\.submitted_by_slack_user_name\s*\|\|\s*\$json\.submitted_by_slack_user_id\)/,
+  'Expected fallback alert text to prefer requester name over Slack id'
+);
 assert.match(readmeDoc, /Invoice Request Intake/, 'Expected workflow listed in README');
 assert.match(readmeDoc, /Structured Slack modal/, 'Expected Slack modal intake documented in README');
 assert.match(readmeDoc, /draft invoice created/i, 'Expected draft-only behavior documented in README');
@@ -241,63 +255,108 @@ assert.match(
 );
 assert.match(
   deploySource,
-  /'Airwallex Auth':\s*{[\s\S]*node:\s+'Find Billing Customer'/,
-  'Expected auth to customer lookup connection'
+  /'Create Billing Customer':\s*{[\s\S]*node:\s+'Route Customer Create Outcome'/,
+  'Expected customer creation to route through customer outcome handling'
 );
 assert.match(
   deploySource,
-  /'Route Customer Resolution Outcome'/,
-  'Expected explicit customer-resolution runtime decision node'
+  /'Route Customer Create Outcome':\s*{[\s\S]*node:\s+'Hydrate Fallback Context'[\s\S]*node:\s+'Prepare Product Payload'/,
+  'Expected customer create fallback routing before product payload preparation'
 );
 assert.match(
   deploySource,
-  /'Route Customer Match Outcome'/,
-  'Expected explicit customer-match runtime decision node'
+  /'Create Products':\s*{[\s\S]*node:\s+'Route Product Create Outcome'/,
+  'Expected product creation to route through product outcome handling'
 );
 assert.match(
   deploySource,
-  /matched_existing_customer/,
-  'Expected existing-customer resolution status'
+  /'Route Product Create Outcome':\s*{[\s\S]*node:\s+'Hydrate Fallback Context'[\s\S]*node:\s+'Prepare Price Payload'/,
+  'Expected product create fallback routing before price payload preparation'
 );
 assert.match(
   deploySource,
-  /create_customer_required/,
-  'Expected create-customer resolution status'
+  /'Create Prices':\s*{[\s\S]*node:\s+'Route Price Create Outcome'/,
+  'Expected price creation to route through price outcome handling'
 );
 assert.match(
   deploySource,
-  /'Create Billing Customer':\s*{[\s\S]*node:\s+'Create Products'/,
-  'Expected customer creation to product creation connection'
+  /'Route Price Create Outcome':\s*{[\s\S]*node:\s+'Hydrate Fallback Context'[\s\S]*node:\s+'Prepare Draft Invoice Payload'/,
+  'Expected price create fallback routing before draft invoice payload preparation'
 );
 assert.match(
   deploySource,
-  /'Resolve Billing Customer':\s*{[\s\S]*node:\s+'Route Customer Resolution Outcome'/,
-  'Expected customer resolution to route through a decision node'
+  /'Create Draft Invoice':\s*{[\s\S]*node:\s+'Route Invoice Chain Outcome'/,
+  'Expected draft invoice to route through invoice-chain outcome handling'
 );
 assert.match(
   deploySource,
-  /'Route Customer Resolution Outcome':\s*{[\s\S]*node:\s+'Write Tracker Fallback'/,
-  'Expected customer-resolution fallback to reach Write Tracker Fallback'
+  /'Attach Invoice Line Items':\s*{[\s\S]*node:\s+'Route Line Item Outcome'/,
+  'Expected line item attachment to route through line item outcome handling'
 );
 assert.match(
   deploySource,
-  /'Route Customer Resolution Outcome':\s*{[\s\S]*node:\s+'Route Customer Match Outcome'/,
-  'Expected non-fallback customer resolution to continue to the match decision'
+  /'Route Line Item Outcome':\s*{[\s\S]*node:\s+'Hydrate Fallback Context'[\s\S]*node:\s+'Mark Draft Success'/,
+  'Expected line item fallback routing before success handling'
 );
 assert.match(
   deploySource,
-  /'Route Customer Match Outcome':\s*{[\s\S]*node:\s+'Prepare Product Payload'/,
-  'Expected exact customer match to continue without creating a billing customer'
+  /\$items\('Normalize Slack Submission', 0, 0\)/,
+  'Expected fallback hydration to recover original normalized request data'
+);
+assert.doesNotMatch(
+  deploySource,
+  /main:\s*\[\s*\[\s*\[\{/,
+  'Expected connection branches to avoid malformed triple-nested arrays'
 );
 assert.match(
   deploySource,
-  /'Route Customer Match Outcome':\s*{[\s\S]*node:\s+'Create Billing Customer'/,
-  'Expected no-match customer resolution to create a billing customer'
+  /const PREPARE_PRODUCT_REQUEST_CODE = `[\s\S]*return\s*{\s*json:\s*{/,
+  'Expected Prepare Product Payload code to return a single json object for runOnceForEachItem'
+);
+assert.doesNotMatch(
+  deploySource,
+  /const PREPARE_PRODUCT_REQUEST_CODE = `[\s\S]*return\s*\[\{\s*json:\s*{/,
+  'Prepare Product Payload should not return an array in runOnceForEachItem mode'
 );
 assert.match(
   deploySource,
-  /'Create Draft Invoice':\s*{[\s\S]*node:\s+'Attach Invoice Line Items'/,
-  'Expected draft invoice to line item attachment connection'
+  /const PREPARE_PRICE_CODE = `[\s\S]*return\s*{\s*json:\s*{/,
+  'Expected Prepare Price Payload code to return a single json object for runOnceForEachItem'
+);
+assert.doesNotMatch(
+  deploySource,
+  /const PREPARE_PRICE_CODE = `[\s\S]*return\s*\[\{\s*json:\s*{/,
+  'Prepare Price Payload should not return an array in runOnceForEachItem mode'
+);
+assert.match(
+  deploySource,
+  /const PREPARE_INVOICE_CODE = `[\s\S]*return\s*{\s*json:\s*{/,
+  'Expected Prepare Draft Invoice Payload code to return a single json object for runOnceForEachItem'
+);
+assert.doesNotMatch(
+  deploySource,
+  /const PREPARE_INVOICE_CODE = `[\s\S]*return\s*\[\{\s*json:\s*{/,
+  'Prepare Draft Invoice Payload should not return an array in runOnceForEachItem mode'
+);
+assert.match(
+  deploySource,
+  /const PREPARE_LINE_ITEMS_CODE = `[\s\S]*return\s*{\s*json:\s*{/,
+  'Expected Prepare Invoice Line Items code to return a single json object for runOnceForEachItem'
+);
+assert.doesNotMatch(
+  deploySource,
+  /const PREPARE_LINE_ITEMS_CODE = `[\s\S]*return\s*\[\{\s*json:\s*{/,
+  'Prepare Invoice Line Items should not return an array in runOnceForEachItem mode'
+);
+assert.match(
+  deploySource,
+  /const DRAFT_SUCCESS_CODE = `[\s\S]*return\s*{\s*json:\s*{/,
+  'Expected Mark Draft Success code to return a single json object for runOnceForEachItem'
+);
+assert.doesNotMatch(
+  deploySource,
+  /const DRAFT_SUCCESS_CODE = `[\s\S]*return\s*\[\{\s*json:\s*{/,
+  'Mark Draft Success should not return an array in runOnceForEachItem mode'
 );
 assert.match(
   deploySource,
@@ -311,8 +370,8 @@ assert.match(
 );
 assert.match(
   deploySource,
-  /'Route Validation Outcome':\s*{[\s\S]*node:\s+'Write Tracker Fallback'/,
-  'Expected validation decision node to reach Write Tracker Fallback'
+  /'Route Validation Outcome':\s*{[\s\S]*node:\s+'Hydrate Fallback Context'/,
+  'Expected validation decision node to hydrate fallback context'
 );
 assert.match(
   deploySource,
@@ -351,8 +410,13 @@ assert.match(
 );
 assert.match(
   deploySource,
-  /'Route Airwallex Outcome':\s*{[\s\S]*node:\s+'Find Billing Customer'/,
-  'Expected Airwallex outcome success path to continue after auth'
+  /'Route Airwallex Outcome':\s*{[\s\S]*node:\s+'Create Billing Customer'/,
+  'Expected Airwallex outcome success path to continue directly to customer creation'
+);
+assert.doesNotMatch(
+  deploySource,
+  /Find Billing Customer|Resolve Billing Customer|Route Customer Resolution Outcome|Route Customer Match Outcome|matched_existing_customer|create_customer_required|ambiguous customer match/,
+  'Expected direct customer creation flow to replace the broken customer lookup chain'
 );
 assert.match(
   deploySource,

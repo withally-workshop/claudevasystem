@@ -6,7 +6,6 @@ const FALLBACK_STATUS = 'fallback_manual_required';
 const DRAFT_SUCCESS_NOTE = 'draft invoice created';
 const DRAFT_REVIEW_STATUS = 'Draft - Pending John Review';
 const AIRWALLEX_AUTH_URL = 'https://api.airwallex.com/api/v1/authentication/login';
-const AIRWALLEX_CUSTOMER_LIST_URL = 'https://api.airwallex.com/api/v1/billing_customers';
 const AIRWALLEX_CUSTOMER_CREATE_URL = 'https://api.airwallex.com/api/v1/billing_customers/create';
 const AIRWALLEX_PRODUCT_CREATE_URL = 'https://api.airwallex.com/api/v1/products/create';
 const AIRWALLEX_PRICE_CREATE_URL = 'https://api.airwallex.com/api/v1/prices/create';
@@ -24,7 +23,7 @@ const SUCCESS_TRACKER_COLUMNS = {
   Currency: '={{ $json.currency }}',
   'Due Date': '={{ $json.due_date }}',
   Status: DRAFT_REVIEW_STATUS,
-  'Requested By': '={{ $json.submitted_by_slack_user_id }}',
+  'Requested By': '={{ $json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id }}',
 };
 const REQUESTER_SUCCESS_TEXT =
   "={{ 'Invoice request received. Airwallex draft invoice was created for ' + $json.client_name + ' (' + $json.currency + ' ' + $json.subtotal + '). Invoice Date: ' + $json.invoice_date + '. Payout: ' + ($json.payout_raw || '7 day payout') + '. Due Date: ' + $json.due_date + '. Request ID: ' + $json.request_id }}";
@@ -41,13 +40,13 @@ const FALLBACK_TRACKER_COLUMNS = {
   Currency: '={{ $json.currency }}',
   'Due Date': '={{ $json.due_date }}',
   Status: FALLBACK_STATUS,
-  'Requested By': '={{ $json.submitted_by_slack_user_id }}',
+  'Requested By': '={{ $json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id }}',
 };
 const REQUESTER_FALLBACK_TEXT =
   "={{ 'Invoice request received for ' + $json.client_name + '. Manual Airwallex creation required. Invoice Date: ' + ($json.invoice_date || 'needs review') + '. Payout: ' + ($json.payout_raw || '7 day payout') + '. Due Date: ' + ($json.due_date || 'needs review') + '. Request ID: ' + $json.request_id }}";
 const LINE_ITEMS_PAYLOAD_LABEL = 'Line Items Payload';
 const JOHN_DM_TEXT =
-  "={{ 'Invoice intake fallback\\nRequest ID: ' + $json.request_id + '\\nClient: ' + $json.client_name + '\\nRequester: ' + $json.submitted_by_slack_user_id + '\\nInvoice Date: ' + ($json.invoice_date || 'needs review') + '\\nPayout: ' + ($json.payout_raw || '7 day payout') + '\\nDue Date: ' + ($json.due_date || 'needs review') + '\\nSubtotal: ' + $json.currency + ' ' + $json.subtotal + '\\nFailure stage: ' + $json.failure_stage + '\\nFailure reason: ' + $json.failure_reason + '\\n' + '" + LINE_ITEMS_PAYLOAD_LABEL + ": ' + JSON.stringify($json.line_items) }}";
+  "={{ 'Invoice intake fallback\\nRequest ID: ' + $json.request_id + '\\nClient: ' + $json.client_name + '\\nRequester: ' + ($json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id) + '\\nInvoice Date: ' + ($json.invoice_date || 'needs review') + '\\nPayout: ' + ($json.payout_raw || '7 day payout') + '\\nDue Date: ' + ($json.due_date || 'needs review') + '\\nSubtotal: ' + $json.currency + ' ' + $json.subtotal + '\\nFailure stage: ' + $json.failure_stage + '\\nFailure reason: ' + $json.failure_reason + '\\n' + '" + LINE_ITEMS_PAYLOAD_LABEL + ": ' + JSON.stringify($json.line_items) }}";
 const AIRWALLEX_CLIENT_ID = 'JaQA4uJ1SDSBkTdFigT9sw';
 const AIRWALLEX_API_KEY = '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af5c91666f50b10ee64fd87fa3db7435e8dc5c07721';
 const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
@@ -181,6 +180,7 @@ const baseRequest = {
   request_id: requestId,
   submitted_at: new Date().toISOString(),
   submitted_by_slack_user_id: payload.submitted_by_slack_user_id || '',
+  submitted_by_slack_user_name: payload.submitted_by_slack_user_name || '',
   client_name_or_company_name: resolvedClientName,
   company_name: resolvedClientName,
   client_name: resolvedClientName,
@@ -228,32 +228,6 @@ return [{
 }];
 `.trim();
 
-const CUSTOMER_RESOLUTION_CODE = `
-const request = $json;
-const candidates = Array.isArray($json.customer_candidates) ? $json.customer_candidates : [];
-
-// Airwallex customer resolution should prefer company name or client name, not email.
-if (candidates.length > 1) {
-  return [{
-    json: {
-      ...request,
-      status: '${FALLBACK_STATUS}',
-      failure_stage: 'customer_resolution',
-      failure_reason: 'ambiguous customer match',
-    }
-  }];
-}
-
-return [{
-  json: {
-    ...request,
-    customer_lookup_name: request.company_name || request.client_name || '',
-    customer_candidates: candidates,
-    customer_resolution_status: candidates.length === 1 ? 'matched_existing_customer' : 'create_customer_required',
-  }
-}];
-`.trim();
-
 const PREPARE_PRODUCT_CODE = `
 const request = $json;
 
@@ -283,7 +257,7 @@ const PREPARE_PRODUCT_REQUEST_CODE = `
 const preparedProducts = Array.isArray($json.request_specific_products) ? $json.request_specific_products : [];
 const firstProduct = preparedProducts[0] || {};
 
-return [{
+return {
   json: {
     ...$json,
     product_payloads: preparedProducts.map((product) => ({
@@ -305,7 +279,7 @@ return [{
       request_id: $json.request_id,
     }
   }
-}];
+};
 `.trim();
 
 const PREPARE_PRICE_CODE = `
@@ -314,7 +288,7 @@ const firstProduct = preparedProducts[0] || {};
 const productBody = $json.body && $json.body.id ? $json.body : {};
 const productIds = Array.isArray($json.airwallex_product_ids) ? $json.airwallex_product_ids : [];
 
-return [{
+return {
   json: {
     ...$json,
     active_product: firstProduct,
@@ -341,7 +315,7 @@ return [{
       recurring: null,
     }
   }
-}];
+};
 `.trim();
 
 const PREPARE_INVOICE_CODE = `
@@ -354,7 +328,7 @@ const resolvedCustomerId =
   createdCustomer.id ||
   '';
 
-return [{
+return {
   json: {
     ...$json,
     airwallex_customer_id: resolvedCustomerId,
@@ -367,7 +341,7 @@ return [{
       request_id: $json.request_id,
     }
   }
-}];
+};
 `.trim();
 
 const PREPARE_LINE_ITEMS_CODE = `
@@ -390,7 +364,7 @@ const preparedLineItems = lineItems.map((item, index) => ({
   resolved_price_id: priceIds[index] || priceId,
 }));
 
-return [{
+return {
   json: {
     ...request,
     airwallex_invoice_id: invoiceId,
@@ -403,11 +377,11 @@ return [{
       }))
     }
   }
-}];
+};
 `.trim();
 
 const DRAFT_SUCCESS_CODE = `
-return [{
+return {
   json: {
     ...$json,
     airwallex_customer_id: $json.airwallex_customer_id || ($json.invoice_payload && $json.invoice_payload.billing_customer_id) || '',
@@ -416,7 +390,44 @@ return [{
     status: 'airwallex_created',
     success_note: '${DRAFT_SUCCESS_NOTE}',
   }
-}];
+};
+`.trim();
+
+const HYDRATE_FALLBACK_CODE = `
+const baseline = ($items('Normalize Slack Submission', 0, 0)[0] || {}).json || {};
+const current = $json || {};
+const errorMessage = current.error?.message || current.failure_reason || '';
+
+function inferFailureStage(message) {
+  const lower = String(message || '').toLowerCase();
+  if (lower.includes('billing_customers')) return 'create_billing_customer';
+  if (lower.includes('/products/')) return 'create_products';
+  if (lower.includes('/prices/')) return 'create_prices';
+  if (lower.includes('add_line_items')) return 'attach_invoice_line_items';
+  if (lower.includes('/invoices/create')) return 'create_draft_invoice';
+  if (lower.includes('authentication')) return 'airwallex_auth';
+  return 'airwallex';
+}
+
+return {
+  json: {
+    ...baseline,
+    ...current,
+    status: 'fallback_manual_required',
+    failure_stage: current.failure_stage || inferFailureStage(errorMessage),
+    failure_reason: current.failure_reason || errorMessage || 'manual Airwallex creation required',
+    request_id: current.request_id || baseline.request_id || '',
+    client_name: current.client_name || baseline.client_name || '',
+    submitted_by_slack_user_id: current.submitted_by_slack_user_id || baseline.submitted_by_slack_user_id || '',
+    submitted_by_slack_user_name: current.submitted_by_slack_user_name || baseline.submitted_by_slack_user_name || '',
+    invoice_date: current.invoice_date || baseline.invoice_date || '',
+    payout_raw: current.payout_raw || baseline.payout_raw || '7 day payout',
+    due_date: current.due_date || baseline.due_date || '',
+    subtotal: current.subtotal || baseline.subtotal || 0,
+    currency: current.currency || baseline.currency || '',
+    line_items: current.line_items || baseline.line_items || [],
+  }
+};
 `.trim();
 
 const workflow = {
@@ -471,48 +482,11 @@ const workflow = {
       },
     },
     {
-      id: 'n4',
-      name: 'Find Billing Customer',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      position: [920, 260],
-      parameters: {
-        method: 'GET',
-        url: AIRWALLEX_CUSTOMER_LIST_URL,
-        sendHeaders: true,
-        headerParameters: {
-          parameters: [
-            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
-          ],
-        },
-        sendQuery: true,
-        queryParameters: {
-          parameters: [
-            {
-              name: 'name',
-              value: '={{ $json.company_name || $json.client_name }}',
-            },
-          ],
-        },
-      },
-    },
-    {
-      id: 'n5',
-      name: 'Resolve Billing Customer',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      position: [1140, 260],
-      parameters: {
-        mode: 'runOnceForEachItem',
-        jsCode: CUSTOMER_RESOLUTION_CODE,
-      },
-    },
-    {
       id: 'n6',
       name: 'Create Billing Customer',
       type: 'n8n-nodes-base.httpRequest',
       typeVersion: 4.2,
-      position: [1360, 260],
+      position: [1140, 260],
       continueOnFail: true,
       parameters: {
         method: 'POST',
@@ -885,10 +859,10 @@ const workflow = {
     },
     {
       id: 'n24',
-      name: 'Route Customer Resolution Outcome',
+      name: 'Route Customer Create Outcome',
       type: 'n8n-nodes-base.if',
       typeVersion: 2.2,
-      position: [1360, 380],
+      position: [1260, 380],
       parameters: {
         conditions: {
           options: {
@@ -898,9 +872,9 @@ const workflow = {
           },
           conditions: [
             {
-              id: 'customer-resolution-fallback-status-check',
-              leftValue: '={{ $json.status }}',
-              rightValue: FALLBACK_STATUS,
+              id: 'customer-create-error-check',
+              leftValue: '={{ $json.error ? "error" : "" }}',
+              rightValue: 'error',
               operator: {
                 type: 'string',
                 operation: 'equals',
@@ -913,10 +887,10 @@ const workflow = {
     },
     {
       id: 'n25',
-      name: 'Route Customer Match Outcome',
+      name: 'Route Product Create Outcome',
       type: 'n8n-nodes-base.if',
       typeVersion: 2.2,
-      position: [1580, 380],
+      position: [1700, 380],
       parameters: {
         conditions: {
           options: {
@@ -926,9 +900,9 @@ const workflow = {
           },
           conditions: [
             {
-              id: 'customer-resolution-match-check',
-              leftValue: '={{ $json.customer_resolution_status }}',
-              rightValue: 'matched_existing_customer',
+              id: 'product-create-error-check',
+              leftValue: '={{ $json.error ? "error" : "" }}',
+              rightValue: 'error',
               operator: {
                 type: 'string',
                 operation: 'equals',
@@ -937,6 +911,73 @@ const workflow = {
           ],
           combinator: 'and',
         },
+      },
+    },
+    {
+      id: 'n26',
+      name: 'Route Price Create Outcome',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.2,
+      position: [1920, 380],
+      parameters: {
+        conditions: {
+          options: {
+            caseSensitive: true,
+            typeValidation: 'strict',
+            version: 2,
+          },
+          conditions: [
+            {
+              id: 'price-create-error-check',
+              leftValue: '={{ $json.error ? "error" : "" }}',
+              rightValue: 'error',
+              operator: {
+                type: 'string',
+                operation: 'equals',
+              },
+            },
+          ],
+          combinator: 'and',
+        },
+      },
+    },
+    {
+      id: 'n27',
+      name: 'Route Line Item Outcome',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.2,
+      position: [2360, 380],
+      parameters: {
+        conditions: {
+          options: {
+            caseSensitive: true,
+            typeValidation: 'strict',
+            version: 2,
+          },
+          conditions: [
+            {
+              id: 'line-item-error-check',
+              leftValue: '={{ $json.error ? "error" : "" }}',
+              rightValue: 'error',
+              operator: {
+                type: 'string',
+                operation: 'equals',
+              },
+            },
+          ],
+          combinator: 'and',
+        },
+      },
+    },
+    {
+      id: 'n28',
+      name: 'Hydrate Fallback Context',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [3120, 520],
+      parameters: {
+        mode: 'runOnceForEachItem',
+        jsCode: HYDRATE_FALLBACK_CODE,
       },
     },
   ],
@@ -949,10 +990,7 @@ const workflow = {
     },
     'Route Validation Outcome': {
       main: [
-        [
-          { node: 'Write Tracker Fallback', type: 'main', index: 0 },
-          { node: 'DM John Failure Alert', type: 'main', index: 0 },
-        ],
+        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
         [{ node: 'Airwallex Auth', type: 'main', index: 0 }],
       ],
     },
@@ -961,48 +999,42 @@ const workflow = {
     },
     'Route Airwallex Outcome': {
       main: [
-        [
-          { node: 'Write Tracker Fallback', type: 'main', index: 0 },
-          { node: 'DM John Failure Alert', type: 'main', index: 0 },
-        ],
-        [{ node: 'Find Billing Customer', type: 'main', index: 0 }],
-      ],
-    },
-    'Find Billing Customer': {
-      main: [[{ node: 'Resolve Billing Customer', type: 'main', index: 0 }]],
-    },
-    'Resolve Billing Customer': {
-      main: [[{ node: 'Route Customer Resolution Outcome', type: 'main', index: 0 }]],
-    },
-    'Route Customer Resolution Outcome': {
-      main: [
-        [
-          { node: 'Write Tracker Fallback', type: 'main', index: 0 },
-          { node: 'DM John Failure Alert', type: 'main', index: 0 },
-        ],
-        [{ node: 'Route Customer Match Outcome', type: 'main', index: 0 }],
-      ],
-    },
-    'Route Customer Match Outcome': {
-      main: [
-        [{ node: 'Prepare Product Payload', type: 'main', index: 0 }],
+        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
         [{ node: 'Create Billing Customer', type: 'main', index: 0 }],
       ],
     },
     'Create Billing Customer': {
-      main: [[{ node: 'Prepare Product Payload', type: 'main', index: 0 }]],
+      main: [[{ node: 'Route Customer Create Outcome', type: 'main', index: 0 }]],
+    },
+    'Route Customer Create Outcome': {
+      main: [
+        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
+        [{ node: 'Prepare Product Payload', type: 'main', index: 0 }],
+      ],
     },
     'Prepare Product Payload': {
       main: [[{ node: 'Create Products', type: 'main', index: 0 }]],
     },
     'Create Products': {
-      main: [[{ node: 'Prepare Price Payload', type: 'main', index: 0 }]],
+      main: [[{ node: 'Route Product Create Outcome', type: 'main', index: 0 }]],
+    },
+    'Route Product Create Outcome': {
+      main: [
+        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
+        [{ node: 'Prepare Price Payload', type: 'main', index: 0 }],
+      ],
     },
     'Prepare Price Payload': {
       main: [[{ node: 'Create Prices', type: 'main', index: 0 }]],
     },
     'Create Prices': {
-      main: [[{ node: 'Prepare Draft Invoice Payload', type: 'main', index: 0 }]],
+      main: [[{ node: 'Route Price Create Outcome', type: 'main', index: 0 }]],
+    },
+    'Route Price Create Outcome': {
+      main: [
+        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
+        [{ node: 'Prepare Draft Invoice Payload', type: 'main', index: 0 }],
+      ],
     },
     'Prepare Draft Invoice Payload': {
       main: [[{ node: 'Create Draft Invoice', type: 'main', index: 0 }]],
@@ -1012,10 +1044,7 @@ const workflow = {
     },
     'Route Invoice Chain Outcome': {
       main: [
-        [
-          { node: 'Write Tracker Fallback', type: 'main', index: 0 },
-          { node: 'DM John Failure Alert', type: 'main', index: 0 },
-        ],
+        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
         [{ node: 'Prepare Invoice Line Items', type: 'main', index: 0 }],
       ],
     },
@@ -1023,19 +1052,28 @@ const workflow = {
       main: [[{ node: 'Attach Invoice Line Items', type: 'main', index: 0 }]],
     },
     'Attach Invoice Line Items': {
-      main: [[{ node: 'Mark Draft Success', type: 'main', index: 0 }]],
+      main: [[{ node: 'Route Line Item Outcome', type: 'main', index: 0 }]],
+    },
+    'Route Line Item Outcome': {
+      main: [
+        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
+        [{ node: 'Mark Draft Success', type: 'main', index: 0 }],
+      ],
     },
     'Mark Draft Success': {
       main: [[{ node: 'Route Fallback Outcome', type: 'main', index: 0 }]],
     },
     'Route Fallback Outcome': {
       main: [
-        [
-          { node: 'Write Tracker Fallback', type: 'main', index: 0 },
-          { node: 'DM John Failure Alert', type: 'main', index: 0 },
-        ],
+        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
         [{ node: 'Write Tracker Success', type: 'main', index: 0 }],
       ],
+    },
+    'Hydrate Fallback Context': {
+      main: [[
+        { node: 'Write Tracker Fallback', type: 'main', index: 0 },
+        { node: 'DM John Failure Alert', type: 'main', index: 0 },
+      ]],
     },
     'Write Tracker Success': {
       main: [[{ node: 'Requester Success Confirmation', type: 'main', index: 0 }]],

@@ -42,6 +42,7 @@ assert.match(deploySource, /payout/, 'Expected payout field');
 assert.match(deploySource, /invoice_date/, 'Expected invoice date field');
 assert.match(deploySource, /line_items_raw/, 'Expected line items modal field');
 assert.match(deploySource, /submitted_by_slack_user_id/, 'Expected submitter field normalization');
+assert.match(deploySource, /submitted_by_slack_user_name/, 'Expected submitter name normalization');
 assert.match(deploySource, /payout_raw/, 'Expected raw payout normalization');
 assert.match(deploySource, /invoice_date_input/, 'Expected raw invoice date normalization');
 assert.match(deploySource, /date_parse_status/, 'Expected date parse status normalization');

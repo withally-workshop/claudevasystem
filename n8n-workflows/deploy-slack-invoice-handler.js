@@ -25,6 +25,7 @@ if (interactionPayload) {
       callback_id: interactionPayload.view?.callback_id || '',
       trigger_id: interactionPayload.trigger_id || '',
       submitted_by_slack_user_id: interactionPayload.user?.id || '',
+      submitted_by_slack_user_name: interactionPayload.user?.name || interactionPayload.user?.username || '',
       interaction_payload: interactionPayload,
     }
   };
@@ -35,6 +36,7 @@ return {
     event_source: 'slash_command',
     trigger_id: source.trigger_id || '',
     submitted_by_slack_user_id: source.user_id || '',
+    submitted_by_slack_user_name: source.user_name || '',
     command: source.command || '',
     raw_command_payload: source,
   }
@@ -203,6 +205,7 @@ const line_items = lineItemsRaw
 return {
   json: {
     submitted_by_slack_user_id: payload.user?.id || $json.submitted_by_slack_user_id || '',
+    submitted_by_slack_user_name: payload.user?.name || payload.user?.username || $json.submitted_by_slack_user_name || '',
     client_name_or_company_name: getValue('client_name_or_company_name'),
     client_name: getValue('client_name_or_company_name'),
     company_name: getValue('client_name_or_company_name'),
@@ -449,7 +452,7 @@ const workflow = {
         channel: PAYMENTS_UPDATES_CHANNEL,
         text: `={{
           ':white_check_mark: Invoice request received' +
-          '\\n- Requester: <@' + $json.submitted_by_slack_user_id + '>' +
+          '\\n- Requester: ' + ($json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id) +
           '\\n- Client: ' + $json.client_name_or_company_name +
           '\\n- Billing Address: ' + ($json.billing_address || '-') +
           '\\n- Amount: ' + $json.currency + ' ' + $json.line_items.reduce((sum, item) => sum + ((Number(item.quantity || 1)) * (Number(item.unit_price || 0))), 0) +
