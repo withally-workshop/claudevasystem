@@ -158,8 +158,53 @@ assert.match(
 );
 assert.match(
   deploySource,
+  /'Route Customer Resolution Outcome'/,
+  'Expected explicit customer-resolution runtime decision node'
+);
+assert.match(
+  deploySource,
+  /'Route Customer Match Outcome'/,
+  'Expected explicit customer-match runtime decision node'
+);
+assert.match(
+  deploySource,
+  /matched_existing_customer/,
+  'Expected existing-customer resolution status'
+);
+assert.match(
+  deploySource,
+  /create_customer_required/,
+  'Expected create-customer resolution status'
+);
+assert.match(
+  deploySource,
   /'Create Billing Customer':\s*{[\s\S]*node:\s+'Create Products'/,
   'Expected customer creation to product creation connection'
+);
+assert.match(
+  deploySource,
+  /'Resolve Billing Customer':\s*{[\s\S]*node:\s+'Route Customer Resolution Outcome'/,
+  'Expected customer resolution to route through a decision node'
+);
+assert.match(
+  deploySource,
+  /'Route Customer Resolution Outcome':\s*{[\s\S]*node:\s+'Write Tracker Fallback'/,
+  'Expected customer-resolution fallback to reach Write Tracker Fallback'
+);
+assert.match(
+  deploySource,
+  /'Route Customer Resolution Outcome':\s*{[\s\S]*node:\s+'Route Customer Match Outcome'/,
+  'Expected non-fallback customer resolution to continue to the match decision'
+);
+assert.match(
+  deploySource,
+  /'Route Customer Match Outcome':\s*{[\s\S]*node:\s+'Prepare Product Payload'/,
+  'Expected exact customer match to continue without creating a billing customer'
+);
+assert.match(
+  deploySource,
+  /'Route Customer Match Outcome':\s*{[\s\S]*node:\s+'Create Billing Customer'/,
+  'Expected no-match customer resolution to create a billing customer'
 );
 assert.match(
   deploySource,

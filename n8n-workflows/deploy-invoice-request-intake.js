@@ -720,6 +720,62 @@ const workflow = {
         },
       },
     },
+    {
+      id: 'n24',
+      name: 'Route Customer Resolution Outcome',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.2,
+      position: [1360, 380],
+      parameters: {
+        conditions: {
+          options: {
+            caseSensitive: true,
+            typeValidation: 'strict',
+            version: 2,
+          },
+          conditions: [
+            {
+              id: 'customer-resolution-fallback-status-check',
+              leftValue: '={{ $json.status }}',
+              rightValue: FALLBACK_STATUS,
+              operator: {
+                type: 'string',
+                operation: 'equals',
+              },
+            },
+          ],
+          combinator: 'and',
+        },
+      },
+    },
+    {
+      id: 'n25',
+      name: 'Route Customer Match Outcome',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.2,
+      position: [1580, 380],
+      parameters: {
+        conditions: {
+          options: {
+            caseSensitive: true,
+            typeValidation: 'strict',
+            version: 2,
+          },
+          conditions: [
+            {
+              id: 'customer-resolution-match-check',
+              leftValue: '={{ $json.customer_resolution_status }}',
+              rightValue: 'matched_existing_customer',
+              operator: {
+                type: 'string',
+                operation: 'equals',
+              },
+            },
+          ],
+          combinator: 'and',
+        },
+      },
+    },
   ],
   connections: {
     'Webhook Trigger': {
@@ -753,7 +809,22 @@ const workflow = {
       main: [[{ node: 'Resolve Billing Customer', type: 'main', index: 0 }]],
     },
     'Resolve Billing Customer': {
-      main: [[{ node: 'Create Billing Customer', type: 'main', index: 0 }]],
+      main: [[{ node: 'Route Customer Resolution Outcome', type: 'main', index: 0 }]],
+    },
+    'Route Customer Resolution Outcome': {
+      main: [
+        [
+          { node: 'Write Tracker Fallback', type: 'main', index: 0 },
+          { node: 'DM John Failure Alert', type: 'main', index: 0 },
+        ],
+        [{ node: 'Route Customer Match Outcome', type: 'main', index: 0 }],
+      ],
+    },
+    'Route Customer Match Outcome': {
+      main: [
+        [{ node: 'Prepare Product Payload', type: 'main', index: 0 }],
+        [{ node: 'Create Billing Customer', type: 'main', index: 0 }],
+      ],
     },
     'Create Billing Customer': {
       main: [[{ node: 'Prepare Product Payload', type: 'main', index: 0 }]],
