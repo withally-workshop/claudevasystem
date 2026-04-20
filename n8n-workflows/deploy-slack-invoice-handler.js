@@ -3,6 +3,7 @@ const https = require('https');
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiMTkwMWE5My02ZjJjLTRlNzEtOWI4ZC02ZjlhMzVhMjU4NzUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiZjBlZjk1YTYtYzc2MS00Zjc2LWJkZTgtMWU1Y2FiN2UxMjcxIiwiaWF0IjoxNzc2NjY1NjMxfQ.uBo2H0dzui9S0_MktoRxdodKzzE58vcQtXSlu8VpcEY';
 const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
+const PAYMENTS_UPDATES_CHANNEL = 'C09HN2EBPR7';
 const INTAKE_WEBHOOK_URL = 'https://noatakhel.app.n8n.cloud/webhook/krave-invoice-request-intake';
 
 const PARSE_SLACK_PAYLOAD_CODE = `
@@ -284,6 +285,31 @@ const workflow = {
       },
     },
     {
+      id: 'n10',
+      name: 'Post Channel Receipt',
+      type: 'n8n-nodes-base.slack',
+      typeVersion: 2.3,
+      position: [1580, 520],
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        resource: 'message',
+        operation: 'post',
+        channel: PAYMENTS_UPDATES_CHANNEL,
+        text: `={{
+          ':white_check_mark: Invoice request received' +
+          '\\n• Requester: <@' + $json.submitted_by_slack_user_id + '>' +
+          '\\n• Client: ' + $json.client_name +
+          '\\n• Company: ' + ($json.company_name || '—') +
+          '\\n• Amount: ' + $json.currency + ' ' + $json.line_items.reduce((sum, item) => sum + ((Number(item.quantity || 0)) * (Number(item.unit_price || 0))), 0) +
+          '\\n• Due Date: ' + $json.due_date +
+          '\\n• Memo: ' + ($json.memo || '—') +
+          '\\n• Line Items: ' + $json.line_items.map((item) => item.description + ' x' + item.quantity + ' @ ' + item.unit_price).join('; ') +
+          '\\n• Status: Received and processing'
+        }}`,
+        otherOptions: {},
+      },
+    },
+    {
       id: 'n8',
       name: 'Acknowledge Slash Command',
       type: 'n8n-nodes-base.respondToWebhook',
@@ -301,7 +327,44 @@ const workflow = {
       typeVersion: 1.1,
       position: [1840, 380],
       parameters: {
-        respondWith: 'noData',
+        respondWith: 'json',
+        responseBody: `={{
+          {
+            response_action: 'update',
+            view: {
+              type: 'modal',
+              callback_id: 'invoice_request_modal_confirmation',
+              title: { type: 'plain_text', text: 'Submitted' },
+              close: { type: 'plain_text', text: 'Close' },
+              clear_on_close: true,
+              blocks: [
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: ':white_check_mark: *Invoice request received*'
+                  }
+                },
+                {
+                  type: 'section',
+                  fields: [
+                    { type: 'mrkdwn', text: '*Client*\\n' + $json.client_name },
+                    { type: 'mrkdwn', text: '*Amount*\\n' + $json.currency + ' ' + $json.line_items.reduce((sum, item) => sum + ((Number(item.quantity || 0)) * (Number(item.unit_price || 0))), 0) },
+                    { type: 'mrkdwn', text: '*Due Date*\\n' + $json.due_date },
+                    { type: 'mrkdwn', text: '*Status*\\nReceived and processing' }
+                  ]
+                },
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: 'A receipt has been posted to #payments-invoices-updates.'
+                  }
+                }
+              ]
+            }
+          }
+        }}`,
         options: {},
       },
     },
@@ -326,13 +389,14 @@ const workflow = {
       ],
     },
     'Normalize Modal Submission': {
-      main: [[{ node: 'Send To Invoice Intake', type: 'main', index: 0 }]],
+      main: [[
+        { node: 'Send To Invoice Intake', type: 'main', index: 0 },
+        { node: 'Post Channel Receipt', type: 'main', index: 0 },
+        { node: 'Acknowledge Modal Submission', type: 'main', index: 0 }
+      ]],
     },
     'Open Invoice Modal': {
       main: [[{ node: 'Acknowledge Slash Command', type: 'main', index: 0 }]],
-    },
-    'Send To Invoice Intake': {
-      main: [[{ node: 'Acknowledge Modal Submission', type: 'main', index: 0 }]],
     },
   },
 };

@@ -21,6 +21,11 @@ assert.match(
 );
 assert.match(
   deploySource,
+  /const PAYMENTS_UPDATES_CHANNEL = 'C09HN2EBPR7'/,
+  'Expected payments channel id for submission receipts'
+);
+assert.match(
+  deploySource,
   /const INTAKE_WEBHOOK_URL = 'https:\/\/noatakhel\.app\.n8n\.cloud\/webhook\/krave-invoice-request-intake'/,
   'Expected invoice intake webhook handoff target'
 );
@@ -34,6 +39,16 @@ assert.match(deploySource, /invoice_request_modal/, 'Expected modal callback id'
 assert.match(deploySource, /line_items_raw/, 'Expected line items modal field');
 assert.match(deploySource, /submitted_by_slack_user_id/, 'Expected submitter field normalization');
 assert.match(deploySource, /line_items/, 'Expected normalized line items payload');
+assert.match(
+  deploySource,
+  /response_action:\s*'update'/,
+  'Expected modal submit acknowledgement to update the view with a confirmation screen'
+);
+assert.match(
+  deploySource,
+  /white_check_mark|Submitted|Invoice request received/i,
+  'Expected submitted confirmation copy in the modal response'
+);
 assert.match(
   deploySource,
   /name:\s+'Parse Slack Payload'[\s\S]*mode:\s+'runOnceForEachItem'/,
@@ -61,6 +76,7 @@ assert.match(deploySource, /'Open Invoice Modal'/, 'Expected modal opener node')
 assert.match(deploySource, /'Route Interaction Type'/, 'Expected interaction-type decision node');
 assert.match(deploySource, /'Normalize Modal Submission'/, 'Expected modal normalization node');
 assert.match(deploySource, /'Send To Invoice Intake'/, 'Expected handoff node to invoice intake workflow');
+assert.match(deploySource, /'Post Channel Receipt'/, 'Expected Slack channel receipt node');
 assert.match(deploySource, /'Acknowledge Slash Command'/, 'Expected explicit slash-command response node');
 assert.match(deploySource, /'Acknowledge Modal Submission'/, 'Expected explicit modal-submit response node');
 assert.match(
@@ -100,8 +116,13 @@ assert.match(
 );
 assert.match(
   deploySource,
-  /'Send To Invoice Intake':\s*{[\s\S]*node:\s+'Acknowledge Modal Submission'/,
-  'Expected modal submit branch to acknowledge Slack after forwarding to invoice intake'
+  /'Normalize Modal Submission':\s*{[\s\S]*node:\s+'Post Channel Receipt'/,
+  'Expected normalized submission to post a channel receipt'
+);
+assert.match(
+  deploySource,
+  /'Normalize Modal Submission':\s*{[\s\S]*node:\s+'Acknowledge Modal Submission'/,
+  'Expected modal submit branch to acknowledge Slack immediately with a confirmation view'
 );
 
 assert.match(readmeDoc, /Slack Invoice Handler/, 'Expected handler workflow listed in README');
@@ -110,12 +131,22 @@ assert.match(
   /same Request URL.*Slash Commands.*Interactivity/i,
   'Expected README to explain using the same request URL for Slack app setup'
 );
+assert.match(
+  readmeDoc,
+  /posts a structured receipt to `#payments-invoices-updates`/i,
+  'Expected README to document the channel receipt behavior'
+);
 assert.match(workflowsDoc, /Slack Invoice Handler/, 'Expected handler workflow listed in WORKFLOWS.md');
 assert.match(workflowsDoc, /slack-invoice-handler/, 'Expected shared Slack handler webhook documented');
 assert.match(
   workflowsDoc,
   /views\.open|open the modal/i,
   'Expected Slack modal opening documented in WORKFLOWS.md'
+);
+assert.match(
+  workflowsDoc,
+  /payments-invoices-updates|channel receipt/i,
+  'Expected WORKFLOWS.md to document the channel receipt behavior'
 );
 assert.match(
   workflowsDoc,

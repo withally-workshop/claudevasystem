@@ -109,7 +109,7 @@ node n8n-workflows/deploy-invoice-request-intake.js
 
 ## Slack Invoice Handler
 
-Receives Slack slash-command and modal submission payloads, opens the invoice modal with `views.open`, normalizes the submitted fields, and forwards the final structured JSON into the existing invoice intake workflow.
+Receives Slack slash-command and modal submission payloads, opens the invoice modal with `views.open`, normalizes the submitted fields, updates the modal to a submitted confirmation view, posts a structured receipt to `#payments-invoices-updates`, and forwards the final structured JSON into the existing invoice intake workflow.
 
 **Slack app setup:** use the same Request URL for both `Slash Commands` and `Interactivity & Shortcuts`.
 

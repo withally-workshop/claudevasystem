@@ -313,7 +313,7 @@ Replaces the scheduled Claude-based EOD summary. Every weekday at 6:00 PM ICT, t
 
 ### Purpose
 
-Handles the Slack-facing part of invoice intake. It accepts both the `/invoice-request` slash command and the matching modal submission payload, opens the modal with `views.open`, normalizes the submitted fields, and forwards the final structured JSON to `krave-invoice-request-intake`.
+Handles the Slack-facing part of invoice intake. It accepts both the `/invoice-request` slash command and the matching modal submission payload, opens the modal with `views.open`, normalizes the submitted fields, updates the modal to a submitted confirmation view, posts a channel receipt to `#payments-invoices-updates`, and forwards the final structured JSON to `krave-invoice-request-intake`.
 
 ### Triggers
 
@@ -336,9 +336,9 @@ Handles the Slack-facing part of invoice intake. It accepts both the `/invoice-r
                                |
                                v
                      [Normalize Modal Submission]
-                               |
-                               v
-                    [Send To Invoice Intake]
+                          |        |        |
+                          v        v        v
+            [Send To Invoice Intake] [Post Channel Receipt] [Acknowledge Modal Submission]
 ```
 
 ### Modal Rules
@@ -354,7 +354,7 @@ Handles the Slack-facing part of invoice intake. It accepts both the `/invoice-r
 | Scenario | Action |
 |----------|--------|
 | Slash command received | Opens the invoice request modal in Slack |
-| Modal `view_submission` received | Normalizes fields and POSTs to `krave-invoice-request-intake` |
+| Modal `view_submission` received | Normalizes fields, updates the modal with a confirmation view, posts a channel receipt, and POSTs to `krave-invoice-request-intake` |
 | Unrelated Slack interaction | Ignored silently |
 
 ---
