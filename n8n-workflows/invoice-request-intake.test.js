@@ -3,10 +3,14 @@ const fs = require('fs');
 const path = require('path');
 
 const deployPath = path.join(__dirname, 'deploy-invoice-request-intake.js');
+const workflowsDocPath = path.join(__dirname, 'WORKFLOWS.md');
+const readmePath = path.join(__dirname, 'README.md');
 
 assert.ok(fs.existsSync(deployPath), 'Expected deploy-invoice-request-intake.js to exist');
 
 const deploySource = fs.readFileSync(deployPath, 'utf8');
+const workflowsDoc = fs.readFileSync(workflowsDocPath, 'utf8');
+const readmeDoc = fs.readFileSync(readmePath, 'utf8');
 
 assert.match(deploySource, /name:\s+'Krave .* Invoice Request Intake'/, 'Expected workflow name in deploy script');
 assert.match(deploySource, /path:\s+'krave-invoice-request-intake'/, 'Expected manual webhook path');
@@ -64,5 +68,12 @@ assert.match(
 );
 assert.match(deploySource, /DM John Failure Alert/, 'Expected John DM alert node');
 assert.match(deploySource, /fallback_manual_required/, 'Expected fallback status value');
+assert.match(readmeDoc, /Invoice Request Intake/, 'Expected workflow listed in README');
+assert.match(readmeDoc, /Structured Slack modal/, 'Expected Slack modal intake documented in README');
+assert.match(readmeDoc, /draft invoice created/i, 'Expected draft-only behavior documented in README');
+assert.match(workflowsDoc, /Invoice Request Intake/, 'Expected Invoice Request Intake in WORKFLOWS.md');
+assert.match(workflowsDoc, /krave-invoice-request-intake/, 'Expected manual webhook documented');
+assert.match(workflowsDoc, /fallback_manual_required/, 'Expected fallback status documented in WORKFLOWS.md');
+assert.match(workflowsDoc, /John DM/i, 'Expected John DM testing alert documented in WORKFLOWS.md');
 
 console.log('Invoice request intake workflow contract check passed.');

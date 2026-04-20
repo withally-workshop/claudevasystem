@@ -13,9 +13,10 @@
 3. [Workflow 1 - Payment Detection](#workflow-1---payment-detection)
 4. [Workflow 2 - Invoice Reminder Cron](#workflow-2---invoice-reminder-cron)
 5. [Workflow 3 - EOD Triage Summary](#workflow-3---eod-triage-summary)
-6. [Credential Reference](#credential-reference)
-7. [Runbook - Common Scenarios](#runbook---common-scenarios)
-8. [Handover Checklist](#handover-checklist)
+6. [Workflow 4 - Invoice Request Intake](#workflow-4---invoice-request-intake)
+7. [Credential Reference](#credential-reference)
+8. [Runbook - Common Scenarios](#runbook---common-scenarios)
+9. [Handover Checklist](#handover-checklist)
 
 ---
 
@@ -26,6 +27,7 @@
 | 1 | Krave - Payment Detection | `grsXd1VCVIL2F8Cv` | Active | 10am + 5pm ICT | Detect Airwallex deposits, match invoices, update tracker |
 | 2 | Krave - Invoice Reminder Cron | `QvHzslWExLjrH0mo` | Active | 10am ICT daily | Send invoice reminders, alert overdue, update tracker |
 | 3 | Krave - EOD Triage Summary | `TBD after deploy` | Planned | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
+| 4 | Krave - Invoice Request Intake | `TBD after deploy` | Planned | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
 
 ---
 
@@ -40,6 +42,7 @@
 | Slack channel | `#airwallexdrafts` | `C0AQZGJDR38` | Bot reads and archives EOD |
 | Slack channel | `#ad-production-internal` | `C0AGEM919QV` | Bot reads |
 | Slack DM destination | Noa Takhel | `U06TBGX9L93` | Bot sends EOD DM |
+| Slack DM destination | John | `TBD in n8n` | Bot sends invoice intake testing alerts |
 | Gmail inbox (scan) | `noa@kravemedia.co` | OAuth2 | Read only (payment detection) |
 | Gmail inbox (send) | `john@kravemedia.co` | OAuth2 | Send + CC |
 
@@ -301,14 +304,93 @@ Replaces the scheduled Claude-based EOD summary. Every weekday at 6:00 PM ICT, t
 
 ---
 
+## Workflow 4 - Invoice Request Intake
+
+**n8n URL:** `TBD after deploy`  
+**Deploy script:** `n8n-workflows/deploy-invoice-request-intake.js`
+
+### Purpose
+
+Replaces unstructured Slack invoice requests with a Structured Slack modal intake that captures clean billing inputs, attempts Airwallex draft creation automatically, writes the result to the tracker, and preserves a manual fallback when the API chain breaks.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-request-intake` |
+| Intake source | Structured Slack modal submission forwarded into the webhook payload |
+
+### Node Flow
+
+```text
+[Webhook Trigger]
+        |
+[Normalize Slack Submission]
+        |
+[Airwallex Auth]
+        |
+[Find Billing Customer]
+        |
+[Resolve Billing Customer]
+   | existing            | missing / create
+   v                     v
+[Create Products]   [Create Billing Customer]
+        |                     |
+        +----------+----------+
+                   |
+             [Create Prices]
+                   |
+         [Create Draft Invoice]
+                   |
+      [Attach Invoice Line Items]
+             | success            | failure
+             v                    v
+[Write Tracker Success]   [Write Tracker Fallback]
+             |                    |
+             v                    v
+[Requester Success Confirmation] [DM John Failure Alert]
+```
+
+### Intake Rules
+
+- Uses a Structured Slack modal so required fields arrive in a predictable payload.
+- Supports multiple line items per request.
+- Resolves customers by company name or client name rather than email.
+- Ambiguous customer matches do not auto-resolve and instead move to fallback.
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| Draft invoice created | Tracker row is updated with Airwallex IDs and the requester gets a success confirmation |
+| Validation failure | Tracker fallback row is written for manual follow-up |
+| Ambiguous customer match | Status becomes `fallback_manual_required`, tracker captures the issue, and John DM fires |
+| Any Airwallex failure | Status becomes `fallback_manual_required`, tracker captures `failure_stage` and `failure_reason`, and John DM fires |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| Missing required modal fields | Mark `failed_validation` and write a manual-ready fallback row |
+| Airwallex auth / customer / product / price / invoice failure | Mark `fallback_manual_required`, preserve the line items payload, and send a John DM testing alert |
+| Draft creation succeeds | Stop at draft only; no auto-finalize and no auto-send in v1 |
+
+### Run Notes
+
+- V1 is draft-only and stops once the Airwallex draft invoice exists.
+- John DM is the temporary testing alert path while the workflow is being stabilized.
+- Keep the serialized line items payload in the tracker so manual recreation stays lossless.
+
+---
+
 ## Credential Reference
 
 | Credential Name | Type | ID | Used By | Account |
 |----------------|------|----|---------|---------|
 | Gmail account | Gmail OAuth2 | `vxHex5lFrkakcsPi` | Payment Detection | `noa@kravemedia.co` |
 | Gmail account (john) | Gmail OAuth2 | `vsDW3WpKXqS9HUs3` | Invoice Reminder Cron | `john@kravemedia.co` |
-| Google Sheets account | Google Sheets OAuth2 | `83MQOm78gYDvziTO` | Payment Detection, Invoice Reminder Cron | `noa@kravemedia.co` |
-| Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | All three workflows | Krave Slack workspace |
+| Google Sheets account | Google Sheets OAuth2 | `83MQOm78gYDvziTO` | Payment Detection, Invoice Reminder Cron, Invoice Request Intake | `noa@kravemedia.co` |
+| Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | All four workflows | Krave Slack workspace |
 | OpenAI account | OpenAI API | `TBD in n8n` | EOD Triage Summary | OpenAI API |
 
 ### Airwallex
@@ -349,6 +431,13 @@ curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-eod-triage-summar
   -H "Content-Type: application/json" -d '{}'
 ```
 
+### Trigger invoice request intake manually
+
+```bash
+curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-invoice-request-intake" \
+  -H "Content-Type: application/json" -d '{}'
+```
+
 ### Payment matched but Airwallex mark paid failed
 
 The Sheets row still shows `Payment Complete` and Slack still shows the confirmation. Log into Airwallex and mark the invoice paid manually.
@@ -371,6 +460,7 @@ The workflow retries once. If the retry also fails, it posts the formatted summa
 node n8n-workflows/deploy-payment-detection.js
 node n8n-workflows/deploy-invoice-reminder-cron.js
 node n8n-workflows/deploy-eod-triage-summary.js
+node n8n-workflows/deploy-invoice-request-intake.js
 ```
 
 Each deploy script creates a new workflow. Activate the new workflow in n8n and deactivate the old one if replacing an existing live version.
@@ -385,7 +475,7 @@ Each deploy script creates a new workflow. Activate the new workflow in n8n and 
 - [ ] Keep Airwallex API credentials secure
 - [ ] Keep all active workflows enabled in n8n
 - [ ] Re-authorize Gmail OAuth2 credentials if email reads or sends stop working
-- [ ] Ensure the Slack bot retains access to all required channels and Noa DM delivery
+- [ ] Ensure the Slack bot retains access to all required channels, Noa DM delivery, and John DM testing alerts
 - [ ] Add or confirm an `OpenAI account` credential in n8n before deploying EOD Triage Summary
 - [ ] Treat repo deploy scripts as the source of truth
 - [ ] Test by webhook after any workflow change

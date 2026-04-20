@@ -9,6 +9,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Payment Detection | Active | 10am + 5pm ICT | [payment-detection.workflow.json](payment-detection.workflow.json) |
 | Invoice Reminder Cron | Active | 10am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
 | EOD Triage Summary | Planned | 6pm ICT weekdays | [deploy-eod-triage-summary.js](deploy-eod-triage-summary.js) |
+| Invoice Request Intake | Planned | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
 
 ---
 
@@ -77,6 +78,29 @@ node n8n-workflows/deploy-eod-triage-summary.js
 **Credentials required in n8n:**
 - `Krave Slack Bot` - read/post access for the three source channels and Noa DM
 - `OpenAI account` - OpenAI API credential for the summary node
+
+---
+
+## Invoice Request Intake
+
+Accepts invoice requests from a **Structured Slack modal**, normalizes the submission, attempts full Airwallex draft invoice creation, writes the result to the Client Invoice Tracker, and falls back to a manual-ready record plus John DM alert if any Airwallex step fails.
+
+**Draft-only behavior:** v1 stops after the Airwallex `draft invoice created` state. It does not auto-finalize or auto-send.
+
+**Webhook (manual trigger):**
+```text
+POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-request-intake
+```
+
+**Deploy from scratch:**
+```bash
+node n8n-workflows/deploy-invoice-request-intake.js
+```
+
+**Credentials required in n8n:**
+- `Krave Slack Bot` - modal intake, requester confirmations, and John DM testing alerts
+- `Google Sheets account` - access to Client Invoice Tracker
+- `Airwallex admin API access` - billing auth plus customer/product/price/invoice endpoints
 
 ---
 
