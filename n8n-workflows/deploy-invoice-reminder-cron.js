@@ -38,7 +38,10 @@ const actions = [];
 for (const row of rows) {
   const j = row.json;
   const status = (j['Status'] || '').toString().trim();
-  if (['Payment Complete', 'Collections', 'Draft — Pending John Review'].includes(status)) continue;
+  if (
+    ['Payment Complete', 'Collections', 'Draft - Pending John Review', 'Draft — Pending John Review']
+      .includes(status)
+  ) continue;
   if (!j['Invoice #'] || !j['Due Date']) continue;
 
   const dueDateStr = j['Due Date'].toString().trim();
