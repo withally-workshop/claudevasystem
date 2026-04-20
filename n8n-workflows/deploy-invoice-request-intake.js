@@ -635,6 +635,80 @@ const workflow = {
         },
       },
     },
+    {
+      id: 'n22',
+      name: 'Route Airwallex Outcome',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.2,
+      position: [920, 380],
+      parameters: {
+        conditions: {
+          options: {
+            caseSensitive: true,
+            typeValidation: 'strict',
+            version: 2,
+          },
+          conditions: [
+            {
+              id: 'auth-fallback-status-check',
+              leftValue: '={{ $json.status }}',
+              rightValue: FALLBACK_STATUS,
+              operator: {
+                type: 'string',
+                operation: 'equals',
+              },
+            },
+            {
+              id: 'auth-token-check',
+              leftValue: '={{ $json.token || "" }}',
+              rightValue: '',
+              operator: {
+                type: 'string',
+                operation: 'equals',
+              },
+            },
+          ],
+          combinator: 'or',
+        },
+      },
+    },
+    {
+      id: 'n23',
+      name: 'Route Invoice Chain Outcome',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.2,
+      position: [2140, 380],
+      parameters: {
+        conditions: {
+          options: {
+            caseSensitive: true,
+            typeValidation: 'strict',
+            version: 2,
+          },
+          conditions: [
+            {
+              id: 'invoice-fallback-status-check',
+              leftValue: '={{ $json.status }}',
+              rightValue: FALLBACK_STATUS,
+              operator: {
+                type: 'string',
+                operation: 'equals',
+              },
+            },
+            {
+              id: 'invoice-id-check',
+              leftValue: '={{ ($json.body && $json.body.id) || $json.airwallex_invoice_id || "" }}',
+              rightValue: '',
+              operator: {
+                type: 'string',
+                operation: 'equals',
+              },
+            },
+          ],
+          combinator: 'or',
+        },
+      },
+    },
   ],
   connections: {
     'Webhook Trigger': {
@@ -653,7 +727,16 @@ const workflow = {
       ],
     },
     'Airwallex Auth': {
-      main: [[{ node: 'Find Billing Customer', type: 'main', index: 0 }]],
+      main: [[{ node: 'Route Airwallex Outcome', type: 'main', index: 0 }]],
+    },
+    'Route Airwallex Outcome': {
+      main: [
+        [
+          { node: 'Write Tracker Fallback', type: 'main', index: 0 },
+          { node: 'DM John Failure Alert', type: 'main', index: 0 },
+        ],
+        [{ node: 'Find Billing Customer', type: 'main', index: 0 }],
+      ],
     },
     'Find Billing Customer': {
       main: [[{ node: 'Resolve Billing Customer', type: 'main', index: 0 }]],
@@ -680,7 +763,16 @@ const workflow = {
       main: [[{ node: 'Create Draft Invoice', type: 'main', index: 0 }]],
     },
     'Create Draft Invoice': {
-      main: [[{ node: 'Prepare Invoice Line Items', type: 'main', index: 0 }]],
+      main: [[{ node: 'Route Invoice Chain Outcome', type: 'main', index: 0 }]],
+    },
+    'Route Invoice Chain Outcome': {
+      main: [
+        [
+          { node: 'Write Tracker Fallback', type: 'main', index: 0 },
+          { node: 'DM John Failure Alert', type: 'main', index: 0 },
+        ],
+        [{ node: 'Prepare Invoice Line Items', type: 'main', index: 0 }],
+      ],
     },
     'Prepare Invoice Line Items': {
       main: [[{ node: 'Attach Invoice Line Items', type: 'main', index: 0 }]],

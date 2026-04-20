@@ -152,6 +152,46 @@ assert.match(
 );
 assert.match(
   deploySource,
+  /'Route Airwallex Outcome'/,
+  'Expected explicit Airwallex runtime decision node'
+);
+assert.match(
+  deploySource,
+  /'Airwallex Auth':\s*{[\s\S]*node:\s+'Route Airwallex Outcome'/,
+  'Expected auth failures to route through Airwallex outcome decision node'
+);
+assert.match(
+  deploySource,
+  /'Route Airwallex Outcome':\s*{[\s\S]*node:\s+'Write Tracker Fallback'/,
+  'Expected Airwallex outcome decision node to reach Write Tracker Fallback'
+);
+assert.match(
+  deploySource,
+  /'Route Airwallex Outcome':\s*{[\s\S]*node:\s+'Find Billing Customer'/,
+  'Expected Airwallex outcome success path to continue after auth'
+);
+assert.match(
+  deploySource,
+  /'Route Invoice Chain Outcome'/,
+  'Expected downstream invoice-chain runtime decision node'
+);
+assert.match(
+  deploySource,
+  /'Create Draft Invoice':\s*{[\s\S]*node:\s+'Route Invoice Chain Outcome'/,
+  'Expected downstream Airwallex failures to route through invoice-chain decision node'
+);
+assert.match(
+  deploySource,
+  /'Route Invoice Chain Outcome':\s*{[\s\S]*node:\s+'Write Tracker Fallback'/,
+  'Expected invoice-chain decision node to reach Write Tracker Fallback'
+);
+assert.match(
+  deploySource,
+  /'Route Invoice Chain Outcome':\s*{[\s\S]*node:\s+'Prepare Invoice Line Items'/,
+  'Expected invoice-chain success path to continue toward line item attachment'
+);
+assert.match(
+  deploySource,
   /billing_customers\/create/,
   'Expected billing customer creation path aligned with billing customer docs'
 );
