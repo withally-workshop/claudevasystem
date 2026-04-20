@@ -28,5 +28,11 @@ assert.match(
   /node:\s+'Normalize Slack Submission',\s*type:\s+'main',\s*index:\s+0/,
   'Expected webhook to normalization wiring'
 );
+assert.match(deploySource, /request_id/, 'Expected request_id in normalization code');
+assert.match(deploySource, /submitted_by_slack_user_id/, 'Expected Slack submitter field');
+assert.match(deploySource, /line_items/, 'Expected line_items payload');
+assert.match(deploySource, /failed_validation/, 'Expected validation failure status');
+assert.match(deploySource, /intake_received/, 'Expected intake_received status');
+assert.match(deploySource, /subtotal/, 'Expected subtotal calculation');
 
 console.log('Invoice request intake workflow contract check passed.');
