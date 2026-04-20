@@ -4,9 +4,7 @@ const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiMTkwMWE5My02ZjJjLTRlNzEtOWI4ZC02ZjlhMzVhMjU4NzUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiZjBlZjk1YTYtYzc2MS00Zjc2LWJkZTgtMWU1Y2FiN2UxMjcxIiwiaWF0IjoxNzc2NjY1NjMxfQ.uBo2H0dzui9S0_MktoRxdodKzzE58vcQtXSlu8VpcEY';
 
 // Credential IDs in n8n
-// NOTE: GMAIL_CRED_ID is currently noa@kravemedia.co. Add john@kravemedia.co Gmail OAuth2
-// credential to n8n and update this ID when available.
-const GMAIL_CRED_ID = 'vxHex5lFrkakcsPi';   // Gmail account (noa@kravemedia.co)
+const GMAIL_CRED_ID = 'vsDW3WpKXqS9HUs3';   // Gmail account (john@kravemedia.co)
 const SHEETS_CRED_ID = '83MQOm78gYDvziTO';  // Google Sheets account
 const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';   // Krave Slack Bot
 
@@ -86,8 +84,9 @@ for (const row of rows) {
   const stratEmail  = STRAT_EMAILS[requestedBy] || null;
   const stratSlackId= STRAT_SLACK[requestedBy]  || null;
   const unknownStrat= !!(requestedBy && !stratEmail);
-  const ccArr = ['noa@kravemedia.co'];
-  if (stratEmail && stratEmail !== 'noa@kravemedia.co') ccArr.push(stratEmail);
+  const ccArr = [];
+  if (stratEmail && stratEmail !== 'john@kravemedia.co') ccArr.push(stratEmail);
+  if (!ccArr.includes('noa@kravemedia.co')) ccArr.push('noa@kravemedia.co');
   const ccEmails = ccArr.join(', ');
 
   const daysOverdue = daysDiff < 0 ? Math.abs(daysDiff) : 0;
