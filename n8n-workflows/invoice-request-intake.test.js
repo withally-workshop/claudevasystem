@@ -69,6 +69,8 @@ assert.match(
 );
 assert.match(deploySource, /request_id/, 'Expected request_id in normalization code');
 assert.match(deploySource, /submitted_by_slack_user_id/, 'Expected Slack submitter field');
+assert.match(deploySource, /client_name_or_company_name/, 'Expected combined client/company input support');
+assert.match(deploySource, /billing_address/, 'Expected billing address input support');
 assert.match(deploySource, /line_items/, 'Expected line_items payload');
 assert.match(
   deploySource,
@@ -112,7 +114,6 @@ assert.doesNotMatch(deploySource, /finalize the invoice/i, 'Should not auto-fina
 assert.match(deploySource, /Airwallex Customer ID/, 'Expected Airwallex customer ID mapping');
 assert.match(deploySource, /Airwallex Invoice ID/, 'Expected Airwallex invoice ID mapping');
 assert.match(deploySource, /Client Name/, 'Expected Client Name tracker mapping');
-assert.match(deploySource, /Email Address/, 'Expected Email Address tracker mapping');
 assert.match(deploySource, /Project Description/, 'Expected Project Description tracker mapping');
 assert.match(deploySource, /Amount/, 'Expected Amount tracker mapping');
 assert.match(deploySource, /Currency/, 'Expected Currency tracker mapping');
@@ -157,6 +158,8 @@ assert.match(
   /existing Invoices sheet structure/i,
   'Expected README to document writes into the existing Invoices sheet structure'
 );
+assert.match(readmeDoc, /Billing Address/i, 'Expected README to document billing address capture');
+assert.match(readmeDoc, /Client Name or Company Name/i, 'Expected README to document combined client field');
 assert.doesNotMatch(
   readmeDoc,
   /Request ID column|Line Items Payload column|Creation Status column/i,
@@ -171,6 +174,8 @@ assert.match(
   /existing Invoices sheet structure/i,
   'Expected WORKFLOWS.md to document writes into the existing Invoices sheet structure'
 );
+assert.match(workflowsDoc, /Billing Address/i, 'Expected WORKFLOWS.md to document billing address capture');
+assert.match(workflowsDoc, /Client Name or Company Name/i, 'Expected WORKFLOWS.md to document combined client field');
 assert.match(
   workflowsDoc,
   /Client Name[\s\S]*Email Address[\s\S]*Project Description[\s\S]*Airwallex Invoice ID[\s\S]*Amount[\s\S]*Currency[\s\S]*Due Date[\s\S]*Status[\s\S]*Requested By/,

@@ -345,9 +345,10 @@ Handles the Slack-facing part of invoice intake. It accepts both the `/invoice-r
 
 - Uses callback ID `invoice_request_modal`
 - Opens the modal with Slack `views.open`
-- Collects `client_name`, `company_name`, `client_email`, `currency`, `due_date`, `memo`, and `line_items_raw`
-- The line item helper text is `Description | Quantity | Unit Price`
+- Collects `client_name_or_company_name`, `billing_address`, `currency`, `due_date`, `memo`, and `line_items_raw`
+- The line item helper text is freeform, with examples like `Krave Media x1 @ 1300`
 - Parses one line item per line and forwards the resulting `line_items[]` array to `krave-invoice-request-intake`
+- Defaults quantity to `1` whenever the requester omits it
 
 ### Outputs
 
@@ -409,6 +410,7 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 ### Intake Rules
 
 - Uses a Structured Slack modal so required fields arrive in a predictable payload.
+- Captures `Client Name or Company Name` and `Billing Address` instead of separate company and email fields.
 - Supports multiple line items per request.
 - Resolves customers by company name or client name rather than email.
 - Ambiguous customer matches do not auto-resolve and instead move to fallback.
@@ -437,7 +439,7 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 - Intake writes into the existing Invoices sheet structure rather than adding new intake-only columns.
 - The intake workflow uses the documented columns `Client Name`, `Email Address`, `Project Description`, `Airwallex Invoice ID`, `Amount`, `Currency`, `Due Date`, `Status`, and `Requested By`.
 - Successful draft creation writes status `Draft - Pending John Review`.
-- Fallback context is condensed into the existing `Project Description` text so the tracker still fits the current A:N layout.
+- Billing Address and fallback context are condensed into the existing `Project Description` text so the tracker still fits the current A:N layout.
 
 ---
 

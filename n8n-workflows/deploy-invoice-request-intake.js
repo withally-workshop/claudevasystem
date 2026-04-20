@@ -16,7 +16,7 @@ const SUCCESS_TRACKER_COLUMNS = {
   'Client Name': '={{ $json.client_name }}',
   'Email Address': '={{ $json.client_email || "" }}',
   'Project Description':
-    '={{ ($json.memo || "Structured Slack modal intake") + " | Structured Slack modal" }}',
+    '={{ (($json.memo || "Structured Slack modal intake") + " | Billing Address: " + ($json.billing_address || "none provided") + " | Structured Slack modal").slice(0, 500) }}',
   'Invoice #': '={{ $json.airwallex_invoice_id || $json.request_id }}',
   'Airwallex Customer ID': '={{ $json.airwallex_customer_id }}',
   'Airwallex Invoice ID': '={{ $json.airwallex_invoice_id }}',
@@ -33,7 +33,7 @@ const FALLBACK_TRACKER_COLUMNS = {
   'Client Name': '={{ $json.client_name }}',
   'Email Address': '={{ $json.client_email || "" }}',
   'Project Description':
-    '={{ (($json.memo || "Structured Slack modal intake") + " | Structured Slack modal | " + ($json.failure_stage || "intake") + ": " + ($json.failure_reason || "manual Airwallex creation required")).slice(0, 500) }}',
+    '={{ (($json.memo || "Structured Slack modal intake") + " | Billing Address: " + ($json.billing_address || "none provided") + " | Structured Slack modal | " + ($json.failure_stage || "intake") + ": " + ($json.failure_reason || "manual Airwallex creation required")).slice(0, 500) }}',
   'Invoice #': '={{ $json.request_id }}',
   'Airwallex Customer ID': '={{ $json.airwallex_customer_id || "" }}',
   'Airwallex Invoice ID': '={{ $json.airwallex_invoice_id || "" }}',
@@ -67,18 +67,22 @@ const subtotal = lineItems.reduce((sum, item) => {
 }, 0);
 
 const missing = [];
-if (!payload.client_name) missing.push('client_name');
+if (!payload.client_name && !payload.client_name_or_company_name) missing.push('client_name_or_company_name');
 if (!payload.currency) missing.push('currency');
 if (!payload.due_date) missing.push('due_date');
 if (!lineItems.length) missing.push('line_items');
+
+const resolvedClientName = payload.client_name_or_company_name || payload.client_name || payload.company_name || '';
 
 const baseRequest = {
   request_id: requestId,
   submitted_at: new Date().toISOString(),
   submitted_by_slack_user_id: payload.submitted_by_slack_user_id || '',
-  company_name: payload.company_name || payload.client_name || '',
-  client_name: payload.client_name || '',
-  client_email: payload.client_email || '',
+  client_name_or_company_name: resolvedClientName,
+  company_name: resolvedClientName,
+  client_name: resolvedClientName,
+  billing_address: payload.billing_address || '',
+  client_email: '',
   currency: payload.currency || '',
   due_date: payload.due_date || '',
   memo: payload.memo || '',
@@ -404,7 +408,7 @@ const workflow = {
         sendBody: true,
         specifyBody: 'json',
         jsonBody:
-          '={{ { name: $json.company_name || $json.client_name, default_billing_currency: $json.currency, email: $json.client_email || undefined, request_id: $json.request_id } }}',
+          '={{ { name: $json.company_name || $json.client_name, default_billing_currency: $json.currency, request_id: $json.request_id } }}',
       },
     },
     {

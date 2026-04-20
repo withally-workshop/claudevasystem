@@ -50,25 +50,69 @@ function getValue(blockId) {
 }
 
 const lineItemsRaw = getValue('line_items_raw');
+
+function parseLineItem(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.includes('|')) {
+    const [descriptionPart, quantityPart, unitPricePart] = trimmed.split('|').map((part) => part.trim());
+    const quantity = Number(quantityPart || 1) || 1;
+    const unitPrice = unitPricePart ? Number(String(unitPricePart).replace(/[$,]/g, '')) : null;
+    return {
+      description: descriptionPart || trimmed,
+      quantity,
+      unit_price: Number.isFinite(unitPrice) ? unitPrice : null,
+      raw_text: trimmed,
+    };
+  }
+
+  const quantityPriceMatch = trimmed.match(/^(.*?)(?:\\s+x\\s*(\\d+))?(?:\\s*@\\s*\\$?([\\d,]+(?:\\.\\d+)?))?$/i);
+  if (quantityPriceMatch && (quantityPriceMatch[2] || quantityPriceMatch[3])) {
+    const description = (quantityPriceMatch[1] || '').trim() || trimmed;
+    const quantity = Number(quantityPriceMatch[2] || 1) || 1;
+    const unitPrice = quantityPriceMatch[3] ? Number(quantityPriceMatch[3].replace(/[$,]/g, '')) : null;
+    return {
+      description,
+      quantity,
+      unit_price: Number.isFinite(unitPrice) ? unitPrice : null,
+      raw_text: trimmed,
+    };
+  }
+
+  const trailingAmountMatch = trimmed.match(/^(.*?)(?:\\s+)(\\$?[\\d,]+(?:\\.\\d+)?)$/);
+  if (trailingAmountMatch) {
+    const unitPrice = Number(trailingAmountMatch[2].replace(/[$,]/g, ''));
+    return {
+      description: trailingAmountMatch[1].trim() || trimmed,
+      quantity: 1,
+      unit_price: Number.isFinite(unitPrice) ? unitPrice : null,
+      raw_text: trimmed,
+    };
+  }
+
+  return {
+    description: trimmed,
+    quantity: 1,
+    unit_price: null,
+    raw_text: trimmed,
+  };
+}
+
 const line_items = lineItemsRaw
   .split('\\n')
   .map((line) => line.trim())
   .filter(Boolean)
-  .map((line) => {
-    const [description, quantity, unit_price] = line.split('|').map((part) => part.trim());
-    return {
-      description: description || '',
-      quantity: Number(quantity || 0),
-      unit_price: Number(unit_price || 0),
-    };
-  });
+  .map(parseLineItem)
+  .filter(Boolean);
 
 return {
   json: {
     submitted_by_slack_user_id: payload.user?.id || $json.submitted_by_slack_user_id || '',
-    client_name: getValue('client_name'),
-    company_name: getValue('company_name'),
-    client_email: getValue('client_email'),
+    client_name_or_company_name: getValue('client_name_or_company_name'),
+    client_name: getValue('client_name_or_company_name'),
+    company_name: getValue('client_name_or_company_name'),
+    billing_address: getValue('billing_address'),
     currency: getValue('currency'),
     due_date: getValue('due_date'),
     memo: getValue('memo'),
@@ -164,23 +208,16 @@ const workflow = {
               blocks: [
                 {
                   type: 'input',
-                  block_id: 'client_name',
-                  label: { type: 'plain_text', text: 'Client Name' },
+                  block_id: 'client_name_or_company_name',
+                  label: { type: 'plain_text', text: 'Client Name or Company Name' },
                   element: { type: 'plain_text_input', action_id: 'value' }
                 },
                 {
                   type: 'input',
-                  block_id: 'company_name',
+                  block_id: 'billing_address',
                   optional: true,
-                  label: { type: 'plain_text', text: 'Company Name' },
-                  element: { type: 'plain_text_input', action_id: 'value' }
-                },
-                {
-                  type: 'input',
-                  block_id: 'client_email',
-                  optional: true,
-                  label: { type: 'plain_text', text: 'Client Email' },
-                  element: { type: 'plain_text_input', action_id: 'value' }
+                  label: { type: 'plain_text', text: 'Billing Address' },
+                  element: { type: 'plain_text_input', action_id: 'value', multiline: true }
                 },
                 {
                   type: 'input',
@@ -213,7 +250,7 @@ const workflow = {
                     type: 'plain_text_input',
                     action_id: 'value',
                     multiline: true,
-                    placeholder: { type: 'plain_text', text: 'Description | Quantity | Unit Price' }
+                    placeholder: { type: 'plain_text', text: 'Krave Media x1 @ 1300\\nUGC package x2 @ 500\\nApril retainer 2500' }
                   }
                 }
               ]
@@ -297,14 +334,14 @@ const workflow = {
         channel: PAYMENTS_UPDATES_CHANNEL,
         text: `={{
           ':white_check_mark: Invoice request received' +
-          '\\n• Requester: <@' + $json.submitted_by_slack_user_id + '>' +
-          '\\n• Client: ' + $json.client_name +
-          '\\n• Company: ' + ($json.company_name || '—') +
-          '\\n• Amount: ' + $json.currency + ' ' + $json.line_items.reduce((sum, item) => sum + ((Number(item.quantity || 0)) * (Number(item.unit_price || 0))), 0) +
-          '\\n• Due Date: ' + $json.due_date +
-          '\\n• Memo: ' + ($json.memo || '—') +
-          '\\n• Line Items: ' + $json.line_items.map((item) => item.description + ' x' + item.quantity + ' @ ' + item.unit_price).join('; ') +
-          '\\n• Status: Received and processing'
+          '\\n- Requester: <@' + $json.submitted_by_slack_user_id + '>' +
+          '\\n- Client: ' + $json.client_name_or_company_name +
+          '\\n- Billing Address: ' + ($json.billing_address || '—') +
+          '\\n- Amount: ' + $json.currency + ' ' + $json.line_items.reduce((sum, item) => sum + ((Number(item.quantity || 1)) * (Number(item.unit_price || 0))), 0) +
+          '\\n- Due Date: ' + $json.due_date +
+          '\\n- Memo: ' + ($json.memo || '—') +
+          '\\n- Line Items: ' + $json.line_items.map((item) => item.raw_text || (item.description + ' x' + (item.quantity || 1) + (item.unit_price == null ? '' : ' @ ' + item.unit_price))).join('; ') +
+          '\\n- Status: Received and processing'
         }}`,
         otherOptions: {},
       },
@@ -348,8 +385,8 @@ const workflow = {
                 {
                   type: 'section',
                   fields: [
-                    { type: 'mrkdwn', text: '*Client*\\n' + $json.client_name },
-                    { type: 'mrkdwn', text: '*Amount*\\n' + $json.currency + ' ' + $json.line_items.reduce((sum, item) => sum + ((Number(item.quantity || 0)) * (Number(item.unit_price || 0))), 0) },
+                    { type: 'mrkdwn', text: '*Client*\\n' + $json.client_name_or_company_name },
+                    { type: 'mrkdwn', text: '*Amount*\\n' + $json.currency + ' ' + $json.line_items.reduce((sum, item) => sum + ((Number(item.quantity || 1)) * (Number(item.unit_price || 0))), 0) },
                     { type: 'mrkdwn', text: '*Due Date*\\n' + $json.due_date },
                     { type: 'mrkdwn', text: '*Status*\\nReceived and processing' }
                   ]

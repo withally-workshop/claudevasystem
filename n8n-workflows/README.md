@@ -88,7 +88,9 @@ Accepts invoice requests from a **Structured Slack modal**, normalizes the submi
 
 **Draft-only behavior:** v1 stops after the Airwallex `draft invoice created` state. It does not auto-finalize or auto-send.
 
-**Tracker write behavior:** intake reuses the documented Invoices tab columns such as `Client Name`, `Email Address`, `Project Description`, `Airwallex Invoice ID`, `Amount`, `Currency`, `Due Date`, `Status`, and `Requested By`. Successful drafts land with status `Draft - Pending John Review`.
+**Tracker write behavior:** intake reuses the existing Invoices sheet structure and documented Invoices tab columns such as `Client Name`, `Email Address`, `Project Description`, `Airwallex Invoice ID`, `Amount`, `Currency`, `Due Date`, `Status`, and `Requested By`. Successful drafts land with status `Draft - Pending John Review`.
+
+**Slack intake fields:** `Client Name or Company Name`, `Billing Address`, `Currency`, `Due Date`, `Memo / Project Description`, and freeform `Line Items`. Billing Address is captured as text and condensed into `Project Description` because the current tracker does not have a dedicated billing-address column.
 
 **Webhook (manual trigger):**
 ```text
@@ -112,6 +114,8 @@ node n8n-workflows/deploy-invoice-request-intake.js
 Receives Slack slash-command and modal submission payloads, opens the invoice modal with `views.open`, normalizes the submitted fields, updates the modal to a submitted confirmation view, posts a structured receipt to `#payments-invoices-updates`, and forwards the final structured JSON into the existing invoice intake workflow.
 
 **Slack app setup:** use the same Request URL for both `Slash Commands` and `Interactivity & Shortcuts`.
+
+**Modal fields:** `Client Name or Company Name`, `Billing Address`, `Currency`, `Due Date`, `Memo / Project Description`, and freeform `Line Items`. Freeform line items support inputs like `Krave Media x1 @ 1300`, `UGC package x2 @ 500`, or `April retainer 2500`. If quantity is omitted, the handler defaults it to `1`.
 
 **Request URL:**
 ```text

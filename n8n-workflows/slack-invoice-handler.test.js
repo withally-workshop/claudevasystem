@@ -36,9 +36,13 @@ assert.match(
 );
 assert.match(deploySource, /views\.open/, 'Expected Slack modal open API call');
 assert.match(deploySource, /invoice_request_modal/, 'Expected modal callback id');
+assert.match(deploySource, /client_name_or_company_name/, 'Expected combined client/company field');
+assert.match(deploySource, /billing_address/, 'Expected billing address field');
 assert.match(deploySource, /line_items_raw/, 'Expected line items modal field');
 assert.match(deploySource, /submitted_by_slack_user_id/, 'Expected submitter field normalization');
 assert.match(deploySource, /line_items/, 'Expected normalized line items payload');
+assert.match(deploySource, /quantity:\s*1/, 'Expected default quantity of 1 when omitted');
+assert.match(deploySource, /unit_price:\s*null/, 'Expected raw line items to remain usable when price is missing');
 assert.match(
   deploySource,
   /response_action:\s*'update'/,
@@ -66,8 +70,8 @@ assert.doesNotMatch(
 );
 assert.match(
   deploySource,
-  /Description \| Quantity \| Unit Price/,
-  'Expected line item input format hint'
+  /Krave Media x1 @ 1300|UGC package x2 @ 500|April retainer 2500/,
+  'Expected freeform line item input examples'
 );
 assert.match(deploySource, /'Webhook Trigger'/, 'Expected webhook trigger node');
 assert.match(deploySource, /'Parse Slack Payload'/, 'Expected payload parser node');
@@ -136,6 +140,9 @@ assert.match(
   /posts a structured receipt to `#payments-invoices-updates`/i,
   'Expected README to document the channel receipt behavior'
 );
+assert.match(readmeDoc, /Client Name or Company Name/i, 'Expected README to document the combined client field');
+assert.match(readmeDoc, /Billing Address/i, 'Expected README to document billing address field');
+assert.match(readmeDoc, /freeform/i, 'Expected README to document freeform line items');
 assert.match(workflowsDoc, /Slack Invoice Handler/, 'Expected handler workflow listed in WORKFLOWS.md');
 assert.match(workflowsDoc, /slack-invoice-handler/, 'Expected shared Slack handler webhook documented');
 assert.match(
@@ -148,6 +155,9 @@ assert.match(
   /payments-invoices-updates|channel receipt/i,
   'Expected WORKFLOWS.md to document the channel receipt behavior'
 );
+assert.match(workflowsDoc, /Client Name or Company Name/i, 'Expected WORKFLOWS.md to document the combined client field');
+assert.match(workflowsDoc, /Billing Address/i, 'Expected WORKFLOWS.md to document billing address field');
+assert.match(workflowsDoc, /freeform/i, 'Expected WORKFLOWS.md to document freeform line items');
 assert.match(
   workflowsDoc,
   /krave-invoice-request-intake/,
