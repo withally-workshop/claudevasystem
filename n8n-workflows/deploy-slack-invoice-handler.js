@@ -94,7 +94,7 @@ const workflow = {
       parameters: {
         httpMethod: 'POST',
         path: 'slack-invoice-handler',
-        responseMode: 'onReceived',
+        responseMode: 'responseNode',
         options: {},
       },
     },
@@ -283,6 +283,28 @@ const workflow = {
         jsonBody: '={{ $json }}',
       },
     },
+    {
+      id: 'n8',
+      name: 'Acknowledge Slash Command',
+      type: 'n8n-nodes-base.respondToWebhook',
+      typeVersion: 1.1,
+      position: [1300, 220],
+      parameters: {
+        respondWith: 'noData',
+        options: {},
+      },
+    },
+    {
+      id: 'n9',
+      name: 'Acknowledge Modal Submission',
+      type: 'n8n-nodes-base.respondToWebhook',
+      typeVersion: 1.1,
+      position: [1840, 380],
+      parameters: {
+        respondWith: 'noData',
+        options: {},
+      },
+    },
   ],
   connections: {
     'Webhook Trigger': {
@@ -305,6 +327,12 @@ const workflow = {
     },
     'Normalize Modal Submission': {
       main: [[{ node: 'Send To Invoice Intake', type: 'main', index: 0 }]],
+    },
+    'Open Invoice Modal': {
+      main: [[{ node: 'Acknowledge Slash Command', type: 'main', index: 0 }]],
+    },
+    'Send To Invoice Intake': {
+      main: [[{ node: 'Acknowledge Modal Submission', type: 'main', index: 0 }]],
     },
   },
 };

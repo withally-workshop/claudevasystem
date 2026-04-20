@@ -24,6 +24,11 @@ assert.match(
   /const INTAKE_WEBHOOK_URL = 'https:\/\/noatakhel\.app\.n8n\.cloud\/webhook\/krave-invoice-request-intake'/,
   'Expected invoice intake webhook handoff target'
 );
+assert.match(
+  deploySource,
+  /responseMode:\s+'responseNode'/,
+  'Expected Slack webhook to respond through explicit response nodes'
+);
 assert.match(deploySource, /views\.open/, 'Expected Slack modal open API call');
 assert.match(deploySource, /invoice_request_modal/, 'Expected modal callback id');
 assert.match(deploySource, /line_items_raw/, 'Expected line items modal field');
@@ -56,6 +61,8 @@ assert.match(deploySource, /'Open Invoice Modal'/, 'Expected modal opener node')
 assert.match(deploySource, /'Route Interaction Type'/, 'Expected interaction-type decision node');
 assert.match(deploySource, /'Normalize Modal Submission'/, 'Expected modal normalization node');
 assert.match(deploySource, /'Send To Invoice Intake'/, 'Expected handoff node to invoice intake workflow');
+assert.match(deploySource, /'Acknowledge Slash Command'/, 'Expected explicit slash-command response node');
+assert.match(deploySource, /'Acknowledge Modal Submission'/, 'Expected explicit modal-submit response node');
 assert.match(
   deploySource,
   /'Webhook Trigger':\s*{[\s\S]*node:\s+'Parse Slack Payload'/,
@@ -73,6 +80,11 @@ assert.match(
 );
 assert.match(
   deploySource,
+  /'Open Invoice Modal':\s*{[\s\S]*node:\s+'Acknowledge Slash Command'/,
+  'Expected slash command branch to acknowledge Slack after opening the modal'
+);
+assert.match(
+  deploySource,
   /'Route Slack Event':\s*{[\s\S]*node:\s+'Route Interaction Type'/,
   'Expected interaction branch to route interaction type'
 );
@@ -85,6 +97,11 @@ assert.match(
   deploySource,
   /'Normalize Modal Submission':\s*{[\s\S]*node:\s+'Send To Invoice Intake'/,
   'Expected normalized submission to forward to invoice intake'
+);
+assert.match(
+  deploySource,
+  /'Send To Invoice Intake':\s*{[\s\S]*node:\s+'Acknowledge Modal Submission'/,
+  'Expected modal submit branch to acknowledge Slack after forwarding to invoice intake'
 );
 
 assert.match(readmeDoc, /Slack Invoice Handler/, 'Expected handler workflow listed in README');
