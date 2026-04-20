@@ -80,6 +80,35 @@ return [{
 }];
 `.trim();
 
+const PRODUCT_PAYLOAD_CODE = `
+const request = $json;
+
+// Products are request-specific because invoice line items vary per submission.
+return (Array.isArray(request.line_items) ? request.line_items : []).map((item, index) => ({
+  json: {
+    request_id: request.request_id,
+    airwallex_customer_id: request.airwallex_customer_id || '',
+    line_index: index,
+    description: item.description || 'Invoice line item',
+    quantity: Number(item.quantity || 0),
+    unit_price: Number(item.unit_price || 0),
+    currency: request.currency,
+    product_name: (request.client_name || request.company_name || 'Client') + ' item ' + (index + 1),
+    memo: request.memo || '',
+  }
+}));
+`.trim();
+
+const DRAFT_SUCCESS_CODE = `
+return [{
+  json: {
+    ...$json,
+    status: 'airwallex_created',
+    success_note: '${DRAFT_SUCCESS_NOTE}',
+  }
+}];
+`.trim();
+
 const workflow = {
   name: 'Krave - Invoice Request Intake',
   settings: {
@@ -167,6 +196,58 @@ const workflow = {
     },
     {
       id: 'n7',
+      name: 'Create Products',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1580, 260],
+      parameters: {
+        mode: 'runOnceForEachItem',
+        jsCode: PRODUCT_PAYLOAD_CODE,
+      },
+    },
+    {
+      id: 'n8',
+      name: 'Create Prices',
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
+      position: [1800, 260],
+      parameters: {
+        method: 'POST',
+        url: 'https://api.airwallex.com/api/v1/billing/prices/create',
+      },
+    },
+    {
+      id: 'n9',
+      name: 'Create Draft Invoice',
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
+      position: [2020, 260],
+      parameters: {
+        method: 'POST',
+        url: 'https://api.airwallex.com/api/v1/billing/invoices/create',
+        bodyParameters: {
+          parameters: [
+            {
+              name: 'status',
+              value: 'draft',
+            },
+          ],
+        },
+      },
+    },
+    {
+      id: 'n10',
+      name: 'Attach Invoice Line Items',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [2240, 260],
+      parameters: {
+        mode: 'runOnceForEachItem',
+        jsCode: DRAFT_SUCCESS_CODE,
+      },
+    },
+    {
+      id: 'n11',
       name: 'Write Tracker Success',
       type: 'n8n-nodes-base.googleSheets',
       typeVersion: 4.5,
@@ -174,7 +255,7 @@ const workflow = {
       parameters: {},
     },
     {
-      id: 'n8',
+      id: 'n12',
       name: 'Write Tracker Fallback',
       type: 'n8n-nodes-base.googleSheets',
       typeVersion: 4.5,
@@ -182,7 +263,7 @@ const workflow = {
       parameters: {},
     },
     {
-      id: 'n9',
+      id: 'n13',
       name: 'Requester Success Confirmation',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
@@ -190,7 +271,7 @@ const workflow = {
       parameters: {},
     },
     {
-      id: 'n10',
+      id: 'n14',
       name: 'DM John Failure Alert',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,

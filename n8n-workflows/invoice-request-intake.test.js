@@ -39,5 +39,11 @@ assert.match(deploySource, /Find Billing Customer/, 'Expected customer lookup no
 assert.match(deploySource, /Create Billing Customer/, 'Expected customer create node');
 assert.match(deploySource, /company name|client name/i, 'Expected name-based lookup comments or code');
 assert.match(deploySource, /ambiguous customer match/i, 'Expected ambiguous customer fallback handling');
+assert.match(deploySource, /Create Products/, 'Expected product creation node');
+assert.match(deploySource, /Create Prices/, 'Expected price creation node');
+assert.match(deploySource, /Create Draft Invoice/, 'Expected draft invoice node');
+assert.match(deploySource, /Attach Invoice Line Items/, 'Expected line item attachment node');
+assert.match(deploySource, /Products are request-specific|request-specific/i, 'Expected dynamic product handling');
+assert.doesNotMatch(deploySource, /finalize the invoice/i, 'Should not auto-finalize in v1');
 
 console.log('Invoice request intake workflow contract check passed.');
