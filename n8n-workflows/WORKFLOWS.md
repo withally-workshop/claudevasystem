@@ -42,7 +42,7 @@
 | Slack channel | `#airwallexdrafts` | `C0AQZGJDR38` | Bot reads and archives EOD |
 | Slack channel | `#ad-production-internal` | `C0AGEM919QV` | Bot reads |
 | Slack DM destination | Noa Takhel | `U06TBGX9L93` | Bot sends EOD DM |
-| Slack DM destination | John | `TBD in n8n` | Bot sends invoice intake testing alerts |
+| Slack DM destination | John | `U0AM5EGRVTP` | Bot sends invoice intake testing alerts |
 | Gmail inbox (scan) | `noa@kravemedia.co` | OAuth2 | Read only (payment detection) |
 | Gmail inbox (send) | `john@kravemedia.co` | OAuth2 | Send + CC |
 

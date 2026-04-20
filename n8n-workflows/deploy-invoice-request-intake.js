@@ -50,11 +50,11 @@ const JOHN_DM_TEXT =
   "={{ 'Invoice intake fallback\\nRequest ID: ' + $json.request_id + '\\nClient: ' + $json.client_name + '\\nRequester: ' + $json.submitted_by_slack_user_id + '\\nSubtotal: ' + $json.currency + ' ' + $json.subtotal + '\\nFailure stage: ' + $json.failure_stage + '\\nFailure reason: ' + $json.failure_reason + '\\n' + '" + LINE_ITEMS_PAYLOAD_LABEL + ": ' + JSON.stringify($json.line_items) }}";
 const AIRWALLEX_CLIENT_ID = 'replace-me';
 const AIRWALLEX_API_KEY = 'replace-me';
-const SHEETS_CRED_ID = 'replace-me';
-const SLACK_CRED_ID = 'replace-me';
-const SHEET_ID = 'replace-me';
+const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
+const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
+const SHEET_ID = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50';
 const REQUESTER_SLACK_FALLBACK_CHANNEL = '={{ $json.submitted_by_slack_user_id || "" }}';
-const JOHN_DM_CHANNEL = 'replace-me';
+const JOHN_DM_CHANNEL = 'U0AM5EGRVTP';
 
 const NORMALIZE_CODE = `
 const payload = $json.body || $json;

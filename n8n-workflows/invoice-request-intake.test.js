@@ -19,6 +19,26 @@ assert.match(deploySource, /api\.airwallex\.com/, 'Expected Airwallex API usage 
 assert.match(deploySource, /googleSheets/i, 'Expected Google Sheets usage in deploy script');
 assert.match(deploySource, /fallback_manual_required/, 'Expected fallback status handling');
 assert.match(deploySource, /draft invoice created/i, 'Expected draft-only success handling');
+assert.match(
+  deploySource,
+  /const SHEETS_CRED_ID = '83MQOm78gYDvziTO'/,
+  'Expected shared Google Sheets credential id from the repo'
+);
+assert.match(
+  deploySource,
+  /const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD'/,
+  'Expected shared Slack credential id from the repo'
+);
+assert.match(
+  deploySource,
+  /const SHEET_ID = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50'/,
+  'Expected shared invoice tracker sheet id from the repo'
+);
+assert.match(
+  deploySource,
+  /const JOHN_DM_CHANNEL = 'U0AM5EGRVTP'/,
+  'Expected John DM Slack user id from the repo'
+);
 assert.match(deploySource, /'Webhook Trigger'/, 'Expected manual webhook node');
 assert.match(deploySource, /'Normalize Slack Submission'/, 'Expected normalization code node');
 assert.match(deploySource, /'Airwallex Auth'/, 'Expected Airwallex auth node');
@@ -145,6 +165,11 @@ assert.match(
   workflowsDoc,
   /Draft - Pending John Review/,
   'Expected WORKFLOWS.md to use the documented draft review status'
+);
+assert.match(
+  workflowsDoc,
+  /Slack DM destination \| John \| `U0AM5EGRVTP`/,
+  'Expected WORKFLOWS.md to document John DM user id'
 );
 assert.doesNotMatch(
   workflowsDoc,
