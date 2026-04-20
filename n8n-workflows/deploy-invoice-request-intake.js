@@ -570,13 +570,87 @@ const workflow = {
         jsCode: DRAFT_SUCCESS_CODE,
       },
     },
+    {
+      id: 'n20',
+      name: 'Route Validation Outcome',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.2,
+      position: [700, 420],
+      parameters: {
+        conditions: {
+          options: {
+            caseSensitive: true,
+            typeValidation: 'strict',
+            version: 2,
+          },
+          conditions: [
+            {
+              id: 'validation-status-check',
+              leftValue: '={{ $json.status }}',
+              rightValue: 'failed_validation',
+              operator: {
+                type: 'string',
+                operation: 'equals',
+              },
+            },
+          ],
+          combinator: 'and',
+        },
+      },
+    },
+    {
+      id: 'n21',
+      name: 'Route Fallback Outcome',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.2,
+      position: [2680, 360],
+      parameters: {
+        conditions: {
+          options: {
+            caseSensitive: true,
+            typeValidation: 'strict',
+            version: 2,
+          },
+          conditions: [
+            {
+              id: 'fallback-status-check',
+              leftValue: '={{ $json.status }}',
+              rightValue: FALLBACK_STATUS,
+              operator: {
+                type: 'string',
+                operation: 'equals',
+              },
+            },
+            {
+              id: 'validation-status-check',
+              leftValue: '={{ $json.status }}',
+              rightValue: 'error',
+              operator: {
+                type: 'string',
+                operation: 'equals',
+              },
+            },
+          ],
+          combinator: 'or',
+        },
+      },
+    },
   ],
   connections: {
     'Webhook Trigger': {
       main: [[{ node: 'Normalize Slack Submission', type: 'main', index: 0 }]],
     },
     'Normalize Slack Submission': {
-      main: [[{ node: 'Airwallex Auth', type: 'main', index: 0 }]],
+      main: [[{ node: 'Route Validation Outcome', type: 'main', index: 0 }]],
+    },
+    'Route Validation Outcome': {
+      main: [
+        [
+          { node: 'Write Tracker Fallback', type: 'main', index: 0 },
+          { node: 'DM John Failure Alert', type: 'main', index: 0 },
+        ],
+        [{ node: 'Airwallex Auth', type: 'main', index: 0 }],
+      ],
     },
     'Airwallex Auth': {
       main: [[{ node: 'Find Billing Customer', type: 'main', index: 0 }]],
@@ -615,7 +689,16 @@ const workflow = {
       main: [[{ node: 'Mark Draft Success', type: 'main', index: 0 }]],
     },
     'Mark Draft Success': {
-      main: [[{ node: 'Write Tracker Success', type: 'main', index: 0 }]],
+      main: [[{ node: 'Route Fallback Outcome', type: 'main', index: 0 }]],
+    },
+    'Route Fallback Outcome': {
+      main: [
+        [
+          { node: 'Write Tracker Fallback', type: 'main', index: 0 },
+          { node: 'DM John Failure Alert', type: 'main', index: 0 },
+        ],
+        [{ node: 'Write Tracker Success', type: 'main', index: 0 }],
+      ],
     },
     'Write Tracker Success': {
       main: [[{ node: 'Requester Success Confirmation', type: 'main', index: 0 }]],

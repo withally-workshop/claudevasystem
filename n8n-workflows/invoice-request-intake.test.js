@@ -117,6 +117,41 @@ assert.match(
 );
 assert.match(
   deploySource,
+  /'Route Validation Outcome'/,
+  'Expected runtime validation decision node'
+);
+assert.match(
+  deploySource,
+  /'Normalize Slack Submission':\s*{[\s\S]*node:\s+'Route Validation Outcome'/,
+  'Expected validation results to route through validation decision node'
+);
+assert.match(
+  deploySource,
+  /'Route Validation Outcome':\s*{[\s\S]*node:\s+'Write Tracker Fallback'/,
+  'Expected validation decision node to reach Write Tracker Fallback'
+);
+assert.match(
+  deploySource,
+  /'Route Validation Outcome':\s*{[\s\S]*node:\s+'Airwallex Auth'/,
+  'Expected validation success to continue to Airwallex auth'
+);
+assert.match(
+  deploySource,
+  /'Route Fallback Outcome'/,
+  'Expected runtime fallback decision node'
+);
+assert.match(
+  deploySource,
+  /'Route Fallback Outcome':\s*{[\s\S]*node:\s+'DM John Failure Alert'/,
+  'Expected fallback decision node to reach DM John Failure Alert'
+);
+assert.match(
+  deploySource,
+  /'Route Fallback Outcome':\s*{[\s\S]*node:\s+'Write Tracker Success'/,
+  'Expected success path to continue through fallback decision node before tracker success'
+);
+assert.match(
+  deploySource,
   /billing_customers\/create/,
   'Expected billing customer creation path aligned with billing customer docs'
 );
