@@ -4,6 +4,7 @@ const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = 'replace-me';
 const FALLBACK_STATUS = 'fallback_manual_required';
 const DRAFT_SUCCESS_NOTE = 'draft invoice created';
+const DRAFT_REVIEW_STATUS = 'Draft - Pending John Review';
 const AIRWALLEX_AUTH_URL = 'https://api.airwallex.com/api/v1/authentication/login';
 const AIRWALLEX_CUSTOMER_LIST_URL = 'https://api.airwallex.com/api/v1/billing_customers';
 const AIRWALLEX_CUSTOMER_CREATE_URL = 'https://api.airwallex.com/api/v1/billing_customers/create';
@@ -11,31 +12,42 @@ const AIRWALLEX_PRODUCT_CREATE_URL = 'https://api.airwallex.com/api/v1/products/
 const AIRWALLEX_PRICE_CREATE_URL = 'https://api.airwallex.com/api/v1/prices/create';
 const AIRWALLEX_INVOICE_CREATE_URL = 'https://api.airwallex.com/api/v1/invoices/create';
 const SUCCESS_TRACKER_COLUMNS = {
-  'Request ID': '={{ $json.request_id }}',
-  Source: 'Slack Modal',
-  'Creation Status': '={{ $json.status }}',
+  'Date Created': '={{ $json.submitted_at }}',
+  'Client Name': '={{ $json.client_name }}',
+  'Email Address': '={{ $json.client_email || "" }}',
+  'Project Description':
+    '={{ ($json.memo || "Structured Slack modal intake") + " | Structured Slack modal" }}',
+  'Invoice #': '={{ $json.airwallex_invoice_id || $json.request_id }}',
   'Airwallex Customer ID': '={{ $json.airwallex_customer_id }}',
   'Airwallex Invoice ID': '={{ $json.airwallex_invoice_id }}',
-  'Failure Stage': '',
-  'Failure Reason': '',
-  'Line Items Payload': '={{ JSON.stringify($json.line_items) }}',
+  Amount: '={{ $json.subtotal }}',
+  Currency: '={{ $json.currency }}',
+  'Due Date': '={{ $json.due_date }}',
+  Status: DRAFT_REVIEW_STATUS,
+  'Requested By': '={{ $json.submitted_by_slack_user_id }}',
 };
 const REQUESTER_SUCCESS_TEXT =
   "={{ 'Invoice request received. Airwallex draft invoice was created for ' + $json.client_name + ' (' + $json.currency + ' ' + $json.subtotal + '). Request ID: ' + $json.request_id }}";
 const FALLBACK_TRACKER_COLUMNS = {
-  'Request ID': '={{ $json.request_id }}',
-  Source: 'Slack Modal',
-  'Creation Status': FALLBACK_STATUS,
-  'Failure Stage': '={{ $json.failure_stage }}',
-  'Failure Reason': '={{ $json.failure_reason }}',
+  'Date Created': '={{ $json.submitted_at }}',
+  'Client Name': '={{ $json.client_name }}',
+  'Email Address': '={{ $json.client_email || "" }}',
+  'Project Description':
+    '={{ (($json.memo || "Structured Slack modal intake") + " | Structured Slack modal | " + ($json.failure_stage || "intake") + ": " + ($json.failure_reason || "manual Airwallex creation required")).slice(0, 500) }}',
+  'Invoice #': '={{ $json.request_id }}',
   'Airwallex Customer ID': '={{ $json.airwallex_customer_id || "" }}',
   'Airwallex Invoice ID': '={{ $json.airwallex_invoice_id || "" }}',
-  'Line Items Payload': '={{ JSON.stringify($json.line_items) }}',
+  Amount: '={{ $json.subtotal }}',
+  Currency: '={{ $json.currency }}',
+  'Due Date': '={{ $json.due_date }}',
+  Status: FALLBACK_STATUS,
+  'Requested By': '={{ $json.submitted_by_slack_user_id }}',
 };
 const REQUESTER_FALLBACK_TEXT =
   "={{ 'Invoice request received for ' + $json.client_name + '. Manual Airwallex creation required. Request ID: ' + $json.request_id }}";
+const LINE_ITEMS_PAYLOAD_LABEL = 'Line Items Payload';
 const JOHN_DM_TEXT =
-  "={{ 'Invoice intake fallback\\nRequest ID: ' + $json.request_id + '\\nClient: ' + $json.client_name + '\\nRequester: ' + $json.submitted_by_slack_user_id + '\\nSubtotal: ' + $json.currency + ' ' + $json.subtotal + '\\nFailure stage: ' + $json.failure_stage + '\\nFailure reason: ' + $json.failure_reason + '\\nLine items: ' + JSON.stringify($json.line_items) }}";
+  "={{ 'Invoice intake fallback\\nRequest ID: ' + $json.request_id + '\\nClient: ' + $json.client_name + '\\nRequester: ' + $json.submitted_by_slack_user_id + '\\nSubtotal: ' + $json.currency + ' ' + $json.subtotal + '\\nFailure stage: ' + $json.failure_stage + '\\nFailure reason: ' + $json.failure_reason + '\\n' + '" + LINE_ITEMS_PAYLOAD_LABEL + ": ' + JSON.stringify($json.line_items) }}";
 const AIRWALLEX_CLIENT_ID = 'replace-me';
 const AIRWALLEX_API_KEY = 'replace-me';
 const SHEETS_CRED_ID = 'replace-me';
@@ -463,13 +475,12 @@ const workflow = {
       credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
       parameters: {
         resource: 'sheet',
-        operation: 'appendOrUpdate',
+        operation: 'append',
         documentId: { __rl: true, value: SHEET_ID, mode: 'id' },
         sheetName: { __rl: true, value: 'Invoices', mode: 'name' },
         columns: {
           mappingMode: 'defineBelow',
           value: SUCCESS_TRACKER_COLUMNS,
-          matchingColumns: ['Request ID'],
           schema: [],
         },
         options: {},
@@ -484,13 +495,12 @@ const workflow = {
       credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
       parameters: {
         resource: 'sheet',
-        operation: 'appendOrUpdate',
+        operation: 'append',
         documentId: { __rl: true, value: SHEET_ID, mode: 'id' },
         sheetName: { __rl: true, value: 'Invoices', mode: 'name' },
         columns: {
           mappingMode: 'defineBelow',
           value: FALLBACK_TRACKER_COLUMNS,
-          matchingColumns: ['Request ID'],
           schema: [],
         },
         options: {},
@@ -848,7 +858,9 @@ if (require.main === module) {
 module.exports = {
   API_KEY,
   DRAFT_SUCCESS_NOTE,
+  DRAFT_REVIEW_STATUS,
   FALLBACK_STATUS,
+  LINE_ITEMS_PAYLOAD_LABEL,
   N8N_URL,
   body,
   https,

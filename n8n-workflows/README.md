@@ -83,9 +83,11 @@ node n8n-workflows/deploy-eod-triage-summary.js
 
 ## Invoice Request Intake
 
-Accepts invoice requests from a **Structured Slack modal**, normalizes the submission, attempts full Airwallex draft invoice creation, writes the result to the Client Invoice Tracker, and falls back to a manual-ready record plus John DM alert if any Airwallex step fails.
+Accepts invoice requests from a **Structured Slack modal**, normalizes the submission, attempts full Airwallex draft invoice creation, writes the result into the existing Invoices sheet structure in the Client Invoice Tracker, and falls back to a manual-ready row plus John DM alert if any Airwallex step fails.
 
 **Draft-only behavior:** v1 stops after the Airwallex `draft invoice created` state. It does not auto-finalize or auto-send.
+
+**Tracker write behavior:** intake reuses the documented Invoices tab columns such as `Client Name`, `Email Address`, `Project Description`, `Airwallex Invoice ID`, `Amount`, `Currency`, `Due Date`, `Status`, and `Requested By`. Successful drafts land with status `Draft - Pending John Review`.
 
 **Webhook (manual trigger):**
 ```text

@@ -51,8 +51,29 @@ assert.match(deploySource, /Products are request-specific|request-specific/i, 'E
 assert.doesNotMatch(deploySource, /finalize the invoice/i, 'Should not auto-finalize in v1');
 assert.match(deploySource, /Airwallex Customer ID/, 'Expected Airwallex customer ID mapping');
 assert.match(deploySource, /Airwallex Invoice ID/, 'Expected Airwallex invoice ID mapping');
-assert.match(deploySource, /Creation Status/, 'Expected creation status mapping');
-assert.match(deploySource, /Slack Modal/, 'Expected source mapping');
+assert.match(deploySource, /Client Name/, 'Expected Client Name tracker mapping');
+assert.match(deploySource, /Email Address/, 'Expected Email Address tracker mapping');
+assert.match(deploySource, /Project Description/, 'Expected Project Description tracker mapping');
+assert.match(deploySource, /Amount/, 'Expected Amount tracker mapping');
+assert.match(deploySource, /Currency/, 'Expected Currency tracker mapping');
+assert.match(deploySource, /Due Date/, 'Expected Due Date tracker mapping');
+assert.match(deploySource, /Status/, 'Expected Status tracker mapping');
+assert.match(deploySource, /Requested By/, 'Expected Requested By tracker mapping');
+assert.match(
+  deploySource,
+  /Draft - Pending John Review/,
+  'Expected documented draft review status mapping'
+);
+assert.doesNotMatch(
+  deploySource,
+  /['"]Request ID['"]\s*:/,
+  'Should not map Request ID as an Invoices sheet column'
+);
+assert.doesNotMatch(
+  deploySource,
+  /['"]Line Items Payload['"]\s*:/,
+  'Should not map Line Items Payload as an Invoices sheet column'
+);
 assert.match(
   deploySource,
   /Airwallex draft invoice was created/i,
@@ -71,10 +92,40 @@ assert.match(deploySource, /fallback_manual_required/, 'Expected fallback status
 assert.match(readmeDoc, /Invoice Request Intake/, 'Expected workflow listed in README');
 assert.match(readmeDoc, /Structured Slack modal/, 'Expected Slack modal intake documented in README');
 assert.match(readmeDoc, /draft invoice created/i, 'Expected draft-only behavior documented in README');
+assert.match(
+  readmeDoc,
+  /existing Invoices sheet structure/i,
+  'Expected README to document writes into the existing Invoices sheet structure'
+);
+assert.doesNotMatch(
+  readmeDoc,
+  /Request ID column|Line Items Payload column|Creation Status column/i,
+  'README should not describe hypothetical intake-only sheet columns'
+);
 assert.match(workflowsDoc, /Invoice Request Intake/, 'Expected Invoice Request Intake in WORKFLOWS.md');
 assert.match(workflowsDoc, /krave-invoice-request-intake/, 'Expected manual webhook documented');
 assert.match(workflowsDoc, /fallback_manual_required/, 'Expected fallback status documented in WORKFLOWS.md');
 assert.match(workflowsDoc, /John DM/i, 'Expected John DM testing alert documented in WORKFLOWS.md');
+assert.match(
+  workflowsDoc,
+  /existing Invoices sheet structure/i,
+  'Expected WORKFLOWS.md to document writes into the existing Invoices sheet structure'
+);
+assert.match(
+  workflowsDoc,
+  /Client Name[\s\S]*Email Address[\s\S]*Project Description[\s\S]*Airwallex Invoice ID[\s\S]*Amount[\s\S]*Currency[\s\S]*Due Date[\s\S]*Status[\s\S]*Requested By/,
+  'Expected WORKFLOWS.md to describe the documented Invoices sheet columns used by intake'
+);
+assert.match(
+  workflowsDoc,
+  /Draft - Pending John Review/,
+  'Expected WORKFLOWS.md to use the documented draft review status'
+);
+assert.doesNotMatch(
+  workflowsDoc,
+  /Request ID column|Line Items Payload column|Creation Status column/i,
+  'WORKFLOWS.md should not describe hypothetical intake-only sheet columns'
+);
 assert.match(
   deploySource,
   /https\.request\s*\(\s*options\s*,/,

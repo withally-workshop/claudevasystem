@@ -362,7 +362,7 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 
 | Scenario | Action |
 |----------|--------|
-| Draft invoice created | Tracker row is updated with Airwallex IDs and the requester gets a success confirmation |
+| Draft invoice created | Existing Invoices sheet structure row is updated with Airwallex IDs and the requester gets a success confirmation |
 | Validation failure | Tracker fallback row is written for manual follow-up |
 | Ambiguous customer match | Status becomes `fallback_manual_required`, tracker captures the issue, and John DM fires |
 | Any Airwallex failure | Status becomes `fallback_manual_required`, tracker captures `failure_stage` and `failure_reason`, and John DM fires |
@@ -379,7 +379,10 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 
 - V1 is draft-only and stops once the Airwallex draft invoice exists.
 - John DM is the temporary testing alert path while the workflow is being stabilized.
-- Keep the serialized line items payload in the tracker so manual recreation stays lossless.
+- Intake writes into the existing Invoices sheet structure rather than adding new intake-only columns.
+- The intake workflow uses the documented columns `Client Name`, `Email Address`, `Project Description`, `Airwallex Invoice ID`, `Amount`, `Currency`, `Due Date`, `Status`, and `Requested By`.
+- Successful draft creation writes status `Draft - Pending John Review`.
+- Fallback context is condensed into the existing `Project Description` text so the tracker still fits the current A:N layout.
 
 ---
 
