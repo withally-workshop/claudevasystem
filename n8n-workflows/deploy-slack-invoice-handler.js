@@ -17,7 +17,7 @@ if (typeof payloadRaw === 'string' && payloadRaw.trim()) {
 }
 
 if (interactionPayload) {
-  return [{
+  return {
     json: {
       event_source: 'interaction',
       payload_type: interactionPayload.type || '',
@@ -26,10 +26,10 @@ if (interactionPayload) {
       submitted_by_slack_user_id: interactionPayload.user?.id || '',
       interaction_payload: interactionPayload,
     }
-  }];
+  };
 }
 
-return [{
+return {
   json: {
     event_source: 'slash_command',
     trigger_id: source.trigger_id || '',
@@ -37,7 +37,7 @@ return [{
     command: source.command || '',
     raw_command_payload: source,
   }
-}];
+};
 `.trim();
 
 const NORMALIZE_MODAL_SUBMISSION_CODE = `
@@ -62,7 +62,7 @@ const line_items = lineItemsRaw
     };
   });
 
-return [{
+return {
   json: {
     submitted_by_slack_user_id: payload.user?.id || $json.submitted_by_slack_user_id || '',
     client_name: getValue('client_name'),
@@ -74,7 +74,7 @@ return [{
     line_items_raw: lineItemsRaw,
     line_items,
   }
-}];
+};
 `.trim();
 
 const workflow = {

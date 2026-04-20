@@ -31,6 +31,21 @@ assert.match(deploySource, /submitted_by_slack_user_id/, 'Expected submitter fie
 assert.match(deploySource, /line_items/, 'Expected normalized line items payload');
 assert.match(
   deploySource,
+  /name:\s+'Parse Slack Payload'[\s\S]*mode:\s+'runOnceForEachItem'/,
+  'Expected parser to run once for each item'
+);
+assert.match(
+  deploySource,
+  /name:\s+'Normalize Modal Submission'[\s\S]*mode:\s+'runOnceForEachItem'/,
+  'Expected modal normalizer to run once for each item'
+);
+assert.doesNotMatch(
+  deploySource,
+  /return\s+\[\{\s*json:\s*\{/,
+  'Code nodes running once per item should return a single json object, not an array'
+);
+assert.match(
+  deploySource,
   /Description \| Quantity \| Unit Price/,
   'Expected line item input format hint'
 );
