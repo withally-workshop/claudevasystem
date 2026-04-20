@@ -13,10 +13,11 @@
 3. [Workflow 1 - Payment Detection](#workflow-1---payment-detection)
 4. [Workflow 2 - Invoice Reminder Cron](#workflow-2---invoice-reminder-cron)
 5. [Workflow 3 - EOD Triage Summary](#workflow-3---eod-triage-summary)
-6. [Workflow 4 - Invoice Request Intake](#workflow-4---invoice-request-intake)
-7. [Credential Reference](#credential-reference)
-8. [Runbook - Common Scenarios](#runbook---common-scenarios)
-9. [Handover Checklist](#handover-checklist)
+6. [Workflow 4 - Slack Invoice Handler](#workflow-4---slack-invoice-handler)
+7. [Workflow 5 - Invoice Request Intake](#workflow-5---invoice-request-intake)
+8. [Credential Reference](#credential-reference)
+9. [Runbook - Common Scenarios](#runbook---common-scenarios)
+10. [Handover Checklist](#handover-checklist)
 
 ---
 
@@ -27,7 +28,8 @@
 | 1 | Krave - Payment Detection | `grsXd1VCVIL2F8Cv` | Active | 10am + 5pm ICT | Detect Airwallex deposits, match invoices, update tracker |
 | 2 | Krave - Invoice Reminder Cron | `QvHzslWExLjrH0mo` | Active | 10am ICT daily | Send invoice reminders, alert overdue, update tracker |
 | 3 | Krave - EOD Triage Summary | `TBD after deploy` | Planned | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
-| 4 | Krave - Invoice Request Intake | `TBD after deploy` | Planned | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
+| 4 | Krave - Slack Invoice Handler | `TBD after deploy` | Planned | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
+| 5 | Krave - Invoice Request Intake | `G1sKFdyY4FWeuMO2` | Deployed, review before publish | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
 
 ---
 
@@ -304,7 +306,60 @@ Replaces the scheduled Claude-based EOD summary. Every weekday at 6:00 PM ICT, t
 
 ---
 
-## Workflow 4 - Invoice Request Intake
+## Workflow 4 - Slack Invoice Handler
+
+**n8n URL:** `TBD after deploy`  
+**Deploy script:** `n8n-workflows/deploy-slack-invoice-handler.js`
+
+### Purpose
+
+Handles the Slack-facing part of invoice intake. It accepts both the `/invoice-request` slash command and the matching modal submission payload, opens the modal with `views.open`, normalizes the submitted fields, and forwards the final structured JSON to `krave-invoice-request-intake`.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/slack-invoice-handler` |
+| Slack app usage | Use the same Request URL for both `Slash Commands` and `Interactivity & Shortcuts` |
+
+### Node Flow
+
+```text
+[Webhook Trigger]
+        |
+[Parse Slack Payload]
+        |
+[Route Slack Event]
+   | slash command           | interaction payload
+   v                         v
+[Open Invoice Modal]   [Route Interaction Type]
+                               |
+                               v
+                     [Normalize Modal Submission]
+                               |
+                               v
+                    [Send To Invoice Intake]
+```
+
+### Modal Rules
+
+- Uses callback ID `invoice_request_modal`
+- Opens the modal with Slack `views.open`
+- Collects `client_name`, `company_name`, `client_email`, `currency`, `due_date`, `memo`, and `line_items_raw`
+- The line item helper text is `Description | Quantity | Unit Price`
+- Parses one line item per line and forwards the resulting `line_items[]` array to `krave-invoice-request-intake`
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| Slash command received | Opens the invoice request modal in Slack |
+| Modal `view_submission` received | Normalizes fields and POSTs to `krave-invoice-request-intake` |
+| Unrelated Slack interaction | Ignored silently |
+
+---
+
+## Workflow 5 - Invoice Request Intake
 
 **n8n URL:** `TBD after deploy`  
 **Deploy script:** `n8n-workflows/deploy-invoice-request-intake.js`
@@ -393,7 +448,7 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 | Gmail account | Gmail OAuth2 | `vxHex5lFrkakcsPi` | Payment Detection | `noa@kravemedia.co` |
 | Gmail account (john) | Gmail OAuth2 | `vsDW3WpKXqS9HUs3` | Invoice Reminder Cron | `john@kravemedia.co` |
 | Google Sheets account | Google Sheets OAuth2 | `83MQOm78gYDvziTO` | Payment Detection, Invoice Reminder Cron, Invoice Request Intake | `noa@kravemedia.co` |
-| Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | All four workflows | Krave Slack workspace |
+| Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | All five workflows | Krave Slack workspace |
 | OpenAI account | OpenAI API | `TBD in n8n` | EOD Triage Summary | OpenAI API |
 
 ### Airwallex

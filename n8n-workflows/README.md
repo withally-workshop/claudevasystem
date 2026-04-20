@@ -9,6 +9,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Payment Detection | Active | 10am + 5pm ICT | [payment-detection.workflow.json](payment-detection.workflow.json) |
 | Invoice Reminder Cron | Active | 10am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
 | EOD Triage Summary | Planned | 6pm ICT weekdays | [deploy-eod-triage-summary.js](deploy-eod-triage-summary.js) |
+| Slack Invoice Handler | Planned | Slack slash command + modal submit | [deploy-slack-invoice-handler.js](deploy-slack-invoice-handler.js) |
 | Invoice Request Intake | Planned | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
 
 ---
@@ -103,6 +104,32 @@ node n8n-workflows/deploy-invoice-request-intake.js
 - `Krave Slack Bot` - modal intake, requester confirmations, and John DM testing alerts
 - `Google Sheets account` - access to Client Invoice Tracker
 - `Airwallex admin API access` - billing auth plus customer/product/price/invoice endpoints
+
+---
+
+## Slack Invoice Handler
+
+Receives Slack slash-command and modal submission payloads, opens the invoice modal with `views.open`, normalizes the submitted fields, and forwards the final structured JSON into the existing invoice intake workflow.
+
+**Slack app setup:** use the same Request URL for both `Slash Commands` and `Interactivity & Shortcuts`.
+
+**Request URL:**
+```text
+POST https://noatakhel.app.n8n.cloud/webhook/slack-invoice-handler
+```
+
+**Downstream handoff:**
+```text
+POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-request-intake
+```
+
+**Deploy from scratch:**
+```bash
+node n8n-workflows/deploy-slack-invoice-handler.js
+```
+
+**Credentials required in n8n:**
+- `Krave Slack Bot` - used by the HTTP Request node to call Slack `views.open`
 
 ---
 

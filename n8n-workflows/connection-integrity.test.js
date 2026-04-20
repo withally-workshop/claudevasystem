@@ -22,6 +22,7 @@ function getConnectionKeys(source) {
 const workflowFiles = [
   path.join(__dirname, 'deploy-invoice-reminder-cron.js'),
   path.join(__dirname, 'deploy-invoice-request-intake.js'),
+  path.join(__dirname, 'deploy-slack-invoice-handler.js'),
 ];
 
 for (const filePath of workflowFiles) {
