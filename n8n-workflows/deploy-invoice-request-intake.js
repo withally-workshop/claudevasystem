@@ -318,6 +318,9 @@ const workflow = {
     'Webhook Trigger': {
       main: [[{ node: 'Normalize Slack Submission', type: 'main', index: 0 }]],
     },
+    'Normalize Slack Submission': {
+      main: [[{ node: 'Airwallex Auth', type: 'main', index: 0 }]],
+    },
   },
 };
 
