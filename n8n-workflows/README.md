@@ -90,7 +90,9 @@ Accepts invoice requests from a **Structured Slack modal**, normalizes the submi
 
 **Tracker write behavior:** intake reuses the existing Invoices sheet structure and documented Invoices tab columns such as `Client Name`, `Email Address`, `Project Description`, `Airwallex Invoice ID`, `Amount`, `Currency`, `Due Date`, `Status`, and `Requested By`. Successful drafts land with status `Draft - Pending John Review`.
 
-**Slack intake fields:** `Client Name or Company Name`, `Billing Address`, `Currency`, `Due Date`, `Memo / Project Description`, and freeform `Line Items`. Billing Address is captured as text and condensed into `Project Description` because the current tracker does not have a dedicated billing-address column.
+**Slack intake fields:** `Client Name or Company Name`, `Billing Address`, `Currency`, `Payout`, `Invoice Date`, `Memo / Project Description`, and freeform `Line Items`. Billing Address is captured as text and condensed into `Project Description` because the current tracker does not have a dedicated billing-address column.
+
+**Date rules:** blank `Payout` defaults to `7 day payout`. Supported payout phrases in v1 are `7 day payout`, `14 day payout`, `30 day payout`, `due now`, and `due on <date>` such as `due on May 1, 2026`. `Invoice Date` accepts blank, `today`, `tomorrow`, `YYYY-MM-DD`, or clear month-name dates like `May 1, 2026`, and defaults to today in `Asia/Manila`.
 
 **Webhook (manual trigger):**
 ```text
@@ -115,7 +117,9 @@ Receives Slack slash-command and modal submission payloads, opens the invoice mo
 
 **Slack app setup:** use the same Request URL for both `Slash Commands` and `Interactivity & Shortcuts`.
 
-**Modal fields:** `Client Name or Company Name`, `Billing Address`, `Currency`, `Due Date`, `Memo / Project Description`, and freeform `Line Items`. Freeform line items support inputs like `Krave Media x1 @ 1300`, `UGC package x2 @ 500`, or `April retainer 2500`. If quantity is omitted, the handler defaults it to `1`.
+**Modal fields:** `Client Name or Company Name`, `Billing Address`, `Currency`, `Payout`, `Invoice Date`, `Memo / Project Description`, and freeform `Line Items`. Freeform line items support inputs like `Krave Media x1 @ 1300`, `UGC package x2 @ 500`, or `April retainer 2500`. If quantity is omitted, the handler defaults it to `1`.
+
+**Helper examples:** payout helper copy shows `7 day payout`, `14 day payout`, and `30 day payout`. Blank payout defaults to `7 day payout`. Invoice-date helper copy shows `today`, `2026-04-21`, and `May 1, 2026`.
 
 **Request URL:**
 ```text

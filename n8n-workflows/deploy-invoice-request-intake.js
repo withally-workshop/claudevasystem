@@ -16,7 +16,7 @@ const SUCCESS_TRACKER_COLUMNS = {
   'Client Name': '={{ $json.client_name }}',
   'Email Address': '={{ $json.client_email || "" }}',
   'Project Description':
-    '={{ (($json.memo || "Structured Slack modal intake") + " | Billing Address: " + ($json.billing_address || "none provided") + " | Structured Slack modal").slice(0, 500) }}',
+    '={{ (($json.memo || "Structured Slack modal intake") + " | Billing Address: " + ($json.billing_address || "none provided") + " | Invoice Date: " + ($json.invoice_date || "needs review") + " | Payout: " + ($json.payout_raw || "7 day payout") + " | Due Date: " + ($json.due_date || "needs review") + " | Structured Slack modal").slice(0, 500) }}',
   'Invoice #': '={{ $json.airwallex_invoice_id || $json.request_id }}',
   'Airwallex Customer ID': '={{ $json.airwallex_customer_id }}',
   'Airwallex Invoice ID': '={{ $json.airwallex_invoice_id }}',
@@ -27,13 +27,13 @@ const SUCCESS_TRACKER_COLUMNS = {
   'Requested By': '={{ $json.submitted_by_slack_user_id }}',
 };
 const REQUESTER_SUCCESS_TEXT =
-  "={{ 'Invoice request received. Airwallex draft invoice was created for ' + $json.client_name + ' (' + $json.currency + ' ' + $json.subtotal + '). Request ID: ' + $json.request_id }}";
+  "={{ 'Invoice request received. Airwallex draft invoice was created for ' + $json.client_name + ' (' + $json.currency + ' ' + $json.subtotal + '). Invoice Date: ' + $json.invoice_date + '. Payout: ' + ($json.payout_raw || '7 day payout') + '. Due Date: ' + $json.due_date + '. Request ID: ' + $json.request_id }}";
 const FALLBACK_TRACKER_COLUMNS = {
   'Date Created': '={{ $json.submitted_at }}',
   'Client Name': '={{ $json.client_name }}',
   'Email Address': '={{ $json.client_email || "" }}',
   'Project Description':
-    '={{ (($json.memo || "Structured Slack modal intake") + " | Billing Address: " + ($json.billing_address || "none provided") + " | Structured Slack modal | " + ($json.failure_stage || "intake") + ": " + ($json.failure_reason || "manual Airwallex creation required")).slice(0, 500) }}',
+    '={{ (($json.memo || "Structured Slack modal intake") + " | Billing Address: " + ($json.billing_address || "none provided") + " | Invoice Date: " + ($json.invoice_date || "needs review") + " | Payout: " + ($json.payout_raw || "7 day payout") + " | Due Date: " + ($json.due_date || "needs review") + " | Structured Slack modal | " + ($json.failure_stage || "intake") + ": " + ($json.failure_reason || "manual Airwallex creation required")).slice(0, 500) }}',
   'Invoice #': '={{ $json.request_id }}',
   'Airwallex Customer ID': '={{ $json.airwallex_customer_id || "" }}',
   'Airwallex Invoice ID': '={{ $json.airwallex_invoice_id || "" }}',
@@ -44,10 +44,10 @@ const FALLBACK_TRACKER_COLUMNS = {
   'Requested By': '={{ $json.submitted_by_slack_user_id }}',
 };
 const REQUESTER_FALLBACK_TEXT =
-  "={{ 'Invoice request received for ' + $json.client_name + '. Manual Airwallex creation required. Request ID: ' + $json.request_id }}";
+  "={{ 'Invoice request received for ' + $json.client_name + '. Manual Airwallex creation required. Invoice Date: ' + ($json.invoice_date || 'needs review') + '. Payout: ' + ($json.payout_raw || '7 day payout') + '. Due Date: ' + ($json.due_date || 'needs review') + '. Request ID: ' + $json.request_id }}";
 const LINE_ITEMS_PAYLOAD_LABEL = 'Line Items Payload';
 const JOHN_DM_TEXT =
-  "={{ 'Invoice intake fallback\\nRequest ID: ' + $json.request_id + '\\nClient: ' + $json.client_name + '\\nRequester: ' + $json.submitted_by_slack_user_id + '\\nSubtotal: ' + $json.currency + ' ' + $json.subtotal + '\\nFailure stage: ' + $json.failure_stage + '\\nFailure reason: ' + $json.failure_reason + '\\n' + '" + LINE_ITEMS_PAYLOAD_LABEL + ": ' + JSON.stringify($json.line_items) }}";
+  "={{ 'Invoice intake fallback\\nRequest ID: ' + $json.request_id + '\\nClient: ' + $json.client_name + '\\nRequester: ' + $json.submitted_by_slack_user_id + '\\nInvoice Date: ' + ($json.invoice_date || 'needs review') + '\\nPayout: ' + ($json.payout_raw || '7 day payout') + '\\nDue Date: ' + ($json.due_date || 'needs review') + '\\nSubtotal: ' + $json.currency + ' ' + $json.subtotal + '\\nFailure stage: ' + $json.failure_stage + '\\nFailure reason: ' + $json.failure_reason + '\\n' + '" + LINE_ITEMS_PAYLOAD_LABEL + ": ' + JSON.stringify($json.line_items) }}";
 const AIRWALLEX_CLIENT_ID = 'JaQA4uJ1SDSBkTdFigT9sw';
 const AIRWALLEX_API_KEY = '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af5c91666f50b10ee64fd87fa3db7435e8dc5c07721';
 const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
@@ -60,8 +60,112 @@ const NORMALIZE_CODE = `
 const payload = $json.body || $json;
 const lineItems = Array.isArray(payload.line_items) ? payload.line_items : [];
 const requestId = 'invreq_' + Date.now();
+const todayFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Manila',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+function formatTodayIso() {
+  const parts = todayFormatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return year + '-' + month + '-' + day;
+}
+
+function isoFromDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function parseIsoDate(iso) {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function addDays(iso, days) {
+  const date = parseIsoDate(iso);
+  date.setUTCDate(date.getUTCDate() + days);
+  return isoFromDate(date);
+}
+
+function diffDays(fromIso, toIso) {
+  const fromDate = parseIsoDate(fromIso);
+  const toDate = parseIsoDate(toIso);
+  return Math.round((toDate.getTime() - fromDate.getTime()) / 86400000);
+}
+
+function parseExplicitDate(input, todayIso) {
+  const raw = String(input || '').trim();
+  if (!raw) return { ok: true, value: todayIso, normalized_input: '' };
+
+  const lower = raw.toLowerCase();
+  if (lower === 'today') {
+    return { ok: true, value: todayIso, normalized_input: 'today' };
+  }
+  if (lower === 'tomorrow') {
+    return { ok: true, value: addDays(todayIso, 1), normalized_input: 'tomorrow' };
+  }
+  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) {
+    const parsed = parseIsoDate(raw);
+    if (!Number.isNaN(parsed.getTime()) && isoFromDate(parsed) === raw) {
+      return { ok: true, value: raw, normalized_input: raw };
+    }
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return {
+      ok: true,
+      value: isoFromDate(new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()))),
+      normalized_input: raw,
+    };
+  }
+
+  return { ok: false, reason: 'unparseable invoice_date', normalized_input: raw };
+}
+
+function parsePayout(rawValue, invoiceDateIso, todayIso) {
+  const raw = String(rawValue || '').trim();
+  const normalized = (raw || '7 day payout').toLowerCase();
+
+  // Supported payout phrases: 7 day payout, 14 day payout, 30 day payout, due now, due on <date>.
+
+  if (normalized === '7 day payout') {
+    return { ok: true, payout_raw: raw || '7 day payout', due_date: addDays(invoiceDateIso, 7) };
+  }
+  if (normalized === '14 day payout') {
+    return { ok: true, payout_raw: raw, due_date: addDays(invoiceDateIso, 14) };
+  }
+  if (normalized === '30 day payout') {
+    return { ok: true, payout_raw: raw, due_date: addDays(invoiceDateIso, 30) };
+  }
+  if (normalized === 'due now') {
+    return { ok: true, payout_raw: raw, due_date: invoiceDateIso };
+  }
+
+  const dueOnMatch = normalized.match(/^due on\\s+(.+)$/);
+  if (dueOnMatch) {
+    const dueOnDate = parseExplicitDate(dueOnMatch[1], todayIso);
+    if (dueOnDate.ok) {
+      return { ok: true, payout_raw: raw, due_date: dueOnDate.value };
+    }
+  }
+
+  return { ok: false, payout_raw: raw || '7 day payout', reason: 'unparseable payout' };
+}
+
+const todayIso = formatTodayIso();
+const invoiceDateInput = payload.invoice_date_input || payload.invoice_date || '';
+const invoiceDateResult = parseExplicitDate(invoiceDateInput, todayIso);
+const payoutResult = invoiceDateResult.ok
+  ? parsePayout(payload.payout_raw, invoiceDateResult.value, todayIso)
+  : { ok: false, payout_raw: payload.payout_raw || '7 day payout', reason: 'unparseable invoice_date' };
+const computedDueDate = invoiceDateResult.ok && payoutResult.ok ? payoutResult.due_date : '';
+const daysUntilDue = computedDueDate ? diffDays(invoiceDateResult.value, computedDueDate) : 0;
 const subtotal = lineItems.reduce((sum, item) => {
-  const quantity = Number(item.quantity || 0);
+  const quantity = Number(item.quantity || 1);
   const unitPrice = Number(item.unit_price || 0);
   return sum + (quantity * unitPrice);
 }, 0);
@@ -69,7 +173,6 @@ const subtotal = lineItems.reduce((sum, item) => {
 const missing = [];
 if (!payload.client_name && !payload.client_name_or_company_name) missing.push('client_name_or_company_name');
 if (!payload.currency) missing.push('currency');
-if (!payload.due_date) missing.push('due_date');
 if (!lineItems.length) missing.push('line_items');
 
 const resolvedClientName = payload.client_name_or_company_name || payload.client_name || payload.company_name || '';
@@ -84,7 +187,12 @@ const baseRequest = {
   billing_address: payload.billing_address || '',
   client_email: '',
   currency: payload.currency || '',
-  due_date: payload.due_date || '',
+  payout_raw: payoutResult.payout_raw || '7 day payout',
+  invoice_date_input: invoiceDateInput,
+  invoice_date: invoiceDateResult.ok ? invoiceDateResult.value : '',
+  date_parse_status: invoiceDateResult.ok && payoutResult.ok ? 'parsed' : 'failed',
+  due_date: computedDueDate,
+  days_until_due: daysUntilDue,
   memo: payload.memo || '',
   line_items: lineItems,
   subtotal,
@@ -97,6 +205,17 @@ if (missing.length) {
       status: 'failed_validation',
       failure_stage: 'validation',
       failure_reason: 'Missing required fields: ' + missing.join(', '),
+    }
+  }];
+}
+
+if (!invoiceDateResult.ok || !payoutResult.ok) {
+  return [{
+    json: {
+      ...baseRequest,
+      status: 'failed_validation',
+      failure_stage: 'validation',
+      failure_reason: !invoiceDateResult.ok ? 'unparseable invoice_date' : 'unparseable payout',
     }
   }];
 }
@@ -243,8 +362,8 @@ return [{
       billing_customer_id: resolvedCustomerId,
       currency: $json.currency,
       collection_method: 'OUT_OF_BAND',
-      days_until_due: 14,
-      memo: $json.memo || '',
+      days_until_due: $json.days_until_due,
+      memo: ($json.memo || '') + ' | Invoice Date: ' + $json.invoice_date + ' | Payout: ' + ($json.payout_raw || '7 day payout') + ' | Due Date: ' + $json.due_date,
       request_id: $json.request_id,
     }
   }

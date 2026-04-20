@@ -1,7 +1,7 @@
 # Krave Media - n8n Automation Workflows
 
 **Instance:** `noatakhel.app.n8n.cloud`  
-**Last updated:** `2026-04-20`  
+**Last updated:** `2026-04-21`  
 **Maintained by:** John (Systems Partner) - `john@kravemedia.co`
 
 ---
@@ -28,8 +28,8 @@
 | 1 | Krave - Payment Detection | `grsXd1VCVIL2F8Cv` | Active | 10am + 5pm ICT | Detect Airwallex deposits, match invoices, update tracker |
 | 2 | Krave - Invoice Reminder Cron | `QvHzslWExLjrH0mo` | Active | 10am ICT daily | Send invoice reminders, alert overdue, update tracker |
 | 3 | Krave - EOD Triage Summary | `TBD after deploy` | Planned | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
-| 4 | Krave - Slack Invoice Handler | `TBD after deploy` | Planned | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
-| 5 | Krave - Invoice Request Intake | `G1sKFdyY4FWeuMO2` | Deployed, review before publish | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
+| 4 | Krave - Slack Invoice Handler | `cxHFf6eIkvvBpPBo` | Active | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
+| 5 | Krave - Invoice Request Intake | `DXxPOtrS9d9Ge1Z2` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
 
 ---
 
@@ -227,7 +227,7 @@ Replaces manual invoice follow-up. Once daily, it scans every open invoice in th
 
 ## Workflow 3 - EOD Triage Summary
 
-**n8n URL:** `TBD after deploy`  
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/cxHFf6eIkvvBpPBo`  
 **Deploy script:** `n8n-workflows/deploy-eod-triage-summary.js`
 
 ### Purpose
@@ -308,7 +308,7 @@ Replaces the scheduled Claude-based EOD summary. Every weekday at 6:00 PM ICT, t
 
 ## Workflow 4 - Slack Invoice Handler
 
-**n8n URL:** `TBD after deploy`  
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/DXxPOtrS9d9Ge1Z2`  
 **Deploy script:** `n8n-workflows/deploy-slack-invoice-handler.js`
 
 ### Purpose
@@ -345,7 +345,10 @@ Handles the Slack-facing part of invoice intake. It accepts both the `/invoice-r
 
 - Uses callback ID `invoice_request_modal`
 - Opens the modal with Slack `views.open`
-- Collects `client_name_or_company_name`, `billing_address`, `currency`, `due_date`, `memo`, and `line_items_raw`
+- Collects `client_name_or_company_name`, `billing_address`, `currency`, `payout`, `invoice_date`, `memo`, and `line_items_raw`
+- The payout helper text shows `7 day payout`, `14 day payout`, and `30 day payout`
+- The invoice-date helper text shows `today`, `2026-04-21`, and `May 1, 2026`
+- Blank payout defaults to `7 day payout`
 - The line item helper text is freeform, with examples like `Krave Media x1 @ 1300`
 - Parses one line item per line and forwards the resulting `line_items[]` array to `krave-invoice-request-intake`
 - Defaults quantity to `1` whenever the requester omits it
@@ -411,6 +414,8 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 
 - Uses a Structured Slack modal so required fields arrive in a predictable payload.
 - Captures `Client Name or Company Name` and `Billing Address` instead of separate company and email fields.
+- Captures `Payout` and `Invoice Date`, then computes the final `Due Date` inside intake.
+- Supports payout phrases `7 day payout`, `14 day payout`, `30 day payout`, `due now`, and `due on <date>`.
 - Supports multiple line items per request.
 - Resolves customers by company name or client name rather than email.
 - Ambiguous customer matches do not auto-resolve and instead move to fallback.
@@ -429,6 +434,7 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 | Failure | Behaviour |
 |---------|-----------|
 | Missing required modal fields | Mark `failed_validation` and write a manual-ready fallback row |
+| Unparseable payout or invoice date | Mark `failed_validation`, preserve the raw text, and write a manual-ready fallback row |
 | Airwallex auth / customer / product / price / invoice failure | Mark `fallback_manual_required`, preserve the line items payload, and send a John DM testing alert |
 | Draft creation succeeds | Stop at draft only; no auto-finalize and no auto-send in v1 |
 
@@ -439,7 +445,7 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 - Intake writes into the existing Invoices sheet structure rather than adding new intake-only columns.
 - The intake workflow uses the documented columns `Client Name`, `Email Address`, `Project Description`, `Airwallex Invoice ID`, `Amount`, `Currency`, `Due Date`, `Status`, and `Requested By`.
 - Successful draft creation writes status `Draft - Pending John Review`.
-- Billing Address and fallback context are condensed into the existing `Project Description` text so the tracker still fits the current A:N layout.
+- Billing Address, Payout, Invoice Date, Due Date, and fallback context are condensed into the existing `Project Description` text so the tracker still fits the current A:N layout.
 
 ---
 

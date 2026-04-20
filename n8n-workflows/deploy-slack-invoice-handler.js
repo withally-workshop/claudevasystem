@@ -49,7 +49,101 @@ function getValue(blockId) {
   return values[blockId]?.value?.value || '';
 }
 
+function isoFromParts(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function parseIsoDate(iso) {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function addDays(iso, days) {
+  const date = parseIsoDate(iso);
+  date.setUTCDate(date.getUTCDate() + days);
+  return isoFromParts(date);
+}
+
+function manilaTodayIso() {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return year + '-' + month + '-' + day;
+}
+
+function parseExplicitDate(input, todayIso) {
+  const raw = String(input || '').trim();
+  if (!raw) return { ok: true, value: todayIso, normalized_input: '' };
+
+  const lower = raw.toLowerCase();
+  if (lower === 'today') {
+    return { ok: true, value: todayIso, normalized_input: 'today' };
+  }
+  if (lower === 'tomorrow') {
+    return { ok: true, value: addDays(todayIso, 1), normalized_input: 'tomorrow' };
+  }
+  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) {
+    const parsed = parseIsoDate(raw);
+    if (!Number.isNaN(parsed.getTime()) && isoFromParts(parsed) === raw) {
+      return { ok: true, value: raw, normalized_input: raw };
+    }
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return {
+      ok: true,
+      value: isoFromParts(new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()))),
+      normalized_input: raw,
+    };
+  }
+
+  return { ok: false, reason: 'unparseable invoice_date', normalized_input: raw };
+}
+
+function parsePayout(rawValue, invoiceDateIso, todayIso) {
+  const raw = String(rawValue || '').trim();
+  const normalized = (raw || '7 day payout').toLowerCase();
+
+  if (normalized === '7 day payout') {
+    return { ok: true, payout_raw: raw || '7 day payout', due_date: addDays(invoiceDateIso, 7) };
+  }
+  if (normalized === '14 day payout') {
+    return { ok: true, payout_raw: raw, due_date: addDays(invoiceDateIso, 14) };
+  }
+  if (normalized === '30 day payout') {
+    return { ok: true, payout_raw: raw, due_date: addDays(invoiceDateIso, 30) };
+  }
+  if (normalized === 'due now') {
+    return { ok: true, payout_raw: raw, due_date: invoiceDateIso };
+  }
+
+  const dueOnMatch = normalized.match(/^due on\\s+(.+)$/);
+  if (dueOnMatch) {
+    const parsedDue = parseExplicitDate(dueOnMatch[1], todayIso);
+    if (parsedDue.ok) {
+      return { ok: true, payout_raw: raw, due_date: parsedDue.value };
+    }
+  }
+
+  return { ok: false, payout_raw: raw || '7 day payout', reason: 'unparseable payout' };
+}
+
 const lineItemsRaw = getValue('line_items_raw');
+const payoutInput = getValue('payout');
+const invoiceDateInput = getValue('invoice_date');
+const todayIso = manilaTodayIso();
+const invoiceDateResult = parseExplicitDate(invoiceDateInput, todayIso);
+const payoutResult = invoiceDateResult.ok
+  ? parsePayout(payoutInput, invoiceDateResult.value, todayIso)
+  : { ok: false, payout_raw: payoutInput || '7 day payout', reason: 'unparseable invoice_date' };
 
 function parseLineItem(line) {
   const trimmed = line.trim();
@@ -114,7 +208,12 @@ return {
     company_name: getValue('client_name_or_company_name'),
     billing_address: getValue('billing_address'),
     currency: getValue('currency'),
-    due_date: getValue('due_date'),
+    payout_raw: payoutResult.payout_raw || '7 day payout',
+    invoice_date_input: invoiceDateInput,
+    invoice_date: invoiceDateResult.ok ? invoiceDateResult.value : '',
+    date_parse_status: invoiceDateResult.ok && payoutResult.ok ? 'parsed' : 'failed',
+    due_date: invoiceDateResult.ok && payoutResult.ok ? payoutResult.due_date : '',
+    failure_reason: !invoiceDateResult.ok ? invoiceDateResult.reason : (!payoutResult.ok ? payoutResult.reason : ''),
     memo: getValue('memo'),
     line_items_raw: lineItemsRaw,
     line_items,
@@ -227,12 +326,28 @@ const workflow = {
                 },
                 {
                   type: 'input',
-                  block_id: 'due_date',
-                  label: { type: 'plain_text', text: 'Due Date' },
+                  block_id: 'payout',
+                  optional: true,
+                  label: { type: 'plain_text', text: 'Payout' },
                   element: {
                     type: 'plain_text_input',
                     action_id: 'value',
-                    placeholder: { type: 'plain_text', text: 'YYYY-MM-DD' }
+                    placeholder: { type: 'plain_text', text: '7 day payout\\n14 day payout\\n30 day payout' }
+                  },
+                  hint: {
+                    type: 'plain_text',
+                    text: 'Leave blank to default to 7 day payout.'
+                  }
+                },
+                {
+                  type: 'input',
+                  block_id: 'invoice_date',
+                  optional: true,
+                  label: { type: 'plain_text', text: 'Invoice Date' },
+                  element: {
+                    type: 'plain_text_input',
+                    action_id: 'value',
+                    placeholder: { type: 'plain_text', text: 'today\\n2026-04-21\\nMay 1, 2026' }
                   }
                 },
                 {
@@ -336,12 +451,14 @@ const workflow = {
           ':white_check_mark: Invoice request received' +
           '\\n- Requester: <@' + $json.submitted_by_slack_user_id + '>' +
           '\\n- Client: ' + $json.client_name_or_company_name +
-          '\\n- Billing Address: ' + ($json.billing_address || '—') +
+          '\\n- Billing Address: ' + ($json.billing_address || '-') +
           '\\n- Amount: ' + $json.currency + ' ' + $json.line_items.reduce((sum, item) => sum + ((Number(item.quantity || 1)) * (Number(item.unit_price || 0))), 0) +
-          '\\n- Due Date: ' + $json.due_date +
-          '\\n- Memo: ' + ($json.memo || '—') +
+          '\\n- Invoice Date: ' + ($json.invoice_date || 'Needs review') +
+          '\\n- Payout: ' + ($json.payout_raw || '7 day payout') +
+          '\\n- Due Date: ' + ($json.due_date || 'Needs review') +
+          '\\n- Memo: ' + ($json.memo || '-') +
           '\\n- Line Items: ' + $json.line_items.map((item) => item.raw_text || (item.description + ' x' + (item.quantity || 1) + (item.unit_price == null ? '' : ' @ ' + item.unit_price))).join('; ') +
-          '\\n- Status: Received and processing'
+          '\\n- Status: ' + ($json.date_parse_status === 'parsed' ? 'Received and processing' : 'Received, needs date review')
         }}`,
         otherOptions: {},
       },
@@ -386,9 +503,9 @@ const workflow = {
                   type: 'section',
                   fields: [
                     { type: 'mrkdwn', text: '*Client*\\n' + $json.client_name_or_company_name },
-                    { type: 'mrkdwn', text: '*Amount*\\n' + $json.currency + ' ' + $json.line_items.reduce((sum, item) => sum + ((Number(item.quantity || 1)) * (Number(item.unit_price || 0))), 0) },
-                    { type: 'mrkdwn', text: '*Due Date*\\n' + $json.due_date },
-                    { type: 'mrkdwn', text: '*Status*\\nReceived and processing' }
+                    { type: 'mrkdwn', text: '*Invoice Date*\\n' + ($json.invoice_date || 'Needs review') },
+                    { type: 'mrkdwn', text: '*Payout*\\n' + ($json.payout_raw || '7 day payout') },
+                    { type: 'mrkdwn', text: '*Due Date*\\n' + ($json.due_date || 'Needs review') }
                   ]
                 },
                 {

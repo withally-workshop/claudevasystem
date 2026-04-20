@@ -38,11 +38,18 @@ assert.match(deploySource, /views\.open/, 'Expected Slack modal open API call');
 assert.match(deploySource, /invoice_request_modal/, 'Expected modal callback id');
 assert.match(deploySource, /client_name_or_company_name/, 'Expected combined client/company field');
 assert.match(deploySource, /billing_address/, 'Expected billing address field');
+assert.match(deploySource, /payout/, 'Expected payout field');
+assert.match(deploySource, /invoice_date/, 'Expected invoice date field');
 assert.match(deploySource, /line_items_raw/, 'Expected line items modal field');
 assert.match(deploySource, /submitted_by_slack_user_id/, 'Expected submitter field normalization');
+assert.match(deploySource, /payout_raw/, 'Expected raw payout normalization');
+assert.match(deploySource, /invoice_date_input/, 'Expected raw invoice date normalization');
+assert.match(deploySource, /date_parse_status/, 'Expected date parse status normalization');
+assert.match(deploySource, /due_date/, 'Expected computed due date in normalized payload');
 assert.match(deploySource, /line_items/, 'Expected normalized line items payload');
 assert.match(deploySource, /quantity:\s*1/, 'Expected default quantity of 1 when omitted');
 assert.match(deploySource, /unit_price:\s*null/, 'Expected raw line items to remain usable when price is missing');
+assert.doesNotMatch(deploySource, /block_id:\s+'due_date'/, 'Expected due date modal field to be removed');
 assert.match(
   deploySource,
   /response_action:\s*'update'/,
@@ -72,6 +79,21 @@ assert.match(
   deploySource,
   /Krave Media x1 @ 1300|UGC package x2 @ 500|April retainer 2500/,
   'Expected freeform line item input examples'
+);
+assert.match(
+  deploySource,
+  /7 day payout|14 day payout|30 day payout/,
+  'Expected payout helper examples'
+);
+assert.match(
+  deploySource,
+  /today|2026-04-21|May 1, 2026/,
+  'Expected invoice date helper examples'
+);
+assert.match(
+  deploySource,
+  /blank payout defaults to 7 day payout|default.*7 day payout|7 day payout/,
+  'Expected payout default helper copy'
 );
 assert.match(deploySource, /'Webhook Trigger'/, 'Expected webhook trigger node');
 assert.match(deploySource, /'Parse Slack Payload'/, 'Expected payload parser node');
@@ -142,6 +164,9 @@ assert.match(
 );
 assert.match(readmeDoc, /Client Name or Company Name/i, 'Expected README to document the combined client field');
 assert.match(readmeDoc, /Billing Address/i, 'Expected README to document billing address field');
+assert.match(readmeDoc, /Payout/i, 'Expected README to document payout field');
+assert.match(readmeDoc, /Invoice Date/i, 'Expected README to document invoice date field');
+assert.match(readmeDoc, /7 day payout/i, 'Expected README to document payout default');
 assert.match(readmeDoc, /freeform/i, 'Expected README to document freeform line items');
 assert.match(workflowsDoc, /Slack Invoice Handler/, 'Expected handler workflow listed in WORKFLOWS.md');
 assert.match(workflowsDoc, /slack-invoice-handler/, 'Expected shared Slack handler webhook documented');
@@ -157,6 +182,9 @@ assert.match(
 );
 assert.match(workflowsDoc, /Client Name or Company Name/i, 'Expected WORKFLOWS.md to document the combined client field');
 assert.match(workflowsDoc, /Billing Address/i, 'Expected WORKFLOWS.md to document billing address field');
+assert.match(workflowsDoc, /Payout/i, 'Expected WORKFLOWS.md to document payout field');
+assert.match(workflowsDoc, /Invoice Date/i, 'Expected WORKFLOWS.md to document invoice date field');
+assert.match(workflowsDoc, /7 day payout/i, 'Expected WORKFLOWS.md to document payout default');
 assert.match(workflowsDoc, /freeform/i, 'Expected WORKFLOWS.md to document freeform line items');
 assert.match(
   workflowsDoc,

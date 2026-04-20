@@ -71,7 +71,17 @@ assert.match(deploySource, /request_id/, 'Expected request_id in normalization c
 assert.match(deploySource, /submitted_by_slack_user_id/, 'Expected Slack submitter field');
 assert.match(deploySource, /client_name_or_company_name/, 'Expected combined client/company input support');
 assert.match(deploySource, /billing_address/, 'Expected billing address input support');
+assert.match(deploySource, /payout_raw/, 'Expected payout raw input support');
+assert.match(deploySource, /invoice_date_input/, 'Expected invoice date input support');
+assert.match(deploySource, /invoice_date/, 'Expected parsed invoice date support');
+assert.match(deploySource, /date_parse_status/, 'Expected date parse status support');
 assert.match(deploySource, /line_items/, 'Expected line_items payload');
+assert.match(deploySource, /Asia\/Manila/, 'Expected Manila timezone handling for invoice date default');
+assert.match(deploySource, /7 day payout/, 'Expected default payout handling');
+assert.match(deploySource, /14 day payout/, 'Expected 14 day payout support');
+assert.match(deploySource, /30 day payout/, 'Expected 30 day payout support');
+assert.match(deploySource, /due now/, 'Expected due now payout support');
+assert.match(deploySource, /due on /, 'Expected due on explicit date support');
 assert.match(
   deploySource,
   /request_specific_products:\s*lineItems\.map/,
@@ -100,6 +110,8 @@ assert.match(
 assert.match(deploySource, /failed_validation/, 'Expected validation failure status');
 assert.match(deploySource, /intake_received/, 'Expected intake_received status');
 assert.match(deploySource, /subtotal/, 'Expected subtotal calculation');
+assert.match(deploySource, /unparseable payout/i, 'Expected explicit payout parse failures');
+assert.match(deploySource, /unparseable invoice_date/i, 'Expected explicit invoice date parse failures');
 assert.match(deploySource, /authentication\/login/, 'Expected Airwallex auth login endpoint');
 assert.match(deploySource, /Find Billing Customer/, 'Expected customer lookup node');
 assert.match(deploySource, /Create Billing Customer/, 'Expected customer create node');
@@ -160,6 +172,9 @@ assert.match(
 );
 assert.match(readmeDoc, /Billing Address/i, 'Expected README to document billing address capture');
 assert.match(readmeDoc, /Client Name or Company Name/i, 'Expected README to document combined client field');
+assert.match(readmeDoc, /Payout/i, 'Expected README to document payout field');
+assert.match(readmeDoc, /Invoice Date/i, 'Expected README to document invoice date field');
+assert.match(readmeDoc, /7 day payout/i, 'Expected README to document payout default');
 assert.doesNotMatch(
   readmeDoc,
   /Request ID column|Line Items Payload column|Creation Status column/i,
@@ -176,6 +191,9 @@ assert.match(
 );
 assert.match(workflowsDoc, /Billing Address/i, 'Expected WORKFLOWS.md to document billing address capture');
 assert.match(workflowsDoc, /Client Name or Company Name/i, 'Expected WORKFLOWS.md to document combined client field');
+assert.match(workflowsDoc, /Payout/i, 'Expected WORKFLOWS.md to document payout field');
+assert.match(workflowsDoc, /Invoice Date/i, 'Expected WORKFLOWS.md to document invoice date field');
+assert.match(workflowsDoc, /7 day payout/i, 'Expected WORKFLOWS.md to document payout default');
 assert.match(
   workflowsDoc,
   /Client Name[\s\S]*Email Address[\s\S]*Project Description[\s\S]*Airwallex Invoice ID[\s\S]*Amount[\s\S]*Currency[\s\S]*Due Date[\s\S]*Status[\s\S]*Requested By/,
