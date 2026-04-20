@@ -283,7 +283,7 @@ const workflow = {
     }
   ],
   connections: {
-    'Schedule 10am 5pm ICT': { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
+    'Schedule 10am ICT':   { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
     'Webhook Trigger':        { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
     'Get Invoice Tracker':    { main: [[{ node: 'Process Invoices',    type: 'main', index: 0 }]] },
     'Process Invoices':       { main: [[{ node: 'Has Client Email?',   type: 'main', index: 0 }]] },

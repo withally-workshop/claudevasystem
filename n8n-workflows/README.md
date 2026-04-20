@@ -34,7 +34,7 @@ node n8n-workflows/deploy-payment-detection.js
 
 ## Invoice Reminder Cron
 
-Scans Client Invoice Tracker twice daily → sends pre-due and overdue reminder emails from noa@kravemedia.co → tags correct strategist + Amanda in #payments-invoices-updates for overdue/late-fee/collections → updates tracker (Status + Reminders Sent).
+Scans Client Invoice Tracker daily at 10am ICT → sends pre-due and overdue reminder emails from john@kravemedia.co → tags the correct strategist + Amanda in #payments-invoices-updates for overdue/late-fee/collections → updates the tracker (Status + Reminders Sent).
 
 **Silent when nothing to do.** Slack alerts only fire for: due-today, overdue, late-fee, collections, or missing client email.
 
@@ -51,7 +51,7 @@ node n8n-workflows/deploy-invoice-reminder-cron.js
 ```
 
 **Credentials required in n8n:**
-- `Gmail account` — noa@kravemedia.co OAuth2 (swap to john@ once that credential is added)
+- `Gmail account` — john@kravemedia.co OAuth2
 - `Google Sheets account` — access to Client Invoice Tracker
 - `Krave Slack Bot` — bot token for #payments-invoices-updates
 
