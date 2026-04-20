@@ -68,7 +68,7 @@ Pull all rows from Client Invoice Tracker (Sheet ID above, tab: `Invoices`, rang
 Skip rows where:
 - Column J (Status) = `Payment Complete`
 - Column J (Status) = `Collections`
-- Column J (Status) = `Draft — Pending Noa Review` (invoice not sent yet — no reminder)
+- Column J (Status) = `Draft — Pending John Review` (invoice not sent yet — no reminder)
 
 For remaining rows, calculate: `days_diff = due_date (Col I) - today`
 
@@ -92,7 +92,7 @@ For remaining rows, calculate: `days_diff = due_date (Col I) - today`
 - Parse this field to determine if reminder already sent
 
 ### Phase 4 — Send Reminder Emails
-Use `mcp__gmail__gmail_create_draft` to create each email draft, then send.
+Use `mcp__gmail-john__gmail_create_draft` to create each email draft, then send.
 
 **From:** john@kravemedia.co
 **To:** client email from Column C (Email Address) — no Airwallex lookup needed

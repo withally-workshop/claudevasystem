@@ -99,10 +99,12 @@ For each confirmed match, update the row using `sheets_update_row`:
 **Do NOT write to Column N** — it is formula-driven.
 
 ### Step 5 — Update Airwallex
-Airwallex does not auto-mark invoices as paid. For each matched invoice:
-- Use `airwallex_get_invoice` to retrieve current status
-- If status is not already `paid`: post a note to #payments-invoices-updates flagging manual update needed
-- Format: `⚠️ Airwallex invoice [Invoice #] needs manual status update → mark as paid`
+For each matched invoice:
+1. Use `airwallex_get_invoice` to retrieve current status
+2. If status is not already `PAID`:
+   - Call `airwallex_mark_paid` with the Airwallex Invoice ID (Col F)
+   - If `airwallex_mark_paid` succeeds → no Slack flag needed
+   - If `airwallex_mark_paid` fails → post to #payments-invoices-updates: `⚠️ Airwallex invoice [Invoice #] needs manual status update → mark as paid`
 
 ### Step 6 — Post Payment Confirmation to Slack
 For each matched payment, post to #payments-invoices-updates (C09HN2EBPR7):

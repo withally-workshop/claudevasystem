@@ -42,9 +42,9 @@ async function getToken() {
   return tokenCache.token;
 }
 
-// Billing API paths that do NOT support x-on-behalf-of
-// Note: /api/v1/bills (spend module) is intentionally excluded — it needs x-on-behalf-of
-const BILLING_PATHS = ["/api/v1/invoices", "/api/v1/billing"];
+// Billing read/write paths — do NOT use x-on-behalf-of (causes 401)
+// Bills (spend module) needs x-on-behalf-of
+const NO_BEHALF_PATHS = ["/api/v1/invoices", "/api/v1/billing", "/api/v1/bills", "/api/v1/billing_customers"];
 
 async function airwallexRequest(method, path, body) {
   const token = await getToken();
@@ -52,8 +52,8 @@ async function airwallexRequest(method, path, body) {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   };
-  const isBillingPath = BILLING_PATHS.some((p) => path.startsWith(p));
-  if (ACCOUNT_ID && !isBillingPath) headers["x-on-behalf-of"] = ACCOUNT_ID;
+  const skipBehalf = NO_BEHALF_PATHS.some((p) => path.startsWith(p));
+  if (ACCOUNT_ID && !skipBehalf) headers["x-on-behalf-of"] = ACCOUNT_ID;
 
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
@@ -98,43 +98,89 @@ const TOOLS = [
   {
     name: "airwallex_create_invoice",
     description:
-      "Create a new invoice in Airwallex for a client. Returns a draft invoice ID.",
+      "Create a new DRAFT invoice in Airwallex. Does NOT include line items — add them separately with airwallex_add_invoice_line_items. Returns a draft invoice ID.",
     inputSchema: {
       type: "object",
       properties: {
         billing_customer_id: {
           type: "string",
-          description: "Airwallex billing customer ID. Use airwallex_list_customers to find it. Optional if customer_name is provided.",
-        },
-        customer_name: {
-          type: "string",
-          description: "Customer name — used as fallback if billing_customer_id is not available.",
+          description: "Airwallex billing customer ID from airwallex_list_customers.",
         },
         currency: { type: "string", description: "Invoice currency e.g. USD, SGD" },
-        line_items: {
-          type: "array",
-          description: "Invoice line items",
-          items: {
-            type: "object",
-            properties: {
-              description: { type: "string" },
-              amount: { type: "number", description: "Amount in smallest currency unit (cents)" },
-              quantity: { type: "number" },
-            },
-            required: ["description", "amount"],
-          },
-        },
-        due_date: {
-          type: "string",
-          description: "Due date in YYYY-MM-DD format",
+        days_until_due: {
+          type: "number",
+          description: "Days until invoice is due (default 7). E.g. 7 or 30.",
         },
         collection_method: {
           type: "string",
-          description: "CHARGE_ON_CHECKOUT or OUT_OF_BAND (default OUT_OF_BAND for bank transfer)",
-          default: "OUT_OF_BAND",
+          description: "CHARGE_ON_CHECKOUT (digital invoice link) or OUT_OF_BAND (bank transfer). Default CHARGE_ON_CHECKOUT.",
+        },
+        linked_payment_account_id: {
+          type: "string",
+          description: "Required for CHARGE_ON_CHECKOUT. The Airwallex payment account ID to receive funds.",
+        },
+        legal_entity_id: {
+          type: "string",
+          description: "Merchant legal entity ID from Airwallex account settings.",
+        },
+        memo: {
+          type: "string",
+          description: "Optional note on the invoice e.g. 'Thank you for your business'",
         },
       },
-      required: ["currency", "line_items"],
+      required: ["billing_customer_id", "currency"],
+    },
+  },
+  {
+    name: "airwallex_create_product",
+    description:
+      "Create a billing product in Airwallex. Required before creating a price. Use once per service type e.g. 'Krave Media Starter Pack'. Returns product_id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Product name e.g. 'Krave Media Starter Pack'" },
+        description: { type: "string", description: "Optional product description" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "airwallex_create_price",
+    description:
+      "Create a one-time price for a product. Must be called after airwallex_create_product. Returns price_id used in add_invoice_line_items.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        product_id: { type: "string", description: "Product ID from airwallex_create_product" },
+        currency: { type: "string", description: "Currency e.g. USD, SGD" },
+        unit_amount: { type: "number", description: "Price amount e.g. 500 for $500" },
+        nickname: { type: "string", description: "Optional label e.g. 'April 2026 package'" },
+      },
+      required: ["product_id", "currency", "unit_amount"],
+    },
+  },
+  {
+    name: "airwallex_add_invoice_line_items",
+    description:
+      "Add line items to a DRAFT invoice using a price_id (from airwallex_create_price). Must be called after airwallex_create_invoice.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        invoice_id: { type: "string", description: "The draft invoice ID" },
+        line_items: {
+          type: "array",
+          description: "Line items to add",
+          items: {
+            type: "object",
+            properties: {
+              price_id: { type: "string", description: "Price ID from airwallex_create_price" },
+              quantity: { type: "number", description: "Quantity (default 1)" },
+            },
+            required: ["price_id"],
+          },
+        },
+      },
+      required: ["invoice_id", "line_items"],
     },
   },
   {
@@ -205,17 +251,27 @@ const TOOLS = [
     },
   },
   {
-    name: "airwallex_upload_bill_document",
+    name: "airwallex_get_billing_invoice",
     description:
-      "Upload a PDF or image file and attach it to an Airwallex bill. Use this to attach invoice PDFs to creator bills for record-keeping.",
+      "Get full billing invoice details including the digital payment link (hosted_invoice_url). Use this after finalizing an invoice to retrieve the shareable payment URL to send to clients.",
     inputSchema: {
       type: "object",
       properties: {
-        bill_id: { type: "string", description: "The bill ID to attach the document to" },
-        file_path: { type: "string", description: "Absolute local path to the file to upload (PDF, PNG, JPG)" },
-        file_name: { type: "string", description: "Display name for the file, e.g. 'invoice-creator-apr2026.pdf'" },
+        invoice_id: { type: "string", description: "The invoice ID" },
       },
-      required: ["bill_id", "file_path", "file_name"],
+      required: ["invoice_id"],
+    },
+  },
+  {
+    name: "airwallex_mark_paid",
+    description:
+      "Mark an Airwallex invoice as paid. Use this after confirming a client payment via Gmail deposit notification.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        invoice_id: { type: "string", description: "The invoice ID to mark as paid" },
+      },
+      required: ["invoice_id"],
     },
   },
 ];
@@ -239,18 +295,42 @@ async function handleTool(name, args) {
 
     case "airwallex_create_invoice": {
       const body = {
+        billing_customer_id: args.billing_customer_id,
         currency: args.currency,
-        collection_method: args.collection_method || "OUT_OF_BAND",
-        items: args.line_items.map((item) => ({
-          description: item.description,
-          unit_amount: item.amount,
+        collection_method: args.collection_method || "CHARGE_ON_CHECKOUT",
+        days_until_due: args.days_until_due || 7,
+      };
+      if (args.linked_payment_account_id) body.linked_payment_account_id = args.linked_payment_account_id;
+      if (args.legal_entity_id) body.legal_entity_id = args.legal_entity_id;
+      if (args.memo) body.memo = args.memo;
+      return await airwallexRequest("POST", "/api/v1/invoices/create", body);
+    }
+
+    case "airwallex_create_product": {
+      const body = { name: args.name };
+      if (args.description) body.description = args.description;
+      return await airwallexRequest("POST", "/api/v1/billing/products/create", body);
+    }
+
+    case "airwallex_create_price": {
+      const body = {
+        product_id: args.product_id,
+        currency: args.currency,
+        unit_amount: args.unit_amount,
+        recurring: false,
+      };
+      if (args.nickname) body.nickname = args.nickname;
+      return await airwallexRequest("POST", "/api/v1/billing/prices/create", body);
+    }
+
+    case "airwallex_add_invoice_line_items": {
+      const body = {
+        line_items: args.line_items.map((item) => ({
+          price_id: item.price_id,
           quantity: item.quantity || 1,
         })),
       };
-      if (args.billing_customer_id) body.billing_customer_id = args.billing_customer_id;
-      if (args.customer_name) body.customer_name = args.customer_name;
-      if (args.due_date) body.due_date = args.due_date;
-      return await airwallexRequest("POST", "/api/v1/billing/invoices", body);
+      return await airwallexRequest("POST", `/api/v1/invoices/${args.invoice_id}/add_line_items`, body);
     }
 
     case "airwallex_finalize_invoice": {
@@ -262,14 +342,19 @@ async function handleTool(name, args) {
     }
 
     case "airwallex_create_customer": {
-      const body = { name: args.name };
+      const body = {
+        name: args.name,
+        type: args.type || "BUSINESS",
+      };
       if (args.email) body.email = args.email;
+      if (args.default_billing_currency) body.default_billing_currency = args.default_billing_currency;
+      if (args.default_legal_entity_id) body.default_legal_entity_id = args.default_legal_entity_id;
       const address = {};
       if (args.country_code) address.country_code = args.country_code;
       if (args.address) address.line1 = args.address;
       if (args.city) address.city = args.city;
       if (Object.keys(address).length) body.address = address;
-      return await airwallexRequest("POST", "/api/v1/billing/customers/create", body);
+      return await airwallexRequest("POST", "/api/v1/billing_customers/create", body);
     }
 
     case "airwallex_list_customers": {
@@ -277,7 +362,7 @@ async function handleTool(name, args) {
       if (args.name) params.set("name", args.name);
       if (args.page_size) params.set("page_size", args.page_size);
       const query = params.toString() ? `?${params}` : "";
-      return await airwallexRequest("GET", `/api/v1/billing/customers${query}`);
+      return await airwallexRequest("GET", `/api/v1/billing_customers/list${query}`);
     }
 
     case "airwallex_list_bills": {
@@ -293,36 +378,16 @@ async function handleTool(name, args) {
       return await airwallexRequest("GET", `/api/v1/bills/${args.bill_id}`);
     }
 
-    case "airwallex_upload_bill_document": {
-      const fs = await import("fs");
-      const path = await import("path");
-      const token = await getToken();
+    case "airwallex_get_billing_invoice": {
+      return await airwallexRequest("GET", `/api/v1/invoices/${args.invoice_id}`);
+    }
 
-      const fileBuffer = fs.default.readFileSync(args.file_path);
-      const ext = path.default.extname(args.file_name).toLowerCase();
-      const mimeTypes = { ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg" };
-      const mimeType = mimeTypes[ext] || "application/octet-stream";
-
-      // Build multipart form data manually
-      const boundary = `----FormBoundary${Date.now()}`;
-      const parts = [
-        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${args.file_name}"\r\nContent-Type: ${mimeType}\r\n\r\n`,
-        fileBuffer,
-        `\r\n--${boundary}--\r\n`,
-      ];
-      const body = Buffer.concat(parts.map((p) => (Buffer.isBuffer(p) ? p : Buffer.from(p))));
-
-      const res = await fetch(`${BASE_URL}/api/v1/bills/${args.bill_id}/documents`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": `multipart/form-data; boundary=${boundary}`,
-        },
-        body,
-      });
-      const text = await res.text();
-      if (!res.ok) throw new Error(`Airwallex API error ${res.status}: ${text}`);
-      return JSON.parse(text);
+    case "airwallex_mark_paid": {
+      return await airwallexRequest(
+        "POST",
+        `/api/v1/invoices/${args.invoice_id}/mark_as_paid`,
+        {}
+      );
     }
 
     default:

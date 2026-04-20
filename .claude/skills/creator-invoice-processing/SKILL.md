@@ -20,8 +20,13 @@ Reads #payments-invoices-updates, extracts all pending creator payment submissio
 
 ## Execution Steps
 
+### 0. Load Last-Read Cursor
+Call `slack_get_last_read(channel_id: C09HN2EBPR7)` — provided by `krave-tools` MCP.
+- If it returns a timestamp → use it as `oldest` in Step 1 (only fetch messages since last run)
+- If it returns `null` → first run; fetch last 50 messages with no `oldest` filter
+
 ### 0a. Scan Gmail Inbox (john@kravemedia.co)
-Call `gmail_search_messages` with query:
+Use the `gmail-john` MCP instance. Call `gmail_search_messages` with query:
 ```
 subject:invoice OR subject:payment OR has:attachment newer_than:7d
 ```
@@ -43,15 +48,21 @@ Before processing ANY submission (from Slack or Gmail):
 4. If both Slack and Gmail have the same invoice → process the **Slack** version (already has thread context), tag source as "Email + Slack (deduped)"
 
 ### 1. Pull Channel History
-- Read the last 50 messages from C09HN2EBPR7
-- Filter for messages containing invoice submissions (look for: Creator, Amount, SGD/USD/HKD, invoice links, "please process")
+Call `slack_get_channel_history(channel_id: C09HN2EBPR7, limit: 50, oldest: <cursor from Step 0 if set>)`.
+- Filter for messages containing invoice submissions (look for: Creator, Amount, SGD/USD/HKD, invoice links, "please process", @Claude EA tag)
 - Skip: ✅ already acknowledged messages (reactions with white_check_mark by the VA), casual replies, transfer notices
 
-### 1b. Reply to Sender Immediately
-For each valid new request, reply in the message thread before drafting:
+**File attachments:** For each qualifying message that includes a file attachment:
+- Note the `file.id` from the message payload
+- Call `slack_download_file(file_id: <id>, dest_path: C:/Users/jopso/Desktop/claude-ea/temp/<CreatorName>-<ts>.pdf)` — provided by `krave-tools` MCP
+- Store the returned `local_path` against that submission for use in Step 5b
+
+### 1b. Reply to Sender Immediately (Slack only)
+For each valid new Slack request (@Claude EA tagged), reply in the message thread:
 ```
-Got it! Processing the bill for [Creator Name] — [Amount]. Draft will be in Airwallex shortly.
+Got it! Processing the bill for [Creator Name] — [Amount]. Will be staged shortly.
 ```
+Email replies are handled in Step 8 after processing is complete.
 
 ### 2. Parse Each Submission
 For each invoice submission extract:
@@ -83,17 +94,32 @@ Auto-flag if any of these are true:
 - Amount doesn't match a known rate card (flag for human review)
 - Duplicate creator name in same payment round
 
-### 5. Output: Bill Prep Report
-Format the output as:
+### 5. Compile Bill Prep Report
+Airwallex Bills API is in beta (list/get/sync only — no create endpoint). Do NOT attempt to create bills via API. Instead, compile a structured prep report for manual entry into Airwallex → Bills.
+
+For each READY TO BILL item, assemble:
+```
+- Supplier name (creator)
+- Invoice number (from PDF, or generated: DD-MM-YYYY-[Initial][LastName])
+- Invoice date (from PDF or submission date)
+- Due date (submission date + payout terms, else submission date)
+- Currency (post-conversion if HKD)
+- Amount
+- Campaign/client
+- PDF status: "Downloaded — attach manually" or "Google Drive link — forward to kravemedia@bills.airwallex.com"
+```
+
+### 5d. Output: Bill Run Report
+Output the following:
 
 ---
 **INVOICE TRIAGE — [DATE]**
 **Channel:** #payments-invoices-updates
 
-**READY TO BILL** (enter in Airwallex)
-| # | Creator | Client | Amount | Currency | Source | Action |
-|---|---------|--------|--------|----------|--------|--------|
-| 1 | [name] | [client] | [amt] | [currency] | Email / Slack | Manual entry / Auto-forward |
+**READY TO ENTER IN AIRWALLEX → BILLS**
+| # | Creator | Client | Amount | Currency | Invoice # | Invoice Date | Due Date | PDF |
+|---|---------|--------|--------|----------|-----------|--------------|----------|-----|
+| 1 | [name] | [client] | [amt] | [currency] | [inv#] | [date] | [due] | Downloaded / Google Drive |
 
 **EXCEPTIONS — ACTION REQUIRED**
 | Creator | Issue | Required Action |
@@ -103,28 +129,37 @@ Format the output as:
 **ALREADY PROCESSED** (✅ reacted — skip)
 - [list]
 
-**DUPLICATES SKIPPED** (same invoice via both Slack + Email — processed once only)
+**DUPLICATES SKIPPED**
 - [Creator] — [Amount] — first seen [date] via [source]
 
 **NEXT STEPS**
-1. Forward email invoices to kravemedia@bills.airwallex.com
-2. Manually enter Slack-only invoices in Airwallex → Bills → + New Bill
-3. Verify currencies and apply -3% FX adjustment where applicable
-4. Post exceptions to #payments-invoices-updates (use template below)
-5. Submit all bills for Noa's approval — do not process payments
+1. Enter each READY item manually in Airwallex → Bills → Create
+2. Attach PDFs: downloaded ones saved to temp folder; Google Drive links → forward PDF to kravemedia@bills.airwallex.com
+3. Verify HKD conversion rates where applied
+4. Do NOT submit — Noa approves in Airwallex
 
 **5PM ICT DIGEST** → post to John's private channel (C0AQZGJDR38):
 ```
 📋 *Bill Digest — [DATE] 5pm ICT*
-*Bills drafted this round:*
-• [Creator] — [Amount] [Currency] — [Client/Campaign]
+*Ready to enter in Airwallex → Bills:*
+• [Creator] — [Amount] [Currency] — [Client/Campaign] — Invoice: [inv#]
+
+*PDFs to attach:*
+• [Creator] — Downloaded / Google Drive link
 
 *Exceptions pending resolution:*
 • [Creator] — [issue]
 
-Action: Submit all bills in Airwallex → Bills for Noa's approval.
+Action: Enter bills manually in Airwallex → Bills. Noa to approve once entered.
 ```
 ---
+
+### 5e. Save Last-Read Cursor
+After all bills are drafted (or exceptions posted), call:
+```
+slack_set_last_read(channel_id: C09HN2EBPR7, ts: <ts of the newest Slack message processed this run>)
+```
+This ensures the next run only fetches messages after this point.
 
 ### 6. Log to Invoice Tracker (Google Sheets)
 After drafting each bill in Airwallex, append a row to the Invoice Tracker:
@@ -141,10 +176,10 @@ Use `sheets_append_row` with values in this exact column order:
 | E — Invoice Currency | Original invoice currency (SGD/USD/HKD) |
 | F — Invoice Amount | Original invoice amount |
 | G — -3% FX Adjustment Applied? | "Yes" if HKD conversion applied, else "No" |
-| H — Airwallex Status | "Draft" (set after bill created) |
+| H — Airwallex Status | "Pending manual entry" (Bills API not available — enter in Airwallex UI) |
 | I — Exceptions / Flags | Exception description if any, else blank |
 | J — Notes / Approver | Client/campaign name |
-| K — Status Update | "Bill drafted — pending Noa approval" |
+| K — Status Update | "Ready to enter in Airwallex — pending manual entry + Noa approval" |
 | L — Follow up date | Due date (submission date if not stated) |
 
 Log exceptions-only rows too with Status Update = "On hold — [reason]".
@@ -159,6 +194,34 @@ Issue: [describe the issue]
 Required: [what the strategist needs to provide]
 Holding bill until resolved.
 ```
+
+### 8. Reply to Strategists via Email
+For every email-sourced submission, reply in the original thread using `gmail_send` (gmail-john MCP) with `in_reply_to_message_id` set to the original message ID. This auto-threads the reply correctly.
+
+**For READY TO BILL items:**
+```
+Hi [First Name],
+
+The invoice has been staged for payment. Noa will review and approve in Airwallex.
+
+Thanks!
+```
+
+**For EXCEPTION items** (replace the body with the specific issue):
+```
+Hi [First Name],
+
+Just a quick flag on [Creator Name]'s invoice — [describe issue clearly, one sentence].
+Could you [what is needed]? Happy to process as soon as that's confirmed.
+
+Thanks!
+```
+
+Rules:
+- Use `in_reply_to_message_id` = the Gmail message ID of the submission email (from Step 0a)
+- One reply per email thread — if a strategist sent 2 invoices in one email, one reply covers both
+- Do NOT reply to non-Krave emails (e.g. creator invoices sent directly from gmail.com addresses) — only reply to `@kravemedia.co` senders
+- Skip reply if already replied in this thread (check if outgoing message exists in thread)
 
 ---
 

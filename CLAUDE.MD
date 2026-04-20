@@ -49,7 +49,7 @@ Skills are built organically as recurring workflows emerge. See backlog below.
 **Skills Backlog** (to build over time, based on Noa's biggest time sinks):
 - `im8-brief-extraction` — Extract IM8 briefs from Slack, map codes, push to Master Tracker
 - `eod-triage-summary` — Generate the daily End-of-Day Triage Summary for Slack
-- `creative-velocity-report` — Compile weekly IM8 Creative Velocity Report from agency channels
+- `creative-velocity-report` — Compile weekly IM8 Creative Velocity Report from agency channels ✓ BUILT
 - `krave-video-qa` — Run 8-point technical QA checklist against editor deliverables
 - `osome-reconciliation` — Guide/automate Osome PDF upload reconciliation workflow
 - `airwallex-ar-triggers` — Monitor invoices, flag overdue, generate $200 late fee notices

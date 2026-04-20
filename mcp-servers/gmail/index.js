@@ -62,6 +62,22 @@ const TOOLS = [
     },
   },
   {
+    name: "gmail_send",
+    description:
+      "Send an email or reply to an existing thread from the impersonated Gmail account. To reply in-thread, provide thread_id and in_reply_to_message_id (Gmail message ID of the message you're replying to).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: "Recipient email address(es), comma-separated" },
+        subject: { type: "string", description: "Email subject line" },
+        body: { type: "string", description: "Plain text email body" },
+        thread_id: { type: "string", description: "Gmail thread ID to reply into (from gmail_get_message)" },
+        in_reply_to_message_id: { type: "string", description: "Gmail message ID of the message being replied to — used to set In-Reply-To header for proper threading" },
+      },
+      required: ["to", "subject", "body"],
+    },
+  },
+  {
     name: "gmail_download_attachment",
     description:
       "Download a specific attachment from a Gmail message. Returns the file content as a base64 string. Use gmail_get_message first to get the attachment_id and filename. Supports PDF invoices.",
@@ -188,14 +204,67 @@ async function handleTool(name, args) {
 
       return {
         id: res.data.id,
+        thread_id: res.data.threadId,
         subject: getHeader(headers, "Subject"),
         from: getHeader(headers, "From"),
         to: getHeader(headers, "To"),
         date: getHeader(headers, "Date"),
-        body: bodyText.slice(0, 3000), // cap to avoid huge emails
+        body: bodyText.slice(0, 3000),
         attachments,
         labelIds: res.data.labelIds || [],
       };
+    }
+
+    case "gmail_send": {
+      let inReplyToHeader = "";
+      let referencesHeader = "";
+
+      if (args.in_reply_to_message_id) {
+        const orig = await gmail.users.messages.get({
+          userId: "me",
+          id: args.in_reply_to_message_id,
+          format: "metadata",
+          metadataHeaders: ["Message-ID", "References"],
+        });
+        const msgId = getHeader(orig.data.payload?.headers || [], "Message-ID");
+        const refs = getHeader(orig.data.payload?.headers || [], "References");
+        if (msgId) {
+          inReplyToHeader = `In-Reply-To: ${msgId}\r\n`;
+          referencesHeader = `References: ${refs ? refs + " " : ""}${msgId}\r\n`;
+        }
+      }
+
+      const from = IMPERSONATE_EMAIL;
+      const mime = [
+        `From: ${from}`,
+        `To: ${args.to}`,
+        `Subject: ${args.subject}`,
+        "Content-Type: text/plain; charset=UTF-8",
+        inReplyToHeader.trimEnd(),
+        referencesHeader.trimEnd(),
+        "",
+        args.body,
+      ]
+        .filter((l) => l !== "")
+        .join("\r\n");
+
+      const raw = Buffer.from(mime).toString("base64url");
+      // Auto-derive thread_id from in_reply_to message if not explicitly provided
+      let threadId = args.thread_id;
+      if (!threadId && args.in_reply_to_message_id) {
+        const origFull = await gmail.users.messages.get({
+          userId: "me",
+          id: args.in_reply_to_message_id,
+          format: "minimal",
+        });
+        threadId = origFull.data.threadId;
+      }
+
+      const sendParams = { userId: "me", requestBody: { raw } };
+      if (threadId) sendParams.requestBody.threadId = threadId;
+
+      const sent = await gmail.users.messages.send(sendParams);
+      return { message_id: sent.data.id, thread_id: sent.data.threadId, status: "sent" };
     }
 
     case "gmail_download_attachment": {

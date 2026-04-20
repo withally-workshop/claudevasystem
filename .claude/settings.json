@@ -1,19 +1,43 @@
 {
   "mcpServers": {
-    "slack": {
-      "command": "C:\\Program Files\\nodejs\\npx.cmd",
-      "args": ["-y", "@modelcontextprotocol/server-slack"],
+    "krave-airwallex": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "C:\\Users\\jopso\\Desktop\\claude-ea\\mcp-servers\\airwallex\\index.js"
+      ],
       "env": {
-        "SLACK_BOT_TOKEN": "xoxb-6955282158992-10835236066231-4hkTVfZk3oZhXyYn7YYETuKz",
-        "SLACK_TEAM_ID": "T06U38A4NV6"
+        "AIRWALLEX_CLIENT_ID": "JaQA4uJ1SDSBkTdFigT9sw",
+        "AIRWALLEX_API_KEY": "5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af5c91666f50b10ee64fd87fa3db7435e8dc5c07721",
+        "AIRWALLEX_ACCOUNT_ID": "acct_dcI6a3RSMbeCKZy9X-v7Mg"
       }
     },
-    "gmail": {
+    "google-sheets": {
       "command": "C:\\Program Files\\nodejs\\node.exe",
-      "args": ["C:\\Users\\jopso\\AppData\\Roaming\\npm\\node_modules\\@gongrzhe\\server-gmail-autoauth-mcp\\dist\\index.js"],
+      "args": [
+        "C:\\Users\\jopso\\Desktop\\claude-ea\\mcp-servers\\google-sheets\\index.js"
+      ],
       "env": {
-        "GMAIL_OAUTH_PATH": "C:\\Users\\jopso\\.gmail-mcp\\gcp-oauth.keys.json",
-        "GMAIL_CREDENTIALS_PATH": "C:\\Users\\jopso\\.gmail-mcp\\credentials.json"
+        "GOOGLE_SERVICE_ACCOUNT_KEY_FILE": "C:\\Users\\jopso\\Downloads\\krave-ea-4ceace6542ec.json"
+      }
+    },
+    "gmail-noa": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "C:\\Users\\jopso\\Desktop\\claude-ea\\mcp-servers\\gmail\\index.js"
+      ],
+      "env": {
+        "GOOGLE_SERVICE_ACCOUNT_KEY_FILE": "C:\\Users\\jopso\\Downloads\\krave-ea-4ceace6542ec.json",
+        "GMAIL_IMPERSONATE_EMAIL": "noa@kravemedia.co"
+      }
+    },
+    "gmail-john": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "C:\\Users\\jopso\\Desktop\\claude-ea\\mcp-servers\\gmail\\index.js"
+      ],
+      "env": {
+        "GOOGLE_SERVICE_ACCOUNT_KEY_FILE": "C:\\Users\\jopso\\Downloads\\krave-ea-4ceace6542ec.json",
+        "GMAIL_IMPERSONATE_EMAIL": "john@kravemedia.co"
       }
     }
   }
