@@ -5,6 +5,18 @@ const API_KEY = 'replace-me';
 const FALLBACK_STATUS = 'fallback_manual_required';
 const DRAFT_SUCCESS_NOTE = 'draft invoice created';
 const AIRWALLEX_AUTH_URL = 'https://api.airwallex.com/api/v1/authentication/login';
+const SUCCESS_TRACKER_COLUMNS = {
+  'Request ID': '={{ $json.request_id }}',
+  Source: 'Slack Modal',
+  'Creation Status': '={{ $json.status }}',
+  'Airwallex Customer ID': '={{ $json.airwallex_customer_id }}',
+  'Airwallex Invoice ID': '={{ $json.airwallex_invoice_id }}',
+  'Failure Stage': '',
+  'Failure Reason': '',
+  'Line Items Payload': '={{ JSON.stringify($json.line_items) }}',
+};
+const REQUESTER_SUCCESS_TEXT =
+  "={{ 'Invoice request received. Airwallex draft invoice was created for ' + $json.client_name + ' (' + $json.currency + ' ' + $json.subtotal + '). Request ID: ' + $json.request_id }}";
 
 const NORMALIZE_CODE = `
 const payload = $json.body || $json;
@@ -252,7 +264,9 @@ const workflow = {
       type: 'n8n-nodes-base.googleSheets',
       typeVersion: 4.5,
       position: [920, 220],
-      parameters: {},
+      parameters: {
+        columns: SUCCESS_TRACKER_COLUMNS,
+      },
     },
     {
       id: 'n12',
@@ -268,7 +282,9 @@ const workflow = {
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
       position: [1140, 220],
-      parameters: {},
+      parameters: {
+        text: REQUESTER_SUCCESS_TEXT,
+      },
     },
     {
       id: 'n14',

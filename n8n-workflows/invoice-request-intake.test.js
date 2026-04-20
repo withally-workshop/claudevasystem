@@ -45,5 +45,14 @@ assert.match(deploySource, /Create Draft Invoice/, 'Expected draft invoice node'
 assert.match(deploySource, /Attach Invoice Line Items/, 'Expected line item attachment node');
 assert.match(deploySource, /Products are request-specific|request-specific/i, 'Expected dynamic product handling');
 assert.doesNotMatch(deploySource, /finalize the invoice/i, 'Should not auto-finalize in v1');
+assert.match(deploySource, /Airwallex Customer ID/, 'Expected Airwallex customer ID mapping');
+assert.match(deploySource, /Airwallex Invoice ID/, 'Expected Airwallex invoice ID mapping');
+assert.match(deploySource, /Creation Status/, 'Expected creation status mapping');
+assert.match(deploySource, /Slack Modal/, 'Expected source mapping');
+assert.match(
+  deploySource,
+  /Airwallex draft invoice was created/i,
+  'Expected requester success confirmation text'
+);
 
 console.log('Invoice request intake workflow contract check passed.');
