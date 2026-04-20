@@ -35,6 +35,31 @@ assert.match(
 assert.match(deploySource, /request_id/, 'Expected request_id in normalization code');
 assert.match(deploySource, /submitted_by_slack_user_id/, 'Expected Slack submitter field');
 assert.match(deploySource, /line_items/, 'Expected line_items payload');
+assert.match(
+  deploySource,
+  /request_specific_products:\s*lineItems\.map/,
+  'Expected request-specific products to preserve every submitted line item'
+);
+assert.match(
+  deploySource,
+  /product_payloads:\s*preparedProducts\.map/,
+  'Expected product payload preparation to preserve every line item payload'
+);
+assert.match(
+  deploySource,
+  /requested_price_payloads:\s*preparedProducts\.map/,
+  'Expected price payload preparation to preserve every line item price'
+);
+assert.match(
+  deploySource,
+  /priceIds\[index\]\s*\|\|\s*priceId/,
+  'Expected invoice line item preparation to prefer per-line-item price ids'
+);
+assert.match(
+  deploySource,
+  /resolved_price_id/,
+  'Expected invoice line items to retain resolved per-line-item price metadata'
+);
 assert.match(deploySource, /failed_validation/, 'Expected validation failure status');
 assert.match(deploySource, /intake_received/, 'Expected intake_received status');
 assert.match(deploySource, /subtotal/, 'Expected subtotal calculation');

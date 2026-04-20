@@ -163,6 +163,18 @@ const firstProduct = preparedProducts[0] || {};
 return [{
   json: {
     ...$json,
+    product_payloads: preparedProducts.map((product) => ({
+      active: true,
+      name: product.product_name || 'Invoice line item',
+      description: product.description || 'Invoice line item',
+      request_id: $json.request_id,
+      metadata: {
+        line_index: product.line_index,
+        quantity: product.quantity,
+        unit_price: product.unit_price,
+        currency: product.currency,
+      },
+    })),
     product_payload: {
       active: true,
       name: firstProduct.product_name || 'Invoice line item',
@@ -177,11 +189,26 @@ const PREPARE_PRICE_CODE = `
 const preparedProducts = Array.isArray($json.request_specific_products) ? $json.request_specific_products : [];
 const firstProduct = preparedProducts[0] || {};
 const productBody = $json.body && $json.body.id ? $json.body : {};
+const productIds = Array.isArray($json.airwallex_product_ids) ? $json.airwallex_product_ids : [];
 
 return [{
   json: {
     ...$json,
     active_product: firstProduct,
+    requested_price_payloads: preparedProducts.map((product, index) => ({
+      currency: $json.currency,
+      product_id: productIds[index] || $json.airwallex_product_id || productBody.id || '',
+      pricing_model: 'PER_UNIT',
+      billing_type: 'IN_ADVANCE',
+      unit_amount: product.unit_price || 0,
+      recurring: null,
+      resolved_price_id_hint: '',
+      metadata: {
+        line_index: product.line_index,
+        quantity: product.quantity,
+        description: product.description || 'Invoice line item',
+      },
+    })),
     price_payload: {
       currency: $json.currency,
       product_id: $json.airwallex_product_id || productBody.id || '',
@@ -227,15 +254,28 @@ const invoiceId = request.airwallex_invoice_id || invoiceBody.id || request.invo
 const lineItems = Array.isArray(request.line_items) ? request.line_items : [];
 const priceBody = request.price_body && request.price_body.id ? request.price_body : {};
 const priceId = request.airwallex_price_id || priceBody.id || '';
+const priceIds = Array.isArray(request.airwallex_price_ids)
+  ? request.airwallex_price_ids
+  : Array.isArray(request.requested_price_payloads)
+    ? request.requested_price_payloads.map((item) => item.resolved_price_id_hint || '')
+    : [];
+const preparedLineItems = lineItems.map((item, index) => ({
+  source_line_index: index,
+  description: item.description || 'Invoice line item',
+  quantity: Number(item.quantity || 0),
+  unit_price: Number(item.unit_price || 0),
+  resolved_price_id: priceIds[index] || priceId,
+}));
 
 return [{
   json: {
     ...request,
     airwallex_invoice_id: invoiceId,
+    prepared_line_items: preparedLineItems,
     add_line_items_payload: {
-      line_items: lineItems.map((item, index) => ({
-        price_id: priceId,
-        quantity: Number(item.quantity || 0),
+      line_items: preparedLineItems.map((item, index) => ({
+        price_id: item.resolved_price_id,
+        quantity: item.quantity,
         sequence: index + 1,
       }))
     }
