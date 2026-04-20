@@ -154,10 +154,10 @@ const workflow = {
   settings: { executionOrder: 'v1', saveManualExecutions: true },
   nodes: [
     {
-      id: 'n1', name: 'Schedule 10am 5pm ICT',
+      id: 'n1', name: 'Schedule 10am ICT',
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [240, 260],
-      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 3,10 * * *' }] } }
+      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 3 * * *' }] } }
     },
     {
       id: 'n2', name: 'Webhook Trigger',
@@ -193,9 +193,9 @@ const workflow = {
           options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
           conditions: [{
             id: 'c1',
-            leftValue: '={{ $json.skipEmail }}',
-            rightValue: true,
-            operator: { type: 'boolean', operation: 'notEquals' }
+            leftValue: '={{ $json.clientEmail }}',
+            rightValue: '',
+            operator: { type: 'string', operation: 'notEquals' }
           }],
           combinator: 'and'
         },
@@ -211,7 +211,7 @@ const workflow = {
       parameters: {
         resource: 'message',
         operation: 'send',
-        toList: '={{ $json.clientEmail }}',
+        sendTo: '={{ $json.clientEmail }}',
         subject: '={{ $json.subject }}',
         emailType: 'text',
         message: '={{ $json.body }}',

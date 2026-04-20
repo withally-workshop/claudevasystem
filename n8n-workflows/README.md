@@ -7,7 +7,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Workflow | Status | Schedule | File |
 |----------|--------|----------|------|
 | Payment Detection | ✅ Active | 10am + 5pm ICT | [payment-detection.workflow.json](payment-detection.workflow.json) |
-| Invoice Reminder Cron | ⏸ Inactive (activate in n8n) | 10am + 5pm ICT | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
+| Invoice Reminder Cron | ✅ Active | 10am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
 
 ---
 
