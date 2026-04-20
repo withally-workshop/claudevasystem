@@ -5,6 +5,11 @@ const API_KEY = 'replace-me';
 const FALLBACK_STATUS = 'fallback_manual_required';
 const DRAFT_SUCCESS_NOTE = 'draft invoice created';
 const AIRWALLEX_AUTH_URL = 'https://api.airwallex.com/api/v1/authentication/login';
+const AIRWALLEX_CUSTOMER_LIST_URL = 'https://api.airwallex.com/api/v1/billing_customers';
+const AIRWALLEX_CUSTOMER_CREATE_URL = 'https://api.airwallex.com/api/v1/billing_customers/create';
+const AIRWALLEX_PRODUCT_CREATE_URL = 'https://api.airwallex.com/api/v1/products/create';
+const AIRWALLEX_PRICE_CREATE_URL = 'https://api.airwallex.com/api/v1/prices/create';
+const AIRWALLEX_INVOICE_CREATE_URL = 'https://api.airwallex.com/api/v1/invoices/create';
 const SUCCESS_TRACKER_COLUMNS = {
   'Request ID': '={{ $json.request_id }}',
   Source: 'Slack Modal',
@@ -31,6 +36,13 @@ const REQUESTER_FALLBACK_TEXT =
   "={{ 'Invoice request received for ' + $json.client_name + '. Manual Airwallex creation required. Request ID: ' + $json.request_id }}";
 const JOHN_DM_TEXT =
   "={{ 'Invoice intake fallback\\nRequest ID: ' + $json.request_id + '\\nClient: ' + $json.client_name + '\\nRequester: ' + $json.submitted_by_slack_user_id + '\\nSubtotal: ' + $json.currency + ' ' + $json.subtotal + '\\nFailure stage: ' + $json.failure_stage + '\\nFailure reason: ' + $json.failure_reason + '\\nLine items: ' + JSON.stringify($json.line_items) }}";
+const AIRWALLEX_CLIENT_ID = 'replace-me';
+const AIRWALLEX_API_KEY = 'replace-me';
+const SHEETS_CRED_ID = 'replace-me';
+const SLACK_CRED_ID = 'replace-me';
+const SHEET_ID = 'replace-me';
+const REQUESTER_SLACK_FALLBACK_CHANNEL = '={{ $json.submitted_by_slack_user_id || "" }}';
+const JOHN_DM_CHANNEL = 'replace-me';
 
 const NORMALIZE_CODE = `
 const payload = $json.body || $json;
@@ -101,34 +113,131 @@ return [{
   json: {
     ...request,
     customer_lookup_name: request.company_name || request.client_name || '',
+    customer_candidates: candidates,
     customer_resolution_status: candidates.length === 1 ? 'matched_existing_customer' : 'create_customer_required',
   }
 }];
 `.trim();
 
-const PRODUCT_PAYLOAD_CODE = `
+const PREPARE_PRODUCT_CODE = `
 const request = $json;
 
 // Products are request-specific because invoice line items vary per submission.
-return (Array.isArray(request.line_items) ? request.line_items : []).map((item, index) => ({
+const lineItems = Array.isArray(request.line_items) ? request.line_items : [];
+
+return [{
   json: {
-    request_id: request.request_id,
-    airwallex_customer_id: request.airwallex_customer_id || '',
-    line_index: index,
-    description: item.description || 'Invoice line item',
-    quantity: Number(item.quantity || 0),
-    unit_price: Number(item.unit_price || 0),
-    currency: request.currency,
-    product_name: (request.client_name || request.company_name || 'Client') + ' item ' + (index + 1),
-    memo: request.memo || '',
+    ...request,
+    current_line_item: lineItems[0] || {},
+    line_item_count: lineItems.length,
+    request_specific_products: lineItems.map((item, index) => ({
+      request_id: request.request_id,
+      line_index: index,
+      description: item.description || 'Invoice line item',
+      quantity: Number(item.quantity || 0),
+      unit_price: Number(item.unit_price || 0),
+      currency: request.currency,
+      product_name: (request.client_name || request.company_name || 'Client') + ' item ' + (index + 1),
+      memo: request.memo || '',
+    })),
   }
-}));
+}];
+`.trim();
+
+const PREPARE_PRODUCT_REQUEST_CODE = `
+const preparedProducts = Array.isArray($json.request_specific_products) ? $json.request_specific_products : [];
+const firstProduct = preparedProducts[0] || {};
+
+return [{
+  json: {
+    ...$json,
+    product_payload: {
+      active: true,
+      name: firstProduct.product_name || 'Invoice line item',
+      description: firstProduct.description || 'Invoice line item',
+      request_id: $json.request_id,
+    }
+  }
+}];
+`.trim();
+
+const PREPARE_PRICE_CODE = `
+const preparedProducts = Array.isArray($json.request_specific_products) ? $json.request_specific_products : [];
+const firstProduct = preparedProducts[0] || {};
+const productBody = $json.body && $json.body.id ? $json.body : {};
+
+return [{
+  json: {
+    ...$json,
+    active_product: firstProduct,
+    price_payload: {
+      currency: $json.currency,
+      product_id: $json.airwallex_product_id || productBody.id || '',
+      pricing_model: 'PER_UNIT',
+      billing_type: 'IN_ADVANCE',
+      unit_amount: firstProduct.unit_price || 0,
+      recurring: null,
+    }
+  }
+}];
+`.trim();
+
+const PREPARE_INVOICE_CODE = `
+const candidates = Array.isArray($json.customer_candidates) ? $json.customer_candidates : [];
+const existingCustomer = candidates.length === 1 ? candidates[0] : null;
+const createdCustomer = $json.body && $json.body.id ? $json.body : $json;
+const resolvedCustomerId =
+  $json.airwallex_customer_id ||
+  existingCustomer?.id ||
+  createdCustomer.id ||
+  '';
+
+return [{
+  json: {
+    ...$json,
+    airwallex_customer_id: resolvedCustomerId,
+    invoice_payload: {
+      billing_customer_id: resolvedCustomerId,
+      days_until_due: 14,
+      memo: $json.memo || '',
+      currency: $json.currency,
+      collection_method: 'OUT_OF_BAND',
+      request_id: $json.request_id,
+    }
+  }
+}];
+`.trim();
+
+const PREPARE_LINE_ITEMS_CODE = `
+const request = $json;
+const invoiceBody = request.body && request.body.id ? request.body : {};
+const invoiceId = request.airwallex_invoice_id || invoiceBody.id || request.invoice_payload?.invoice_id || '';
+const lineItems = Array.isArray(request.line_items) ? request.line_items : [];
+const priceBody = request.price_body && request.price_body.id ? request.price_body : {};
+const priceId = request.airwallex_price_id || priceBody.id || '';
+
+return [{
+  json: {
+    ...request,
+    airwallex_invoice_id: invoiceId,
+    add_line_items_payload: {
+      line_items: lineItems.map((item, index) => ({
+        price_id: priceId,
+        quantity: Number(item.quantity || 0),
+        sequence: index + 1,
+      }))
+    }
+  }
+}];
 `.trim();
 
 const DRAFT_SUCCESS_CODE = `
 return [{
   json: {
     ...$json,
+    airwallex_customer_id: $json.airwallex_customer_id || ($json.invoice_payload && $json.invoice_payload.billing_customer_id) || '',
+    airwallex_product_id: $json.airwallex_product_id || (($json.body && $json.body.id) || ''),
+    airwallex_invoice_id: $json.airwallex_invoice_id || ($json.body && $json.body.id) || '',
     status: 'airwallex_created',
     success_note: '${DRAFT_SUCCESS_NOTE}',
   }
@@ -173,9 +282,17 @@ const workflow = {
       type: 'n8n-nodes-base.httpRequest',
       typeVersion: 4.2,
       position: [700, 300],
+      continueOnFail: true,
       parameters: {
         method: 'POST',
         url: AIRWALLEX_AUTH_URL,
+        sendHeaders: true,
+        headerParameters: {
+          parameters: [
+            { name: 'x-client-id', value: AIRWALLEX_CLIENT_ID },
+            { name: 'x-api-key', value: AIRWALLEX_API_KEY },
+          ],
+        },
       },
     },
     {
@@ -186,7 +303,13 @@ const workflow = {
       position: [920, 260],
       parameters: {
         method: 'GET',
-        url: 'https://api.airwallex.com/api/v1/billing/customers',
+        url: AIRWALLEX_CUSTOMER_LIST_URL,
+        sendHeaders: true,
+        headerParameters: {
+          parameters: [
+            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
+          ],
+        },
         sendQuery: true,
         queryParameters: {
           parameters: [
@@ -215,102 +338,236 @@ const workflow = {
       type: 'n8n-nodes-base.httpRequest',
       typeVersion: 4.2,
       position: [1360, 260],
+      continueOnFail: true,
       parameters: {
         method: 'POST',
-        url: 'https://api.airwallex.com/api/v1/billing/customers/create',
+        url: AIRWALLEX_CUSTOMER_CREATE_URL,
+        sendHeaders: true,
+        headerParameters: {
+          parameters: [
+            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
+            { name: 'Content-Type', value: 'application/json' },
+          ],
+        },
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '={{ { company_name: $json.company_name || $json.client_name, email: $json.client_email || undefined } }}',
       },
     },
     {
       id: 'n7',
       name: 'Create Products',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
       position: [1580, 260],
+      continueOnFail: true,
       parameters: {
-        mode: 'runOnceForEachItem',
-        jsCode: PRODUCT_PAYLOAD_CODE,
+        method: 'POST',
+        url: AIRWALLEX_PRODUCT_CREATE_URL,
+        sendHeaders: true,
+        headerParameters: {
+          parameters: [
+            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
+            { name: 'Content-Type', value: 'application/json' },
+          ],
+        },
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '={{ $json.product_payload || {} }}',
       },
     },
     {
       id: 'n8',
-      name: 'Create Prices',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      position: [1800, 260],
+      name: 'Prepare Price Payload',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1700, 260],
       parameters: {
-        method: 'POST',
-        url: 'https://api.airwallex.com/api/v1/billing/prices/create',
+        mode: 'runOnceForEachItem',
+        jsCode: PREPARE_PRICE_CODE,
       },
     },
     {
       id: 'n9',
-      name: 'Create Draft Invoice',
+      name: 'Create Prices',
       type: 'n8n-nodes-base.httpRequest',
       typeVersion: 4.2,
-      position: [2020, 260],
+      position: [1800, 260],
+      continueOnFail: true,
       parameters: {
         method: 'POST',
-        url: 'https://api.airwallex.com/api/v1/billing/invoices/create',
-        bodyParameters: {
+        url: AIRWALLEX_PRICE_CREATE_URL,
+        sendHeaders: true,
+        headerParameters: {
           parameters: [
-            {
-              name: 'status',
-              value: 'draft',
-            },
+            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
+            { name: 'Content-Type', value: 'application/json' },
           ],
         },
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '={{ $json.price_payload || {} }}',
       },
     },
     {
       id: 'n10',
-      name: 'Attach Invoice Line Items',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      position: [2240, 260],
+      name: 'Create Draft Invoice',
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
+      position: [2020, 260],
+      continueOnFail: true,
       parameters: {
-        mode: 'runOnceForEachItem',
-        jsCode: DRAFT_SUCCESS_CODE,
+        method: 'POST',
+        url: AIRWALLEX_INVOICE_CREATE_URL,
+        sendHeaders: true,
+        headerParameters: {
+          parameters: [
+            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
+            { name: 'Content-Type', value: 'application/json' },
+          ],
+        },
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '={{ $json.invoice_payload || { status: "draft" } }}',
       },
     },
     {
       id: 'n11',
-      name: 'Write Tracker Success',
-      type: 'n8n-nodes-base.googleSheets',
-      typeVersion: 4.5,
-      position: [920, 220],
+      name: 'Attach Invoice Line Items',
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
+      position: [2240, 260],
+      continueOnFail: true,
       parameters: {
-        columns: SUCCESS_TRACKER_COLUMNS,
+        method: 'POST',
+        url: '={{ "https://api.airwallex.com/api/v1/invoices/" + $json.airwallex_invoice_id + "/add_line_items" }}',
+        sendHeaders: true,
+        headerParameters: {
+          parameters: [
+            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
+            { name: 'Content-Type', value: 'application/json' },
+          ],
+        },
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '={{ $json.add_line_items_payload || {} }}',
       },
     },
     {
       id: 'n12',
-      name: 'Write Tracker Fallback',
+      name: 'Write Tracker Success',
       type: 'n8n-nodes-base.googleSheets',
       typeVersion: 4.5,
-      position: [920, 420],
+      position: [2680, 220],
+      credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
       parameters: {
-        columns: FALLBACK_TRACKER_COLUMNS,
+        resource: 'sheet',
+        operation: 'appendOrUpdate',
+        documentId: { __rl: true, value: SHEET_ID, mode: 'id' },
+        sheetName: { __rl: true, value: 'Invoices', mode: 'name' },
+        columns: {
+          mappingMode: 'defineBelow',
+          value: SUCCESS_TRACKER_COLUMNS,
+          matchingColumns: ['Request ID'],
+          schema: [],
+        },
+        options: {},
       },
     },
     {
       id: 'n13',
-      name: 'Requester Success Confirmation',
-      type: 'n8n-nodes-base.slack',
-      typeVersion: 2.3,
-      position: [1140, 220],
+      name: 'Write Tracker Fallback',
+      type: 'n8n-nodes-base.googleSheets',
+      typeVersion: 4.5,
+      position: [920, 420],
+      credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
       parameters: {
-        text: REQUESTER_SUCCESS_TEXT,
+        resource: 'sheet',
+        operation: 'appendOrUpdate',
+        documentId: { __rl: true, value: SHEET_ID, mode: 'id' },
+        sheetName: { __rl: true, value: 'Invoices', mode: 'name' },
+        columns: {
+          mappingMode: 'defineBelow',
+          value: FALLBACK_TRACKER_COLUMNS,
+          matchingColumns: ['Request ID'],
+          schema: [],
+        },
+        options: {},
       },
     },
     {
       id: 'n14',
+      name: 'Requester Success Confirmation',
+      type: 'n8n-nodes-base.slack',
+      typeVersion: 2.3,
+      position: [2900, 220],
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        resource: 'message',
+        operation: 'post',
+        channel: REQUESTER_SLACK_FALLBACK_CHANNEL,
+        text: REQUESTER_SUCCESS_TEXT,
+        otherOptions: {},
+      },
+    },
+    {
+      id: 'n15',
       name: 'DM John Failure Alert',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
       position: [1140, 420],
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
+        resource: 'message',
+        operation: 'post',
+        channel: JOHN_DM_CHANNEL,
         text: JOHN_DM_TEXT,
         fallbackText: REQUESTER_FALLBACK_TEXT,
+        otherOptions: {},
+      },
+    },
+    {
+      id: 'n16',
+      name: 'Prepare Product Payload',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1470, 260],
+      parameters: {
+        mode: 'runOnceForEachItem',
+        jsCode: PREPARE_PRODUCT_REQUEST_CODE,
+      },
+    },
+    {
+      id: 'n17',
+      name: 'Prepare Draft Invoice Payload',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1920, 260],
+      parameters: {
+        mode: 'runOnceForEachItem',
+        jsCode: PREPARE_INVOICE_CODE,
+      },
+    },
+    {
+      id: 'n18',
+      name: 'Prepare Invoice Line Items',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [2140, 260],
+      parameters: {
+        mode: 'runOnceForEachItem',
+        jsCode: PREPARE_LINE_ITEMS_CODE,
+      },
+    },
+    {
+      id: 'n19',
+      name: 'Mark Draft Success',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [2460, 260],
+      parameters: {
+        mode: 'runOnceForEachItem',
+        jsCode: DRAFT_SUCCESS_CODE,
       },
     },
   ],
@@ -321,14 +578,105 @@ const workflow = {
     'Normalize Slack Submission': {
       main: [[{ node: 'Airwallex Auth', type: 'main', index: 0 }]],
     },
+    'Airwallex Auth': {
+      main: [[{ node: 'Find Billing Customer', type: 'main', index: 0 }]],
+    },
+    'Find Billing Customer': {
+      main: [[{ node: 'Resolve Billing Customer', type: 'main', index: 0 }]],
+    },
+    'Resolve Billing Customer': {
+      main: [[{ node: 'Create Billing Customer', type: 'main', index: 0 }]],
+    },
+    'Create Billing Customer': {
+      main: [[{ node: 'Prepare Product Payload', type: 'main', index: 0 }]],
+    },
+    'Prepare Product Payload': {
+      main: [[{ node: 'Create Products', type: 'main', index: 0 }]],
+    },
+    'Create Products': {
+      main: [[{ node: 'Prepare Price Payload', type: 'main', index: 0 }]],
+    },
+    'Prepare Price Payload': {
+      main: [[{ node: 'Create Prices', type: 'main', index: 0 }]],
+    },
+    'Create Prices': {
+      main: [[{ node: 'Prepare Draft Invoice Payload', type: 'main', index: 0 }]],
+    },
+    'Prepare Draft Invoice Payload': {
+      main: [[{ node: 'Create Draft Invoice', type: 'main', index: 0 }]],
+    },
+    'Create Draft Invoice': {
+      main: [[{ node: 'Prepare Invoice Line Items', type: 'main', index: 0 }]],
+    },
+    'Prepare Invoice Line Items': {
+      main: [[{ node: 'Attach Invoice Line Items', type: 'main', index: 0 }]],
+    },
+    'Attach Invoice Line Items': {
+      main: [[{ node: 'Mark Draft Success', type: 'main', index: 0 }]],
+    },
+    'Mark Draft Success': {
+      main: [[{ node: 'Write Tracker Success', type: 'main', index: 0 }]],
+    },
+    'Write Tracker Success': {
+      main: [[{ node: 'Requester Success Confirmation', type: 'main', index: 0 }]],
+    },
   },
 };
+
+const body = JSON.stringify(workflow);
+const url = new URL(N8N_URL + '/api/v1/workflows');
+
+const options = {
+  hostname: url.hostname,
+  path: url.pathname,
+  method: 'POST',
+  headers: {
+    'X-N8N-API-KEY': API_KEY,
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(body),
+  },
+};
+
+if (require.main === module) {
+  const req = https.request(options, (res) => {
+    let data = '';
+    res.on('data', (chunk) => {
+      data += chunk;
+    });
+    res.on('end', () => {
+      try {
+        const result = JSON.parse(data);
+        if (result.id) {
+          console.log('SUCCESS');
+          console.log('Workflow ID:', result.id);
+          console.log('Name:', result.name);
+          console.log('URL: https://noatakhel.app.n8n.cloud/workflow/' + result.id);
+          console.log('\nNext: Activate the workflow in n8n, then test via:');
+          console.log('POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-request-intake');
+        } else {
+          console.log('ERROR response:');
+          console.log(JSON.stringify(result, null, 2).substring(0, 2000));
+        }
+      } catch (error) {
+        console.log('Parse error. Raw response:');
+        console.log(data.substring(0, 1000));
+      }
+    });
+  });
+
+  req.on('error', (error) => console.error('Request error:', error.message));
+  req.write(body);
+  req.end();
+}
 
 module.exports = {
   API_KEY,
   DRAFT_SUCCESS_NOTE,
   FALLBACK_STATUS,
   N8N_URL,
+  body,
   https,
+  options,
+  url,
   workflow,
 };

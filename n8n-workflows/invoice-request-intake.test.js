@@ -75,5 +75,75 @@ assert.match(workflowsDoc, /Invoice Request Intake/, 'Expected Invoice Request I
 assert.match(workflowsDoc, /krave-invoice-request-intake/, 'Expected manual webhook documented');
 assert.match(workflowsDoc, /fallback_manual_required/, 'Expected fallback status documented in WORKFLOWS.md');
 assert.match(workflowsDoc, /John DM/i, 'Expected John DM testing alert documented in WORKFLOWS.md');
+assert.match(
+  deploySource,
+  /https\.request\s*\(\s*options\s*,/,
+  'Expected deploy script to create workflow via https.request'
+);
+assert.match(
+  deploySource,
+  /path:\s*url\.pathname/,
+  'Expected deploy script to POST to /api/v1/workflows using parsed URL pathname'
+);
+assert.match(
+  deploySource,
+  /console\.log\('SUCCESS'\)/,
+  'Expected deploy script success logging'
+);
+assert.match(
+  deploySource,
+  /Workflow ID:/,
+  'Expected deploy script to print workflow id details on success'
+);
+assert.match(
+  deploySource,
+  /'Normalize Slack Submission':\s*{[\s\S]*node:\s+'Airwallex Auth'/,
+  'Expected normalization to auth connection'
+);
+assert.match(
+  deploySource,
+  /'Airwallex Auth':\s*{[\s\S]*node:\s+'Find Billing Customer'/,
+  'Expected auth to customer lookup connection'
+);
+assert.match(
+  deploySource,
+  /'Create Billing Customer':\s*{[\s\S]*node:\s+'Create Products'/,
+  'Expected customer creation to product creation connection'
+);
+assert.match(
+  deploySource,
+  /'Create Draft Invoice':\s*{[\s\S]*node:\s+'Attach Invoice Line Items'/,
+  'Expected draft invoice to line item attachment connection'
+);
+assert.match(
+  deploySource,
+  /billing_customers\/create/,
+  'Expected billing customer creation path aligned with billing customer docs'
+);
+assert.match(
+  deploySource,
+  /api\/v1\/products\/create/,
+  'Expected product creation path aligned with product docs'
+);
+assert.match(
+  deploySource,
+  /api\/v1\/prices\/create/,
+  'Expected price creation path aligned with price docs'
+);
+assert.match(
+  deploySource,
+  /api\/v1\/invoices\/create/,
+  'Expected invoice creation path aligned with invoice docs'
+);
+assert.match(
+  deploySource,
+  /billing_customer_id/,
+  'Expected invoice payload to use billing_customer_id'
+);
+assert.match(
+  deploySource,
+  /api\/v1\/invoices\/"\s*\+\s*\$json\.airwallex_invoice_id\s*\+\s*"\/add_line_items/,
+  'Expected invoice line item endpoint naming aligned with docs'
+);
 
 console.log('Invoice request intake workflow contract check passed.');
