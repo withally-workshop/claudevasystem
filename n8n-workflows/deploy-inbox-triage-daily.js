@@ -2,6 +2,7 @@ const https = require('https');
 
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiMTkwMWE5My02ZjJjLTRlNzEtOWI4ZC02ZjlhMzVhMjU4NzUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiZjBlZjk1YTYtYzc2MS00Zjc2LWJkZTgtMWU1Y2FiN2UxMjcxIiwiaWF0IjoxNzc2NjY1NjMxfQ.uBo2H0dzui9S0_MktoRxdodKzzE58vcQtXSlu8VpcEY';
+const GMAIL_CRED_ID = 'vxHex5lFrkakcsPi';
 const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
 const OPENAI_CRED_ID = 'UIREXIYn59JOH1zU';
 const AIRWALLEX_DRAFTS = 'C0AQZGJDR38';
@@ -240,7 +241,9 @@ const workflow = {
       type: 'n8n-nodes-base.gmail',
       typeVersion: 2.1,
       position: [680, 260],
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
+        resource: 'message',
         operation: 'getAll',
         limit: 50,
         filters: {
@@ -254,7 +257,9 @@ const workflow = {
       type: 'n8n-nodes-base.gmail',
       typeVersion: 2.1,
       position: [900, 260],
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
+        resource: 'message',
         operation: 'get',
         messageId: '={{ $json.id }}',
         simple: false,
@@ -352,7 +357,9 @@ const workflow = {
       type: 'n8n-nodes-base.gmail',
       typeVersion: 2.1,
       position: [2020, 80],
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
+        resource: 'message',
         operation: 'createDraft',
         subject: '={{ $json.draft_subject }}',
         message: '={{ $json.message?.content || "" }}',
@@ -365,7 +372,9 @@ const workflow = {
       type: 'n8n-nodes-base.gmail',
       typeVersion: 2.1,
       position: [2020, 180],
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
+        resource: 'message',
         operation: 'addLabels',
         messageId: '={{ $json.message_id }}',
         labelIds: '={{ [$json.tier_label_name] }}',
@@ -377,7 +386,9 @@ const workflow = {
       type: 'n8n-nodes-base.gmail',
       typeVersion: 2.1,
       position: [2020, 280],
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
+        resource: 'message',
         operation: 'addLabels',
         messageId: '={{ $json.message_id }}',
         labelIds: '={{ $json.context_label_name ? [$json.context_label_name] : [] }}',
@@ -397,7 +408,9 @@ const workflow = {
       type: 'n8n-nodes-base.gmail',
       typeVersion: 2.1,
       position: [2460, 280],
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
+        resource: 'message',
         operation: 'modify',
         messageId: '={{ $json.message_id }}',
         removeLabelIds: '={{ $json.removeLabelIds || ["INBOX"] }}',
@@ -421,7 +434,12 @@ const workflow = {
       position: [2900, 200],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       continueOnFail: true,
-      parameters: { channel: AIRWALLEX_DRAFTS, text: '={{ $json.summary_text }}' },
+      parameters: {
+        select: 'channel',
+        channelId: { __rl: true, value: AIRWALLEX_DRAFTS, mode: 'id' },
+        text: '={{ $json.summary_text }}',
+        otherOptions: {},
+      },
     },
     {
       id: 'n18',
@@ -431,7 +449,12 @@ const workflow = {
       position: [2900, 320],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       continueOnFail: true,
-      parameters: { channel: NOA_USER_ID, text: '={{ $json.summary_text }}' },
+      parameters: {
+        select: 'channel',
+        channelId: { __rl: true, value: NOA_USER_ID, mode: 'id' },
+        text: '={{ $json.summary_text }}',
+        otherOptions: {},
+      },
     },
     {
       id: 'n19',
@@ -460,7 +483,12 @@ const workflow = {
       position: [3340, 140],
       continueOnFail: true,
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
-      parameters: { channel: AIRWALLEX_DRAFTS, text: '={{ $json.summary_text }}' },
+      parameters: {
+        select: 'channel',
+        channelId: { __rl: true, value: AIRWALLEX_DRAFTS, mode: 'id' },
+        text: '={{ $json.summary_text }}',
+        otherOptions: {},
+      },
     },
     {
       id: 'n21',
@@ -489,7 +517,12 @@ const workflow = {
       position: [3340, 320],
       continueOnFail: true,
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
-      parameters: { channel: NOA_USER_ID, text: '={{ $json.summary_text }}' },
+      parameters: {
+        select: 'channel',
+        channelId: { __rl: true, value: NOA_USER_ID, mode: 'id' },
+        text: '={{ $json.summary_text }}',
+        otherOptions: {},
+      },
     },
     {
       id: 'n23',
@@ -499,8 +532,10 @@ const workflow = {
       position: [3560, 230],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
-        channel: AIRWALLEX_DRAFTS,
-        text: '={{ "Inbox triage Slack delivery needs manual follow-up. Channel: " + AIRWALLEX_DRAFTS + " DM: " + NOA_USER_ID }}',
+        select: 'channel',
+        channelId: { __rl: true, value: AIRWALLEX_DRAFTS, mode: 'id' },
+        text: 'Inbox triage Slack delivery needs manual follow-up. Channel: #airwallexdrafts DM: Noa Takhel',
+        otherOptions: {},
       },
     },
   ],
