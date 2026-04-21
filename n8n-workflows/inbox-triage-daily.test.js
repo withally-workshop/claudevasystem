@@ -26,5 +26,16 @@ assert.match(deploySource, /scheduleTrigger/, 'Expected schedule trigger node');
 assert.match(deploySource, /gmail/i, 'Expected Gmail integration in deploy script');
 assert.match(deploySource, /slack/i, 'Expected Slack integration in deploy script');
 assert.match(deploySource, /openAi/i, 'Expected OpenAI integration in deploy script');
+assert.match(deploySource, /in:inbox after:/, 'Expected inbox-after-date Gmail query');
+assert.match(deploySource, /gmail-message-id|message_id/, 'Expected normalized message id field');
+assert.match(deploySource, /thread_id/, 'Expected normalized thread id field');
+assert.match(deploySource, /from_name/, 'Expected normalized sender name field');
+assert.match(deploySource, /from_email/, 'Expected normalized sender email field');
+assert.match(deploySource, /subject/, 'Expected normalized subject field');
+assert.match(deploySource, /snippet/, 'Expected normalized snippet field');
+assert.match(deploySource, /body_preview/, 'Expected normalized body preview field');
+assert.match(deploySource, /received_at/, 'Expected normalized timestamp field');
+assert.match(deploySource, /Intl\.DateTimeFormat/, 'Expected runtime date formatting for Manila timezone');
+assert.match(deploySource, /runOnceForEachItem/, 'Expected per-message normalization');
 
 console.log('Inbox triage daily workflow contract check passed.');
