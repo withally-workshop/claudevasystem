@@ -10,7 +10,7 @@
 
 ## Purpose
 
-Give Noa a clear picture of what's happening today before her deep work block starts at 1:30 PM ICT. Surfaces John's focus goals, carry-overs from yesterday's EOD, and any blockers needing her input — delivered automatically, no manual assembly required.
+Give Noa a clear picture of what's happening today before her deep work block starts at 1:30 PM ICT. Surfaces John's focus goals, carry-overs from yesterday's EOD, any blockers needing her input, and the morning inbox-triage follow-ups when available — delivered automatically, no manual assembly required.
 
 ---
 
@@ -21,10 +21,12 @@ Give Noa a clear picture of what's happening today before her deep work block st
 | Time (GMT+8) | Action |
 |---|---|
 | By 9:00 AM | John posts focus goals + context to `#airwallexdrafts` |
+| By 9:00 AM | Inbox Triage Daily posts `Morning Triage` to `#airwallexdrafts` when it runs successfully |
 | 9:00 AM | Remote agent fires (UTC hour 01 slot in hourly trigger) |
 | 9:00 AM | Reads yesterday's EOD from `#airwallexdrafts` for carry-overs |
 | 9:00 AM | Reads John's morning posts for focus goals |
-| 9:00 AM | Generates SOD report using template, sends to Noa's DM + John's DM |
+| 9:00 AM | Reads same-day `Morning Triage` for BAU / inbox follow-ups when available |
+| 9:00 AM | Generates SOD report using template, sends to Noa's DM + `#airwallexdrafts` |
 
 ### Data Sources
 
@@ -32,6 +34,7 @@ Give Noa a clear picture of what's happening today before her deep work block st
 |---|---|---|
 | `#airwallexdrafts` — yesterday | Carry-overs, unresolved blockers | Bot message from yesterday containing "Today's Wrap-up" |
 | `#airwallexdrafts` — today | Focus goals, new blockers | Messages from U0AM5EGRVTP posted after midnight GMT+8 |
+| `#airwallexdrafts` — today | BAU / inbox follow-ups | Bot message from today containing "Morning Triage" |
 
 ---
 
@@ -50,7 +53,7 @@ Give Noa a clear picture of what's happening today before her deep work block st
 - [from John's dump + unresolved yesterday blockers]
 
 **BAU / Follow-ups (Business As Usual)**
-- [recurring ops: pending invoices, IM8 check-ins, etc.]
+- [recurring ops: pending invoices, IM8 check-ins, inbox triage follow-ups, etc.]
 ```
 
 ---
@@ -69,6 +72,7 @@ No format required — free text is fine.
 ## Failure Handling
 
 - If John hasn't posted by 9 AM: agent sends carry-overs only, notes missing goals
+- If inbox triage has not posted `Morning Triage` yet: agent sends without it and does not block the SOD report
 - If no yesterday EOD found: agent notes it and sends whatever context is available
 - If Slack send fails: agent retries once, then posts error to `#airwallexdrafts`
 - If agent doesn't fire: manually invoke `/sod-report` in Claude Code

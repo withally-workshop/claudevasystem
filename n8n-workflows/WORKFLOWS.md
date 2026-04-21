@@ -29,7 +29,7 @@
 | 1 | Krave - Payment Detection | `grsXd1VCVIL2F8Cv` | Active | 10am + 5pm ICT | Detect Airwallex deposits, match invoices, update tracker |
 | 2 | Krave - Invoice Reminder Cron | `QvHzslWExLjrH0mo` | Active | 10am ICT daily | Send invoice reminders, alert overdue, update tracker |
 | 3 | Krave - EOD Triage Summary | `TBD after deploy` | Planned | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
-| 4 | Krave - Inbox Triage Daily | `TBD after deploy` | Planned | 9am ICT weekdays + manual webhook | Read inbox email, create Gmail drafts, apply labels, keep `EA/Unsure` in inbox, and post summary to `#airwallexdrafts` plus Noa |
+| 4 | Krave - Inbox Triage Daily | `3YyEjk1e6oZV786T` | Active | 9am ICT weekdays + manual webhook | Read inbox email, create Gmail drafts, apply labels, keep `EA/Unsure` in inbox, and post summary to `#airwallexdrafts` plus Noa |
 | 5 | Krave - Slack Invoice Handler | `cxHFf6eIkvvBpPBo` | Active | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
 | 6 | Krave - Invoice Request Intake | `DXxPOtrS9d9Ge1Z2` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
 
@@ -310,7 +310,7 @@ Replaces the scheduled Claude-based EOD summary. Every weekday at 6:00 PM ICT, t
 
 ## Workflow 4 - Inbox Triage Daily
 
-**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/TBD-after-deploy`  
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/3YyEjk1e6oZV786T`  
 **Deploy script:** `n8n-workflows/deploy-inbox-triage-daily.js`
 
 ### Purpose

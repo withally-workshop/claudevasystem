@@ -1,6 +1,6 @@
 # Skill: Start of Day Report
 
-**Purpose:** Generate Noa's daily Start of Day Report — pulls carry-overs from yesterday's EOD + John's morning goals dump, sends to Noa's DM before her day begins.
+**Purpose:** Generate Noa's daily Start of Day Report — pulls carry-overs from yesterday's EOD, John's morning goals dump, and the morning inbox-triage summary when available, then sends to Noa's DM before her day begins.
 
 **Automated:** Runs **Monday–Friday at 9:00 AM GMT+8** via the hourly invoice trigger (trigger ID: `trig_0175RPhNgA1HaPH5w34W3QdN`, UTC hour 01 routing). Sends directly to Noa's DM. No confirmation step.
 
@@ -12,7 +12,7 @@
 
 Post your focus goals and context for the day to `#airwallexdrafts` before 9 AM GMT+8. No specific format required — just dump what you're focusing on, any blockers you're aware of, and anything you want Noa to know about your day's priorities.
 
-The agent reads your post + yesterday's EOD carry-overs and builds the report automatically.
+The agent reads your post + yesterday's EOD carry-overs + the morning inbox-triage summary in `#airwallexdrafts` when it exists, then builds the report automatically.
 
 ---
 
@@ -22,6 +22,7 @@ The agent reads your post + yesterday's EOD carry-overs and builds the report au
 |---|---|
 | `#airwallexdrafts` — yesterday's EOD bot message | Carry-over from Yesterday + unresolved Blockers |
 | `#airwallexdrafts` — John's posts from today (before 9 AM) | Focus Goals + new Blockers |
+| `#airwallexdrafts` — today's `Morning Triage` bot message | BAU / Follow-ups from Inbox Triage Daily, plus inbox items that stayed `EA/Unsure` |
 
 ---
 
@@ -39,6 +40,10 @@ Split messages into two groups:
 
 **Group B — John's morning dump** (messages from `U0AM5EGRVTP` posted today before 9 AM GMT+8)
 - Use for **Focus Goals** and any additional **Blocker / Input Needed**
+
+**Group C — Today's inbox triage summary** (bot message from today containing "Morning Triage")
+- Use for **BAU / Follow-ups (Business As Usual)**
+- Pull forward any `Review These` items as candidate blockers or follow-ups when they still need human judgment
 
 ### Step 1 — Collect additional context (manual only)
 
@@ -61,7 +66,7 @@ Use this exact template:
 - [from John's dump + unresolved yesterday blockers]
 
 **BAU / Follow-ups (Business As Usual)**
-- [recurring ops inferred from context: pending invoices, IM8 agency check-ins, etc.]
+- [recurring ops inferred from context, including inbox triage follow-ups when available: pending invoices, IM8 agency check-ins, `Review These`, etc.]
 ```
 
 Rules:
@@ -70,12 +75,13 @@ Rules:
 - Group by business only if multi-business.
 - Omit any section with zero items.
 - If John posted no morning dump: note `John's morning goals not yet posted — carry-overs only.`
+- If no `Morning Triage` summary is found yet: continue without it. Do not block the report.
 - If no yesterday EOD found: note `No EOD data from yesterday.`
 
 ### Step 3 — Send via Slack MCP
 
 Send to both recipients:
 - **Noa's DM:** `mcp__slack__slack_post_message` with `channel_id: U06TBGX9L93`
-- **John's DM:** `mcp__slack__slack_post_message` with `channel_id: U0AM5EGRVTP`
+- **#airwallexdrafts:** `mcp__slack__slack_post_message` with `channel_id: C0AQZGJDR38`
 
 Confirm `ts` returned for each — confirms delivery. If either send fails, output the formatted message for manual send.
