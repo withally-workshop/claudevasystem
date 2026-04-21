@@ -63,5 +63,13 @@ assert.match(deploySource, /removeLabelIds/i, 'Expected archive step to remove I
 assert.match(deploySource, /INBOX/, 'Expected explicit inbox removal target');
 assert.match(deploySource, /draft_required/, 'Expected draft gating field');
 assert.match(deploySource, /if\s*\(\$json\.tier === 'EA\/Unsure'\)|EA\/Unsure[\s\S]*remain/i, 'Expected unsure retention logic');
+assert.match(deploySource, /Morning Triage/i, 'Expected morning-triage summary header');
+assert.match(deploySource, /\[URGENT\]|Needs Your Reply|Review These|Auto-Sorted/i, 'Expected summary sections');
+assert.match(deploySource, /Inbox: /, 'Expected final inbox count line');
+assert.match(deploySource, /'Did Channel Send Fail\?'/, 'Expected channel send retry decision');
+assert.match(deploySource, /'Did Noa DM Fail\?'/, 'Expected DM retry decision');
+assert.match(deploySource, /'Post Failure Alert'/, 'Expected failure alert node');
+assert.match(deploySource, /C0AQZGJDR38/, 'Expected failure alerts to route to #airwallexdrafts');
+assert.match(deploySource, /U06TBGX9L93/, 'Expected Noa DM destination');
 
 console.log('Inbox triage daily workflow contract check passed.');

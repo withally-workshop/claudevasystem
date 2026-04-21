@@ -179,6 +179,32 @@ return {
 };
 `.trim();
 
+const BUILD_SUMMARY_CODE = `
+const rows = $input.all().map((item) => item.json);
+
+function linesFor(tier) {
+  return rows
+    .filter((row) => row.tier === tier)
+    .map((row) => '- ' + row.from_name + ' | ' + row.subject + ' - ' + (row.summary_line || row.reason || '') + (row.summary_draft_note ? ' -> ' + row.summary_draft_note : ''));
+}
+
+const urgent = linesFor('EA/Urgent');
+const reply = linesFor('EA/Needs-Reply');
+const fyi = linesFor('EA/FYI');
+const unsure = linesFor('EA/Unsure');
+const autoSortedCount = rows.filter((row) => row.tier === 'EA/Auto-Sorted').length;
+
+const sections = ['*Morning Triage - ' + new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Manila', weekday: 'long', month: 'long', day: 'numeric' }) + ' (ICT)*'];
+if (urgent.length) sections.push('\\n*[URGENT] - Action today (' + urgent.length + ')*\\n' + urgent.join('\\n'));
+if (reply.length) sections.push('\\n*Needs Your Reply (' + reply.length + ')*\\n' + reply.join('\\n'));
+if (fyi.length) sections.push('\\n*FYI (' + fyi.length + ')*\\n' + fyi.join('\\n'));
+if (unsure.length) sections.push('\\n*Review These (' + unsure.length + ')*\\n' + unsure.join('\\n'));
+sections.push('\\n*Auto-Sorted (' + autoSortedCount + ')* - newsletters, receipts, notifications');
+sections.push('\\nInbox: ' + unsure.length);
+
+return [{ json: { summary_text: sections.join('\\n') } }];
+`.trim();
+
 const workflow = {
   name: 'Krave - Inbox Triage Daily',
   settings: { executionOrder: 'v1', saveManualExecutions: true },
@@ -384,7 +410,7 @@ const workflow = {
       typeVersion: 2,
       position: [2680, 260],
       parameters: {
-        jsCode: `return [{ json: { timezone: '${TIMEZONE}', openAiCredentialId: '${OPENAI_CRED_ID}', tiers: ['${TIER_URGENT}', '${TIER_NEEDS_REPLY}', '${TIER_FYI}', '${TIER_AUTO_SORTED}', '${TIER_UNSURE}'] } }];`,
+        jsCode: BUILD_SUMMARY_CODE,
       },
     },
     {
@@ -394,7 +420,8 @@ const workflow = {
       typeVersion: 2.3,
       position: [2900, 200],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
-      parameters: { channel: AIRWALLEX_DRAFTS },
+      continueOnFail: true,
+      parameters: { channel: AIRWALLEX_DRAFTS, text: '={{ $json.summary_text }}' },
     },
     {
       id: 'n18',
@@ -403,7 +430,78 @@ const workflow = {
       typeVersion: 2.3,
       position: [2900, 320],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
-      parameters: { channel: NOA_USER_ID },
+      continueOnFail: true,
+      parameters: { channel: NOA_USER_ID, text: '={{ $json.summary_text }}' },
+    },
+    {
+      id: 'n19',
+      name: 'Did Channel Send Fail?',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.1,
+      position: [3120, 200],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 1 },
+          conditions: [{
+            id: 'channel-fail',
+            leftValue: '={{ !!$json.error }}',
+            rightValue: true,
+            operator: { type: 'boolean', operation: 'equals' },
+          }],
+          combinator: 'and',
+        },
+      },
+    },
+    {
+      id: 'n20',
+      name: 'Retry Channel Send',
+      type: 'n8n-nodes-base.slack',
+      typeVersion: 2.3,
+      position: [3340, 140],
+      continueOnFail: true,
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: { channel: AIRWALLEX_DRAFTS, text: '={{ $json.summary_text }}' },
+    },
+    {
+      id: 'n21',
+      name: 'Did Noa DM Fail?',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.1,
+      position: [3120, 320],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 1 },
+          conditions: [{
+            id: 'dm-fail',
+            leftValue: '={{ !!$json.error }}',
+            rightValue: true,
+            operator: { type: 'boolean', operation: 'equals' },
+          }],
+          combinator: 'and',
+        },
+      },
+    },
+    {
+      id: 'n22',
+      name: 'Retry Noa DM',
+      type: 'n8n-nodes-base.slack',
+      typeVersion: 2.3,
+      position: [3340, 320],
+      continueOnFail: true,
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: { channel: NOA_USER_ID, text: '={{ $json.summary_text }}' },
+    },
+    {
+      id: 'n23',
+      name: 'Post Failure Alert',
+      type: 'n8n-nodes-base.slack',
+      typeVersion: 2.3,
+      position: [3560, 230],
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        channel: AIRWALLEX_DRAFTS,
+        text: '={{ "Inbox triage Slack delivery needs manual follow-up. Channel: " + AIRWALLEX_DRAFTS + " DM: " + NOA_USER_ID }}',
+      },
     },
   ],
   connections: {
@@ -427,6 +525,18 @@ const workflow = {
     'Apply Context Label': { main: [[{ node: 'Archive Decision', type: 'main', index: 0 }]] },
     'Archive Decision': { main: [[{ node: 'Archive Non-Unsure', type: 'main', index: 0 }]] },
     'Archive Non-Unsure': { main: [[{ node: 'Build Slack Summary', type: 'main', index: 0 }]] },
+    'Build Slack Summary': {
+      main: [
+        [{ node: 'Post to Airwallex Drafts', type: 'main', index: 0 }],
+        [{ node: 'DM Noa Summary', type: 'main', index: 0 }],
+      ],
+    },
+    'Post to Airwallex Drafts': { main: [[{ node: 'Did Channel Send Fail?', type: 'main', index: 0 }]] },
+    'DM Noa Summary': { main: [[{ node: 'Did Noa DM Fail?', type: 'main', index: 0 }]] },
+    'Did Channel Send Fail?': { main: [[{ node: 'Retry Channel Send', type: 'main', index: 0 }], []] },
+    'Retry Channel Send': { main: [[{ node: 'Post Failure Alert', type: 'main', index: 0 }]] },
+    'Did Noa DM Fail?': { main: [[{ node: 'Retry Noa DM', type: 'main', index: 0 }], []] },
+    'Retry Noa DM': { main: [[{ node: 'Post Failure Alert', type: 'main', index: 0 }]] },
   },
 };
 
