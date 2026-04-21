@@ -7,6 +7,11 @@ const OPENAI_CRED_ID = 'UIREXIYn59JOH1zU';
 const AIRWALLEX_DRAFTS = 'C0AQZGJDR38';
 const NOA_USER_ID = 'U06TBGX9L93';
 const TIMEZONE = 'Asia/Manila';
+const TIER_URGENT = 'EA/Urgent';
+const TIER_NEEDS_REPLY = 'EA/Needs-Reply';
+const TIER_FYI = 'EA/FYI';
+const TIER_AUTO_SORTED = 'EA/Auto-Sorted';
+const TIER_UNSURE = 'EA/Unsure';
 
 const BUILD_QUERY_CODE = `
 const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -65,6 +70,60 @@ return {
     received_at: headerValue(payload.headers, 'Date') || ''
   }
 };
+`.trim();
+
+const RULES_CLASSIFIER_CODE = `
+const KNOWN_CONTACT_MARKERS = [
+  'amanda',
+  'shin',
+  'joshua',
+  'amy',
+  'shuo shimpa',
+  'im8',
+  'krave',
+];
+
+const URGENT_PATTERNS = [
+  /legal/i,
+  /contract/i,
+  /overdue/i,
+  /deadline today/i,
+  /payment risk/i,
+];
+
+const AUTO_SORT_PATTERNS = [
+  /newsletter/i,
+  /receipt/i,
+  /noreply@/i,
+  /no-reply@/i,
+];
+
+const haystack = [
+  $json.from_name,
+  $json.from_email,
+  $json.subject,
+  $json.snippet,
+  $json.body_preview
+].join(' ');
+
+const knownContact = KNOWN_CONTACT_MARKERS.some((marker) => haystack.toLowerCase().includes(marker));
+const urgentMatch = URGENT_PATTERNS.some((pattern) => pattern.test(haystack));
+const autoSortMatch = AUTO_SORT_PATTERNS.some((pattern) => pattern.test(haystack));
+
+if (urgentMatch) {
+  return { json: { ...$json, tier: 'EA/Urgent', context_label: '', reason: 'Matched urgent rules', ai_needed: false, draft_required: true } };
+}
+
+if (knownContact) {
+  return { json: { ...$json, tier: 'EA/Needs-Reply', context_label: '', reason: 'Matched known-contact rules', ai_needed: false, draft_required: true } };
+}
+
+// Never auto-sort known contacts even if notification language is present.
+if (autoSortMatch && !knownContact) {
+  return { json: { ...$json, tier: 'EA/Auto-Sorted', context_label: 'Receipts', reason: 'Matched auto-sort rules', ai_needed: false, draft_required: false } };
+}
+
+return { json: { ...$json, tier: '', context_label: '', reason: 'Needs AI review', ai_needed: true, draft_required: false, allowed_tiers: ['EA/Urgent', 'EA/Needs-Reply', 'EA/FYI', 'EA/Auto-Sorted', 'EA/Unsure'] } };
 `.trim();
 
 const workflow = {
@@ -132,29 +191,37 @@ const workflow = {
     },
     {
       id: 'n7',
-      name: 'Build Slack Summary',
+      name: 'Rules Classifier',
       type: 'n8n-nodes-base.code',
       typeVersion: 2,
       position: [1340, 260],
-      parameters: {
-        jsCode: `return [{ json: { timezone: '${TIMEZONE}', openAiCredentialId: '${OPENAI_CRED_ID}' } }];`,
-      },
+      parameters: { mode: 'runOnceForEachItem', jsCode: RULES_CLASSIFIER_CODE },
     },
     {
       id: 'n8',
+      name: 'Build Slack Summary',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1560, 260],
+      parameters: {
+        jsCode: `return [{ json: { timezone: '${TIMEZONE}', openAiCredentialId: '${OPENAI_CRED_ID}', tiers: ['${TIER_URGENT}', '${TIER_NEEDS_REPLY}', '${TIER_FYI}', '${TIER_AUTO_SORTED}', '${TIER_UNSURE}'] } }];`,
+      },
+    },
+    {
+      id: 'n9',
       name: 'Post to Airwallex Drafts',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
-      position: [1560, 200],
+      position: [1780, 200],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: { channel: AIRWALLEX_DRAFTS },
     },
     {
-      id: 'n9',
+      id: 'n10',
       name: 'DM Noa Summary',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
-      position: [1560, 320],
+      position: [1780, 320],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: { channel: NOA_USER_ID },
     },
@@ -165,7 +232,8 @@ const workflow = {
     'Build Gmail Query': { main: [[{ node: 'Search Inbox', type: 'main', index: 0 }]] },
     'Search Inbox': { main: [[{ node: 'Fetch Message Details', type: 'main', index: 0 }]] },
     'Fetch Message Details': { main: [[{ node: 'Normalize Email', type: 'main', index: 0 }]] },
-    'Normalize Email': { main: [[{ node: 'Build Slack Summary', type: 'main', index: 0 }]] },
+    'Normalize Email': { main: [[{ node: 'Rules Classifier', type: 'main', index: 0 }]] },
+    'Rules Classifier': { main: [[{ node: 'Build Slack Summary', type: 'main', index: 0 }]] },
   },
 };
 

@@ -37,5 +37,14 @@ assert.match(deploySource, /body_preview/, 'Expected normalized body preview fie
 assert.match(deploySource, /received_at/, 'Expected normalized timestamp field');
 assert.match(deploySource, /Intl\.DateTimeFormat/, 'Expected runtime date formatting for Manila timezone');
 assert.match(deploySource, /runOnceForEachItem/, 'Expected per-message normalization');
+assert.match(deploySource, /EA\/Urgent/, 'Expected urgent tier constant');
+assert.match(deploySource, /EA\/Needs-Reply/, 'Expected needs-reply tier constant');
+assert.match(deploySource, /EA\/FYI/, 'Expected FYI tier constant');
+assert.match(deploySource, /EA\/Auto-Sorted/, 'Expected auto-sorted tier constant');
+assert.match(deploySource, /EA\/Unsure/, 'Expected unsure tier constant');
+assert.match(deploySource, /Amanda|Shin|Joshua|Amy|Shuo Shimpa|IM8/i, 'Expected known-contact protection list');
+assert.match(deploySource, /legal|contract|overdue|deadline today|payment risk/i, 'Expected urgent keyword guardrails');
+assert.match(deploySource, /newsletter|receipt|noreply@|no-reply@/i, 'Expected auto-sorted keyword guardrails');
+assert.match(deploySource, /never auto-sort known contacts|known contacts/i, 'Expected explicit known-contact comment or code');
 
 console.log('Inbox triage daily workflow contract check passed.');
