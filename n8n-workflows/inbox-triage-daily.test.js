@@ -54,5 +54,14 @@ assert.match(deploySource, /Krave|IM8|Halo-Home|Skyvane|Invoices|Contracts|Recei
 assert.match(deploySource, /3-and-1 Framework/, 'Expected 3-and-1 drafting instruction');
 assert.match(deploySource, /No filler|direct|outcome-oriented/i, 'Expected Noa voice guidance');
 assert.match(deploySource, /Draft ready in Gmail/i, 'Expected summary wording for drafted messages');
+assert.match(deploySource, /'Create Gmail Draft'/, 'Expected Gmail draft node');
+assert.match(deploySource, /'Apply Tier Label'/, 'Expected Gmail tier label node');
+assert.match(deploySource, /'Apply Context Label'/, 'Expected Gmail context label node');
+assert.match(deploySource, /'Archive Non-Unsure'/, 'Expected Gmail archive node');
+assert.match(deploySource, /EA\/Unsure/, 'Expected unsure branch handling');
+assert.match(deploySource, /removeLabelIds/i, 'Expected archive step to remove INBOX');
+assert.match(deploySource, /INBOX/, 'Expected explicit inbox removal target');
+assert.match(deploySource, /draft_required/, 'Expected draft gating field');
+assert.match(deploySource, /if\s*\(\$json\.tier === 'EA\/Unsure'\)|EA\/Unsure[\s\S]*remain/i, 'Expected unsure retention logic');
 
 console.log('Inbox triage daily workflow contract check passed.');

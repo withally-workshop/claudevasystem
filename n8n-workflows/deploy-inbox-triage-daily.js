@@ -144,6 +144,41 @@ const DRAFT_PROMPT_PREFIX = [
   'Do not send. Draft only.',
 ].join('\n');
 
+const PREPARE_GMAIL_MUTATION_CODE = `
+return {
+  json: {
+    ...$json,
+    tier_label_name: $json.tier,
+    context_label_name: $json.context_label || '',
+    archive_after_triage: $json.tier !== 'EA/Unsure',
+    draft_subject: 'Re: ' + ($json.subject || ''),
+    summary_draft_note: $json.draft_required ? 'Draft ready in Gmail' : ''
+  }
+};
+`.trim();
+
+const ARCHIVE_DECISION_CODE = `
+// EA/Unsure emails remain in inbox for manual review.
+if ($json.tier === 'EA/Unsure') {
+  return {
+    json: {
+      ...$json,
+      archive_after_triage: false,
+      removeLabelIds: [],
+      inbox_retention_reason: 'EA/Unsure remain in inbox for manual review'
+    }
+  };
+}
+
+return {
+  json: {
+    ...$json,
+    archive_after_triage: true,
+    removeLabelIds: ['INBOX']
+  }
+};
+`.trim();
+
 const workflow = {
   name: 'Krave - Inbox Triage Daily',
   settings: { executionOrder: 'v1', saveManualExecutions: true },
@@ -279,29 +314,94 @@ const workflow = {
     },
     {
       id: 'n10',
+      name: 'Prepare Gmail Mutation',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1800, 140],
+      parameters: { mode: 'runOnceForEachItem', jsCode: PREPARE_GMAIL_MUTATION_CODE },
+    },
+    {
+      id: 'n11',
+      name: 'Create Gmail Draft',
+      type: 'n8n-nodes-base.gmail',
+      typeVersion: 2.1,
+      position: [2020, 80],
+      parameters: {
+        operation: 'createDraft',
+        subject: '={{ $json.draft_subject }}',
+        message: '={{ $json.message?.content || "" }}',
+        emailType: 'text',
+      },
+    },
+    {
+      id: 'n12',
+      name: 'Apply Tier Label',
+      type: 'n8n-nodes-base.gmail',
+      typeVersion: 2.1,
+      position: [2020, 180],
+      parameters: {
+        operation: 'addLabels',
+        messageId: '={{ $json.message_id }}',
+        labelIds: '={{ [$json.tier_label_name] }}',
+      },
+    },
+    {
+      id: 'n13',
+      name: 'Apply Context Label',
+      type: 'n8n-nodes-base.gmail',
+      typeVersion: 2.1,
+      position: [2020, 280],
+      parameters: {
+        operation: 'addLabels',
+        messageId: '={{ $json.message_id }}',
+        labelIds: '={{ $json.context_label_name ? [$json.context_label_name] : [] }}',
+      },
+    },
+    {
+      id: 'n14',
+      name: 'Archive Decision',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [2240, 280],
+      parameters: { mode: 'runOnceForEachItem', jsCode: ARCHIVE_DECISION_CODE },
+    },
+    {
+      id: 'n15',
+      name: 'Archive Non-Unsure',
+      type: 'n8n-nodes-base.gmail',
+      typeVersion: 2.1,
+      position: [2460, 280],
+      parameters: {
+        operation: 'modify',
+        messageId: '={{ $json.message_id }}',
+        removeLabelIds: '={{ $json.removeLabelIds || ["INBOX"] }}',
+      },
+    },
+    {
+      id: 'n16',
       name: 'Build Slack Summary',
       type: 'n8n-nodes-base.code',
       typeVersion: 2,
-      position: [1800, 260],
+      position: [2680, 260],
       parameters: {
         jsCode: `return [{ json: { timezone: '${TIMEZONE}', openAiCredentialId: '${OPENAI_CRED_ID}', tiers: ['${TIER_URGENT}', '${TIER_NEEDS_REPLY}', '${TIER_FYI}', '${TIER_AUTO_SORTED}', '${TIER_UNSURE}'] } }];`,
       },
     },
     {
-      id: 'n11',
+      id: 'n17',
       name: 'Post to Airwallex Drafts',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
-      position: [2020, 200],
+      position: [2900, 200],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: { channel: AIRWALLEX_DRAFTS },
     },
     {
-      id: 'n12',
+      id: 'n18',
       name: 'DM Noa Summary',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
-      position: [2020, 320],
+      position: [2900, 320],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: { channel: NOA_USER_ID },
     },
@@ -315,7 +415,18 @@ const workflow = {
     'Normalize Email': { main: [[{ node: 'Rules Classifier', type: 'main', index: 0 }]] },
     'Rules Classifier': { main: [[{ node: 'AI Classifier', type: 'main', index: 0 }]] },
     'AI Classifier': { main: [[{ node: 'Draft Reply', type: 'main', index: 0 }]] },
-    'Draft Reply': { main: [[{ node: 'Build Slack Summary', type: 'main', index: 0 }]] },
+    'Draft Reply': { main: [[{ node: 'Prepare Gmail Mutation', type: 'main', index: 0 }]] },
+    'Prepare Gmail Mutation': {
+      main: [
+        [{ node: 'Create Gmail Draft', type: 'main', index: 0 }],
+        [{ node: 'Apply Tier Label', type: 'main', index: 0 }],
+      ],
+    },
+    'Create Gmail Draft': { main: [[{ node: 'Apply Context Label', type: 'main', index: 0 }]] },
+    'Apply Tier Label': { main: [[{ node: 'Apply Context Label', type: 'main', index: 0 }]] },
+    'Apply Context Label': { main: [[{ node: 'Archive Decision', type: 'main', index: 0 }]] },
+    'Archive Decision': { main: [[{ node: 'Archive Non-Unsure', type: 'main', index: 0 }]] },
+    'Archive Non-Unsure': { main: [[{ node: 'Build Slack Summary', type: 'main', index: 0 }]] },
   },
 };
 
