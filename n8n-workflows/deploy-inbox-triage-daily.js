@@ -118,7 +118,7 @@ if (knownContact) {
   return { json: { ...$json, tier: 'EA/Needs-Reply', context_label: '', reason: 'Matched known-contact rules', ai_needed: false, draft_required: true } };
 }
 
-// Never auto-sort known contacts even if notification language is present.
+// Never auto-sort a known contact even if the message looks like an automated notification.
 if (autoSortMatch && !knownContact) {
   return { json: { ...$json, tier: 'EA/Auto-Sorted', context_label: 'Receipts', reason: 'Matched auto-sort rules', ai_needed: false, draft_required: false } };
 }
@@ -158,7 +158,7 @@ return {
 `.trim();
 
 const ARCHIVE_DECISION_CODE = `
-// EA/Unsure emails remain in inbox for manual review.
+// EA/Unsure stays in inbox so human review can happen after triage.
 if ($json.tier === 'EA/Unsure') {
   return {
     json: {
