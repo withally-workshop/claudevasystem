@@ -13,11 +13,12 @@
 3. [Workflow 1 - Payment Detection](#workflow-1---payment-detection)
 4. [Workflow 2 - Invoice Reminder Cron](#workflow-2---invoice-reminder-cron)
 5. [Workflow 3 - EOD Triage Summary](#workflow-3---eod-triage-summary)
-6. [Workflow 4 - Slack Invoice Handler](#workflow-4---slack-invoice-handler)
-7. [Workflow 5 - Invoice Request Intake](#workflow-5---invoice-request-intake)
-8. [Credential Reference](#credential-reference)
-9. [Runbook - Common Scenarios](#runbook---common-scenarios)
-10. [Handover Checklist](#handover-checklist)
+6. [Workflow 4 - Inbox Triage Daily](#workflow-4---inbox-triage-daily)
+7. [Workflow 5 - Slack Invoice Handler](#workflow-5---slack-invoice-handler)
+8. [Workflow 6 - Invoice Request Intake](#workflow-6---invoice-request-intake)
+9. [Credential Reference](#credential-reference)
+10. [Runbook - Common Scenarios](#runbook---common-scenarios)
+11. [Handover Checklist](#handover-checklist)
 
 ---
 
@@ -28,8 +29,9 @@
 | 1 | Krave - Payment Detection | `grsXd1VCVIL2F8Cv` | Active | 10am + 5pm ICT | Detect Airwallex deposits, match invoices, update tracker |
 | 2 | Krave - Invoice Reminder Cron | `QvHzslWExLjrH0mo` | Active | 10am ICT daily | Send invoice reminders, alert overdue, update tracker |
 | 3 | Krave - EOD Triage Summary | `TBD after deploy` | Planned | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
-| 4 | Krave - Slack Invoice Handler | `cxHFf6eIkvvBpPBo` | Active | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
-| 5 | Krave - Invoice Request Intake | `DXxPOtrS9d9Ge1Z2` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
+| 4 | Krave - Inbox Triage Daily | `TBD after deploy` | Planned | 9am ICT weekdays + manual webhook | Read inbox email, create Gmail drafts, apply labels, keep `EA/Unsure` in inbox, and post summary to `#airwallexdrafts` plus Noa |
+| 5 | Krave - Slack Invoice Handler | `cxHFf6eIkvvBpPBo` | Active | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
+| 6 | Krave - Invoice Request Intake | `DXxPOtrS9d9Ge1Z2` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
 
 ---
 
@@ -306,7 +308,55 @@ Replaces the scheduled Claude-based EOD summary. Every weekday at 6:00 PM ICT, t
 
 ---
 
-## Workflow 4 - Slack Invoice Handler
+## Workflow 4 - Inbox Triage Daily
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/TBD-after-deploy`  
+**Deploy script:** `n8n-workflows/deploy-inbox-triage-daily.js`
+
+### Purpose
+
+Reads new inbox email from `noa@kravemedia.co`, classifies each message into the `EA/Urgent`, `EA/Needs-Reply`, `EA/FYI`, `EA/Auto-Sorted`, and `EA/Unsure` tier model, creates Gmail drafts for reply-needed messages, applies Gmail labels, leaves `EA/Unsure` in the inbox, and posts the final summary to both `#airwallexdrafts` and Noa's Slack DM.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Schedule | `0 1 * * 1-5` - 9:00 AM ICT weekdays |
+| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-inbox-triage-daily` |
+
+### Tier Model
+
+| Tier | Meaning |
+|------|---------|
+| `EA/Urgent` | Requires Noa's action today |
+| `EA/Needs-Reply` | Draft ready in Gmail for Noa to review |
+| `EA/FYI` | No action, but Noa should know |
+| `EA/Auto-Sorted` | Newsletters, receipts, and notifications |
+| `EA/Unsure` | Ambiguous, stays in inbox for manual review |
+
+### Starter Context Labels
+
+`Krave`, `IM8`, `Halo-Home`, `Skyvane`, `Invoices`, `Contracts`, `Receipts`, `Suppliers`
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| `EA/Urgent` / `EA/Needs-Reply` | Create Gmail drafts, apply labels, include `Draft ready in Gmail` in summary |
+| `EA/FYI` / `EA/Auto-Sorted` | Apply labels, archive after triage |
+| `EA/Unsure` | Apply labels, keep in inbox, surface under `Review These` |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| Slack send failure | Retry once per destination, then post failure alert to `#airwallexdrafts` |
+| Gmail draft or label issue | Workflow carries failure context into the final summary |
+| Email send | Never send automatically; draft only |
+
+---
+
+## Workflow 5 - Slack Invoice Handler
 
 **n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/DXxPOtrS9d9Ge1Z2`  
 **Deploy script:** `n8n-workflows/deploy-slack-invoice-handler.js`
@@ -363,7 +413,7 @@ Handles the Slack-facing part of invoice intake. It accepts both the `/invoice-r
 
 ---
 
-## Workflow 5 - Invoice Request Intake
+## Workflow 6 - Invoice Request Intake
 
 **n8n URL:** `TBD after deploy`  
 **Deploy script:** `n8n-workflows/deploy-invoice-request-intake.js`

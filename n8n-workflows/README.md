@@ -9,6 +9,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Payment Detection | Active | 10am + 5pm ICT | [payment-detection.workflow.json](payment-detection.workflow.json) |
 | Invoice Reminder Cron | Active | 10am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
 | EOD Triage Summary | Planned | 6pm ICT weekdays | [deploy-eod-triage-summary.js](deploy-eod-triage-summary.js) |
+| Inbox Triage Daily | Planned | 9am ICT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
 | Slack Invoice Handler | Planned | Slack slash command + modal submit | [deploy-slack-invoice-handler.js](deploy-slack-invoice-handler.js) |
 | Invoice Request Intake | Planned | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
 
@@ -79,6 +80,31 @@ node n8n-workflows/deploy-eod-triage-summary.js
 **Credentials required in n8n:**
 - `Krave Slack Bot` - read/post access for the three source channels and Noa DM
 - `OpenAI account` - OpenAI API credential for the summary node
+
+---
+
+## Inbox Triage Daily
+
+Reads new inbox email from `noa@kravemedia.co`, classifies each message into the `EA/*` tier model, creates Gmail drafts for `EA/Urgent` and `EA/Needs-Reply`, applies Gmail labels, leaves `EA/Unsure` in the inbox, and posts the final summary to both `#airwallexdrafts` and Noa's Slack DM.
+
+**Draft-only behavior:** creates Gmail drafts only and never sends email automatically.
+
+**Inbox retention:** `EA/Unsure` stays in the inbox for manual review after triage.
+
+**Webhook (manual trigger):**
+```text
+POST https://noatakhel.app.n8n.cloud/webhook/krave-inbox-triage-daily
+```
+
+**Deploy from scratch:**
+```bash
+node n8n-workflows/deploy-inbox-triage-daily.js
+```
+
+**Credentials required in n8n:**
+- `Gmail account` - `noa@kravemedia.co` OAuth2 for inbox reads, labels, archive, and Gmail drafts
+- `Krave Slack Bot` - summary posts to `#airwallexdrafts` plus Noa DM delivery
+- `OpenAI account` - classification and reply drafting
 
 ---
 

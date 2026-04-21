@@ -3,10 +3,14 @@ const fs = require('fs');
 const path = require('path');
 
 const deployPath = path.join(__dirname, 'deploy-inbox-triage-daily.js');
+const workflowsDocPath = path.join(__dirname, 'WORKFLOWS.md');
+const readmePath = path.join(__dirname, 'README.md');
 
 assert.ok(fs.existsSync(deployPath), 'Expected deploy-inbox-triage-daily.js to exist');
 
 const deploySource = fs.readFileSync(deployPath, 'utf8');
+const workflowsDoc = fs.readFileSync(workflowsDocPath, 'utf8');
+const readmeDoc = fs.readFileSync(readmePath, 'utf8');
 
 assert.match(deploySource, /name:\s+'Krave .* Inbox Triage Daily'/, 'Expected workflow name in deploy script');
 assert.match(deploySource, /const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD'/, 'Expected shared Slack credential id');
@@ -71,5 +75,15 @@ assert.match(deploySource, /'Did Noa DM Fail\?'/, 'Expected DM retry decision');
 assert.match(deploySource, /'Post Failure Alert'/, 'Expected failure alert node');
 assert.match(deploySource, /C0AQZGJDR38/, 'Expected failure alerts to route to #airwallexdrafts');
 assert.match(deploySource, /U06TBGX9L93/, 'Expected Noa DM destination');
+assert.match(readmeDoc, /Inbox Triage Daily/, 'Expected workflow listed in README');
+assert.match(readmeDoc, /Gmail drafts/i, 'Expected README to document draft-only email behavior');
+assert.match(readmeDoc, /EA\/Unsure/i, 'Expected README to document inbox retention for unsure emails');
+assert.match(readmeDoc, /#airwallexdrafts/i, 'Expected README to document archive channel summary');
+assert.match(readmeDoc, /Noa/i, 'Expected README to document Noa DM delivery');
+assert.match(workflowsDoc, /Inbox Triage Daily/, 'Expected workflow listed in WORKFLOWS.md');
+assert.match(workflowsDoc, /krave-inbox-triage-daily/, 'Expected manual webhook documented');
+assert.match(workflowsDoc, /EA\/Urgent[\s\S]*EA\/Needs-Reply[\s\S]*EA\/FYI[\s\S]*EA\/Auto-Sorted[\s\S]*EA\/Unsure/, 'Expected tier model documented');
+assert.match(workflowsDoc, /Krave|IM8|Halo-Home|Skyvane|Invoices|Contracts|Receipts|Suppliers/, 'Expected starter context labels documented');
+assert.match(workflowsDoc, /draft only|never send/i, 'Expected non-sending behavior documented');
 
 console.log('Inbox triage daily workflow contract check passed.');
