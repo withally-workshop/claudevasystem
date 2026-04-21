@@ -126,6 +126,24 @@ if (autoSortMatch && !knownContact) {
 return { json: { ...$json, tier: '', context_label: '', reason: 'Needs AI review', ai_needed: true, draft_required: false, allowed_tiers: ['EA/Urgent', 'EA/Needs-Reply', 'EA/FYI', 'EA/Auto-Sorted', 'EA/Unsure'] } };
 `.trim();
 
+const AI_CLASSIFIER_PROMPT = [
+  'You are classifying one email for Noa Takhel.',
+  'Return JSON only with keys: tier, context_label, reason, draft_required, summary_line.',
+  'Allowed tiers: EA/Urgent, EA/Needs-Reply, EA/FYI, EA/Auto-Sorted, EA/Unsure.',
+  'Allowed context labels: Krave, IM8, Halo-Home, Skyvane, Invoices, Contracts, Receipts, Suppliers, blank.',
+  'Choose EA/Needs-Reply instead of EA/FYI if action is ambiguous.',
+  'Never auto-sort known contacts.',
+  'Use summary wording that can mention Draft ready in Gmail when drafting is required.',
+].join('\n');
+
+const DRAFT_PROMPT_PREFIX = [
+  'Write a Gmail draft in Noa Takhel\'s voice.',
+  'Be direct and outcome-oriented.',
+  'No filler.',
+  'Use the 3-and-1 Framework if the email asks for a decision.',
+  'Do not send. Draft only.',
+].join('\n');
+
 const workflow = {
   name: 'Krave - Inbox Triage Daily',
   settings: { executionOrder: 'v1', saveManualExecutions: true },
@@ -199,29 +217,91 @@ const workflow = {
     },
     {
       id: 'n8',
+      name: 'AI Classifier',
+      type: '@n8n/n8n-nodes-langchain.openAi',
+      typeVersion: 1.8,
+      position: [1560, 180],
+      credentials: { openAiApi: { id: OPENAI_CRED_ID, name: 'OpenAI account' } },
+      parameters: {
+        modelId: {
+          __rl: true,
+          mode: 'list',
+          value: 'gpt-4o-mini',
+          cachedResultName: 'GPT-4O-MINI',
+        },
+        options: {
+          temperature: 0.2,
+        },
+        messages: {
+          values: [
+            {
+              role: 'system',
+              content: AI_CLASSIFIER_PROMPT,
+            },
+            {
+              role: 'user',
+              content: '={{ JSON.stringify($json) }}',
+            },
+          ],
+        },
+      },
+    },
+    {
+      id: 'n9',
+      name: 'Draft Reply',
+      type: '@n8n/n8n-nodes-langchain.openAi',
+      typeVersion: 1.8,
+      position: [1560, 340],
+      credentials: { openAiApi: { id: OPENAI_CRED_ID, name: 'OpenAI account' } },
+      parameters: {
+        modelId: {
+          __rl: true,
+          mode: 'list',
+          value: 'gpt-4o-mini',
+          cachedResultName: 'GPT-4O-MINI',
+        },
+        options: {
+          temperature: 0.3,
+        },
+        messages: {
+          values: [
+            {
+              role: 'system',
+              content: DRAFT_PROMPT_PREFIX,
+            },
+            {
+              role: 'user',
+              content: '={{ "Draft a reply for this email context: " + JSON.stringify($json) }}',
+            },
+          ],
+        },
+      },
+    },
+    {
+      id: 'n10',
       name: 'Build Slack Summary',
       type: 'n8n-nodes-base.code',
       typeVersion: 2,
-      position: [1560, 260],
+      position: [1800, 260],
       parameters: {
         jsCode: `return [{ json: { timezone: '${TIMEZONE}', openAiCredentialId: '${OPENAI_CRED_ID}', tiers: ['${TIER_URGENT}', '${TIER_NEEDS_REPLY}', '${TIER_FYI}', '${TIER_AUTO_SORTED}', '${TIER_UNSURE}'] } }];`,
       },
     },
     {
-      id: 'n9',
+      id: 'n11',
       name: 'Post to Airwallex Drafts',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
-      position: [1780, 200],
+      position: [2020, 200],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: { channel: AIRWALLEX_DRAFTS },
     },
     {
-      id: 'n10',
+      id: 'n12',
       name: 'DM Noa Summary',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
-      position: [1780, 320],
+      position: [2020, 320],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: { channel: NOA_USER_ID },
     },
@@ -233,7 +313,9 @@ const workflow = {
     'Search Inbox': { main: [[{ node: 'Fetch Message Details', type: 'main', index: 0 }]] },
     'Fetch Message Details': { main: [[{ node: 'Normalize Email', type: 'main', index: 0 }]] },
     'Normalize Email': { main: [[{ node: 'Rules Classifier', type: 'main', index: 0 }]] },
-    'Rules Classifier': { main: [[{ node: 'Build Slack Summary', type: 'main', index: 0 }]] },
+    'Rules Classifier': { main: [[{ node: 'AI Classifier', type: 'main', index: 0 }]] },
+    'AI Classifier': { main: [[{ node: 'Draft Reply', type: 'main', index: 0 }]] },
+    'Draft Reply': { main: [[{ node: 'Build Slack Summary', type: 'main', index: 0 }]] },
   },
 };
 

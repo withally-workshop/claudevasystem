@@ -46,5 +46,13 @@ assert.match(deploySource, /Amanda|Shin|Joshua|Amy|Shuo Shimpa|IM8/i, 'Expected 
 assert.match(deploySource, /legal|contract|overdue|deadline today|payment risk/i, 'Expected urgent keyword guardrails');
 assert.match(deploySource, /newsletter|receipt|noreply@|no-reply@/i, 'Expected auto-sorted keyword guardrails');
 assert.match(deploySource, /never auto-sort known contacts|known contacts/i, 'Expected explicit known-contact comment or code');
+assert.match(deploySource, /'AI Classifier'/, 'Expected AI classifier node');
+assert.match(deploySource, /'Draft Reply'/, 'Expected draft-generation node');
+assert.match(deploySource, /Return JSON only/i, 'Expected structured AI response instructions');
+assert.match(deploySource, /EA\/Urgent[\s\S]*EA\/Needs-Reply[\s\S]*EA\/FYI[\s\S]*EA\/Auto-Sorted[\s\S]*EA\/Unsure/, 'Expected allowed tier list in prompt');
+assert.match(deploySource, /Krave|IM8|Halo-Home|Skyvane|Invoices|Contracts|Receipts|Suppliers/, 'Expected starter context labels');
+assert.match(deploySource, /3-and-1 Framework/, 'Expected 3-and-1 drafting instruction');
+assert.match(deploySource, /No filler|direct|outcome-oriented/i, 'Expected Noa voice guidance');
+assert.match(deploySource, /Draft ready in Gmail/i, 'Expected summary wording for drafted messages');
 
 console.log('Inbox triage daily workflow contract check passed.');
