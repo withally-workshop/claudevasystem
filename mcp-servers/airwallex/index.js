@@ -44,7 +44,9 @@ async function getToken() {
 
 // Billing read/write paths — do NOT use x-on-behalf-of (causes 401)
 // Bills (spend module) needs x-on-behalf-of
-const NO_BEHALF_PATHS = ["/api/v1/invoices", "/api/v1/billing", "/api/v1/bills", "/api/v1/billing_customers"];
+const NO_BEHALF_PATHS = ["/api/v1/invoices", "/api/v1/billing", "/api/v1/bills", "/api/v1/billing_customers", "/api/v1/products", "/api/v1/prices"];
+
+const BILLING_PATHS = ["/api/v1/invoices", "/api/v1/billing_customers", "/api/v1/products", "/api/v1/prices"];
 
 async function airwallexRequest(method, path, body) {
   const token = await getToken();
@@ -54,6 +56,7 @@ async function airwallexRequest(method, path, body) {
   };
   const skipBehalf = NO_BEHALF_PATHS.some((p) => path.startsWith(p));
   if (ACCOUNT_ID && !skipBehalf) headers["x-on-behalf-of"] = ACCOUNT_ID;
+  if (BILLING_PATHS.some((p) => path.startsWith(p))) headers["x-api-version"] = "2025-06-16";
 
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
@@ -309,7 +312,7 @@ async function handleTool(name, args) {
     case "airwallex_create_product": {
       const body = { name: args.name };
       if (args.description) body.description = args.description;
-      return await airwallexRequest("POST", "/api/v1/billing/products/create", body);
+      return await airwallexRequest("POST", "/api/v1/products/create", body);
     }
 
     case "airwallex_create_price": {
@@ -320,7 +323,7 @@ async function handleTool(name, args) {
         recurring: false,
       };
       if (args.nickname) body.nickname = args.nickname;
-      return await airwallexRequest("POST", "/api/v1/billing/prices/create", body);
+      return await airwallexRequest("POST", "/api/v1/prices/create", body);
     }
 
     case "airwallex_add_invoice_line_items": {
@@ -362,7 +365,7 @@ async function handleTool(name, args) {
       if (args.name) params.set("name", args.name);
       if (args.page_size) params.set("page_size", args.page_size);
       const query = params.toString() ? `?${params}` : "";
-      return await airwallexRequest("GET", `/api/v1/billing_customers/list${query}`);
+      return await airwallexRequest("GET", `/api/v1/billing_customers${query}`);
     }
 
     case "airwallex_list_bills": {

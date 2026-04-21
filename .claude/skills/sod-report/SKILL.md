@@ -1,18 +1,18 @@
 # Skill: Start of Day Report
 
-**Purpose:** Generate Noa's daily Start of Day Report — pulls carry-overs from yesterday's EOD, John's morning goals dump, and the morning inbox-triage summary when available, then sends to Noa's DM before her day begins.
+**Purpose:** Generate Noa's daily Start of Day Report from validated Slack inputs - yesterday's EOD carry-over, John's morning goals dump, and today's `Morning Triage` - then deliver the finished report to both `#airwallexdrafts` and Noa's DM.
 
-**Automated:** Runs **Monday–Friday at 9:00 AM GMT+8** via the hourly invoice trigger (trigger ID: `trig_0175RPhNgA1HaPH5w34W3QdN`, UTC hour 01 routing). Sends directly to Noa's DM. No confirmation step.
+**Automated:** Local/manual only for now. Run the `n8n` workflow manually or via `POST /webhook/krave-sod-report` only after all required inputs are present in `#airwallexdrafts`.
 
-**Manual invoke:** Use this skill for off-schedule runs or if the automated send failed.
+**Manual invoke:** Use this skill for off-schedule drafting, validation, or manual resend support when the workflow is unavailable.
 
 ---
 
-## Operator Input (Daily — by 9:00 AM GMT+8)
+## Operator Input
 
-Post your focus goals and context for the day to `#airwallexdrafts` before 9 AM GMT+8. No specific format required — just dump what you're focusing on, any blockers you're aware of, and anything you want Noa to know about your day's priorities.
+Post your focus goals and context for the day to `#airwallexdrafts` before running the workflow. No specific format required - just dump what you're focusing on, any blockers you're aware of, and anything you want Noa to know about your day's priorities.
 
-The agent reads your post + yesterday's EOD carry-overs + the morning inbox-triage summary in `#airwallexdrafts` when it exists, then builds the report automatically.
+The workflow reads your post + yesterday's EOD carry-overs + today's `Morning Triage` in `#airwallexdrafts`, validates that all three exist, then builds the report.
 
 ---
 
@@ -20,53 +20,63 @@ The agent reads your post + yesterday's EOD carry-overs + the morning inbox-tria
 
 | Source | What it provides |
 |---|---|
-| `#airwallexdrafts` — yesterday's EOD bot message | Carry-over from Yesterday + unresolved Blockers |
-| `#airwallexdrafts` — John's posts from today (before 9 AM) | Focus Goals + new Blockers |
-| `#airwallexdrafts` — today's `Morning Triage` bot message | BAU / Follow-ups from Inbox Triage Daily, plus inbox items that stayed `EA/Unsure` |
+| `#airwallexdrafts` - yesterday's EOD bot message | Carry-over from Yesterday + unresolved Blockers |
+| `#airwallexdrafts` - John's posts from today | Focus Goals + new Blockers |
+| `#airwallexdrafts` - today's `Morning Triage` bot message | BAU / Follow-ups from Inbox Triage Daily, plus inbox items that stayed `EA/Unsure` |
 
 ---
 
 ## Instructions (Manual Invoke)
 
-### Step 0 — Pull #airwallexdrafts
+### Step 0 - Pull #airwallexdrafts
 
 Use `mcp__slack__slack_get_channel_history` with `channel_id: C0AQZGJDR38`, limit: 100.
 
-Split messages into two groups:
+Split messages into three groups:
 
-**Group A — Yesterday's EOD** (bot message from yesterday containing "Today's Wrap-up")
-- Extract `Not Completed / Needs More Work / Planned Next Steps` → **Carry-over from Yesterday**
-- Extract `Blocker / Input Needed` → carry forward only if still unresolved
+**Group A - Yesterday's EOD** (bot message from yesterday containing "Today's Wrap-up")
+- Extract `Not Completed / Needs More Work / Planned Next Steps` -> **Carry-over from Yesterday**
+- Extract `Blocker / Input Needed` -> carry forward only if still unresolved
 
-**Group B — John's morning dump** (messages from `U0AM5EGRVTP` posted today before 9 AM GMT+8)
+**Group B - John's morning dump** (messages from `U0AM5EGRVTP` posted today before the run)
 - Use for **Focus Goals** and any additional **Blocker / Input Needed**
 
-**Group C — Today's inbox triage summary** (bot message from today containing "Morning Triage")
+**Group C - Today's inbox triage summary** (bot message from today containing "Morning Triage")
 - Use for **BAU / Follow-ups (Business As Usual)**
 - Pull forward any `Review These` items as candidate blockers or follow-ups when they still need human judgment
 
-### Step 1 — Collect additional context (manual only)
+### Step 1 - Validate required inputs
+
+All three sources are mandatory:
+
+- yesterday's EOD containing `Today's Wrap-up`
+- John's same-day morning dump
+- today's `Morning Triage`
+
+If any source is missing, stop and alert `#airwallexdrafts`. Do not draft or send a partial SOD report.
+
+### Step 2 - Collect additional context (manual only)
 
 Ask: "Anything to add before I send? (Focus goals, blockers, priorities not yet posted in #airwallexdrafts)" If nothing to add, proceed.
 
-### Step 2 — Format the message
+### Step 3 - Format the message
 
 Use this exact template:
 
 ```
-### ✍️ Today's Goals
+### Today's Goals
 
 **Focus Goals**
 - [from John's morning dump]
 
 **Carry-over from Yesterday**
-- [from yesterday's EOD Not Completed section — omit if none]
+- [from yesterday's EOD Not Completed section - omit if none]
 
 **Blocker / Input Needed**
 - [from John's dump + unresolved yesterday blockers]
 
 **BAU / Follow-ups (Business As Usual)**
-- [recurring ops inferred from context, including inbox triage follow-ups when available: pending invoices, IM8 agency check-ins, `Review These`, etc.]
+- [recurring ops inferred from validated context: pending invoices, IM8 agency check-ins, `Review These`, etc.]
 ```
 
 Rules:
@@ -74,14 +84,14 @@ Rules:
 - Flag time-sensitive items with `[URGENT]` or include deadline inline.
 - Group by business only if multi-business.
 - Omit any section with zero items.
-- If John posted no morning dump: note `John's morning goals not yet posted — carry-overs only.`
-- If no `Morning Triage` summary is found yet: continue without it. Do not block the report.
-- If no yesterday EOD found: note `No EOD data from yesterday.`
+- If John posted no morning dump: stop and alert. Do not send the report.
+- If no `Morning Triage` summary is found yet: stop and alert. Do not send the report.
+- If no yesterday EOD found: stop and alert. Do not send the report.
 
-### Step 3 — Send via Slack MCP
+### Step 4 - Send via Slack MCP
 
 Send to both recipients:
-- **Noa's DM:** `mcp__slack__slack_post_message` with `channel_id: U06TBGX9L93`
 - **#airwallexdrafts:** `mcp__slack__slack_post_message` with `channel_id: C0AQZGJDR38`
+- **Noa's DM:** `mcp__slack__slack_post_message` with `channel_id: U06TBGX9L93`
 
-Confirm `ts` returned for each — confirms delivery. If either send fails, output the formatted message for manual send.
+Confirm `ts` returned for each - confirms delivery. If either send fails, output the formatted message for manual send.

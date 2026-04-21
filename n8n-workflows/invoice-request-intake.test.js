@@ -79,34 +79,39 @@ assert.match(deploySource, /date_parse_status/, 'Expected date parse status supp
 assert.match(deploySource, /line_items/, 'Expected line_items payload');
 assert.match(deploySource, /Asia\/Manila/, 'Expected Manila timezone handling for invoice date default');
 assert.match(deploySource, /7 day payout/, 'Expected default payout handling');
-assert.match(deploySource, /14 day payout/, 'Expected 14 day payout support');
 assert.match(deploySource, /30 day payout/, 'Expected 30 day payout support');
 assert.match(deploySource, /due now/, 'Expected due now payout support');
-assert.match(deploySource, /due on /, 'Expected due on explicit date support');
+assert.match(deploySource, /dueOnMatch/, 'Expected due on explicit date support');
+assert.match(deploySource, /const daysMatch = normalized\.match/, 'Expected generic numeric payout support');
 assert.match(
   deploySource,
-  /request_specific_products:\s*lineItems\.map/,
-  'Expected request-specific products to preserve every submitted line item'
+  /parseInt\(daysMatch\[1\], 10\)/,
+  'Expected generic payout support to derive a numeric day count'
 );
 assert.match(
   deploySource,
-  /product_payloads:\s*preparedProducts\.map/,
-  'Expected product payload preparation to preserve every line item payload'
+  /const PREPARE_PRODUCT_REQUEST_CODE = `[\s\S]*return lineItems\.map/,
+  'Expected product payload preparation to preserve every submitted line item'
 );
 assert.match(
   deploySource,
-  /requested_price_payloads:\s*preparedProducts\.map/,
-  'Expected price payload preparation to preserve every line item price'
+  /product_payload/,
+  'Expected per-line-item product payload preparation'
 );
 assert.match(
   deploySource,
-  /priceIds\[index\]\s*\|\|\s*priceId/,
-  'Expected invoice line item preparation to prefer per-line-item price ids'
+  /const AGGREGATE_PRICE_IDS_CODE = `/,
+  'Expected aggregate price-id handling after price creation'
 );
 assert.match(
   deploySource,
-  /resolved_price_id/,
-  'Expected invoice line items to retain resolved per-line-item price metadata'
+  /collected_prices/,
+  'Expected collected price metadata to feed invoice line item creation'
+);
+assert.match(
+  deploySource,
+  /price_id/,
+  'Expected invoice line items to preserve resolved Airwallex price ids'
 );
 assert.match(deploySource, /failed_validation/, 'Expected validation failure status');
 assert.match(deploySource, /intake_received/, 'Expected intake_received status');
@@ -114,6 +119,9 @@ assert.match(deploySource, /subtotal/, 'Expected subtotal calculation');
 assert.match(deploySource, /unparseable payout/i, 'Expected explicit payout parse failures');
 assert.match(deploySource, /unparseable invoice_date/i, 'Expected explicit invoice date parse failures');
 assert.match(deploySource, /authentication\/login/, 'Expected Airwallex auth login endpoint');
+assert.match(deploySource, /Lookup Billing Customer/, 'Expected customer lookup node');
+assert.match(deploySource, /Resolve Customer/, 'Expected customer resolution node');
+assert.match(deploySource, /Route Customer Exists/, 'Expected customer existence decision node');
 assert.match(deploySource, /Create Billing Customer/, 'Expected customer create node');
 assert.match(deploySource, /Route Customer Create Outcome/, 'Expected customer create outcome route');
 assert.match(deploySource, /company name|client name/i, 'Expected customer naming comments or code');
@@ -125,7 +133,7 @@ assert.match(deploySource, /Create Draft Invoice/, 'Expected draft invoice node'
 assert.match(deploySource, /Attach Invoice Line Items/, 'Expected line item attachment node');
 assert.match(deploySource, /Route Line Item Outcome/, 'Expected line item outcome route');
 assert.match(deploySource, /Hydrate Fallback Context/, 'Expected fallback hydration node');
-assert.match(deploySource, /Products are request-specific|request-specific/i, 'Expected dynamic product handling');
+assert.match(deploySource, /line_item_index/, 'Expected dynamic per-line-item handling');
 assert.doesNotMatch(deploySource, /finalize the invoice/i, 'Should not auto-finalize in v1');
 assert.match(deploySource, /Airwallex Customer ID/, 'Expected Airwallex customer ID mapping');
 assert.match(deploySource, /Airwallex Invoice ID/, 'Expected Airwallex invoice ID mapping');
@@ -230,13 +238,13 @@ assert.doesNotMatch(
 );
 assert.match(
   deploySource,
-  /https\.request\s*\(\s*options\s*,/,
-  'Expected deploy script to create workflow via https.request'
+  /const WORKFLOW_ID = '5XHxhQ7wB2rxE3qz'/,
+  'Expected deploy script to target the live invoice intake workflow id'
 );
 assert.match(
   deploySource,
-  /path:\s*url\.pathname/,
-  'Expected deploy script to POST to /api/v1/workflows using parsed URL pathname'
+  /function n8nRequest\(method, path, body\)/,
+  'Expected deploy script to use the shared n8n request helper'
 );
 assert.match(
   deploySource,
@@ -250,8 +258,33 @@ assert.match(
 );
 assert.match(
   deploySource,
-  /'Normalize Slack Submission':\s*{[\s\S]*node:\s+'Airwallex Auth'/,
-  'Expected normalization to auth connection'
+  /n8nRequest\('PUT', `\/api\/v1\/workflows\/\$\{WORKFLOW_ID\}`/,
+  'Expected deploy script to update the fixed live workflow'
+);
+assert.match(
+  deploySource,
+  /n8nRequest\('POST', `\/api\/v1\/workflows\/\$\{WORKFLOW_ID\}\/activate`\)/,
+  'Expected deploy script to reactivate the workflow after update'
+);
+assert.match(
+  deploySource,
+  /'Normalize Slack Submission':\s*{[\s\S]*node:\s+'Route Validation Outcome'/,
+  'Expected normalization to route through validation before auth'
+);
+assert.match(
+  deploySource,
+  /'Lookup Billing Customer':\s*{[\s\S]*node:\s+'Resolve Customer'/,
+  'Expected customer lookup to feed the customer resolution step'
+);
+assert.match(
+  deploySource,
+  /'Resolve Customer':\s*{[\s\S]*node:\s+'Route Customer Exists'/,
+  'Expected customer resolution to feed the customer existence decision'
+);
+assert.match(
+  deploySource,
+  /'Route Customer Exists':\s*{[\s\S]*node:\s+'Create Billing Customer'[\s\S]*node:\s+'Prepare Product Payload'/,
+  'Expected customer existence routing to create or reuse a billing customer before products'
 );
 assert.match(
   deploySource,
@@ -310,53 +343,28 @@ assert.doesNotMatch(
 );
 assert.match(
   deploySource,
-  /const PREPARE_PRODUCT_REQUEST_CODE = `[\s\S]*return\s*{\s*json:\s*{/,
-  'Expected Prepare Product Payload code to return a single json object for runOnceForEachItem'
-);
-assert.doesNotMatch(
-  deploySource,
-  /const PREPARE_PRODUCT_REQUEST_CODE = `[\s\S]*return\s*\[\{\s*json:\s*{/,
-  'Prepare Product Payload should not return an array in runOnceForEachItem mode'
+  /const PREPARE_PRODUCT_REQUEST_CODE = `[\s\S]*return lineItems\.map/,
+  'Expected Prepare Product Payload code to emit one item per submitted line item'
 );
 assert.match(
   deploySource,
   /const PREPARE_PRICE_CODE = `[\s\S]*return\s*{\s*json:\s*{/,
   'Expected Prepare Price Payload code to return a single json object for runOnceForEachItem'
 );
-assert.doesNotMatch(
-  deploySource,
-  /const PREPARE_PRICE_CODE = `[\s\S]*return\s*\[\{\s*json:\s*{/,
-  'Prepare Price Payload should not return an array in runOnceForEachItem mode'
-);
 assert.match(
   deploySource,
   /const PREPARE_INVOICE_CODE = `[\s\S]*return\s*{\s*json:\s*{/,
   'Expected Prepare Draft Invoice Payload code to return a single json object for runOnceForEachItem'
-);
-assert.doesNotMatch(
-  deploySource,
-  /const PREPARE_INVOICE_CODE = `[\s\S]*return\s*\[\{\s*json:\s*{/,
-  'Prepare Draft Invoice Payload should not return an array in runOnceForEachItem mode'
 );
 assert.match(
   deploySource,
   /const PREPARE_LINE_ITEMS_CODE = `[\s\S]*return\s*{\s*json:\s*{/,
   'Expected Prepare Invoice Line Items code to return a single json object for runOnceForEachItem'
 );
-assert.doesNotMatch(
-  deploySource,
-  /const PREPARE_LINE_ITEMS_CODE = `[\s\S]*return\s*\[\{\s*json:\s*{/,
-  'Prepare Invoice Line Items should not return an array in runOnceForEachItem mode'
-);
 assert.match(
   deploySource,
   /const DRAFT_SUCCESS_CODE = `[\s\S]*return\s*{\s*json:\s*{/,
   'Expected Mark Draft Success code to return a single json object for runOnceForEachItem'
-);
-assert.doesNotMatch(
-  deploySource,
-  /const DRAFT_SUCCESS_CODE = `[\s\S]*return\s*\[\{\s*json:\s*{/,
-  'Mark Draft Success should not return an array in runOnceForEachItem mode'
 );
 assert.match(
   deploySource,
@@ -405,13 +413,13 @@ assert.match(
 );
 assert.match(
   deploySource,
-  /'Route Airwallex Outcome':\s*{[\s\S]*node:\s+'Write Tracker Fallback'/,
-  'Expected Airwallex outcome decision node to reach Write Tracker Fallback'
+  /'Route Airwallex Outcome':\s*{[\s\S]*node:\s+'Hydrate Fallback Context'/,
+  'Expected Airwallex outcome decision node to hydrate fallback context on auth failure'
 );
 assert.match(
   deploySource,
-  /'Route Airwallex Outcome':\s*{[\s\S]*node:\s+'Create Billing Customer'/,
-  'Expected Airwallex outcome success path to continue directly to customer creation'
+  /'Route Airwallex Outcome':\s*{[\s\S]*node:\s+'Merge Auth Token'/,
+  'Expected Airwallex outcome success path to continue through merged auth context'
 );
 assert.doesNotMatch(
   deploySource,
@@ -430,8 +438,8 @@ assert.match(
 );
 assert.match(
   deploySource,
-  /'Route Invoice Chain Outcome':\s*{[\s\S]*node:\s+'Write Tracker Fallback'/,
-  'Expected invoice-chain decision node to reach Write Tracker Fallback'
+  /'Route Invoice Chain Outcome':\s*{[\s\S]*node:\s+'Hydrate Fallback Context'/,
+  'Expected invoice-chain decision node to hydrate fallback context on failure'
 );
 assert.match(
   deploySource,

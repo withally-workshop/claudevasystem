@@ -177,7 +177,8 @@ const workflow = {
         authentication: 'none', sendHeaders: true,
         headerParameters: { parameters: [
           { name: 'Authorization', value: AW_BEARER },
-          { name: 'Content-Type', value: 'application/json' }
+          { name: 'Content-Type', value: 'application/json' },
+          { name: 'x-api-version', value: '2025-06-16' }
         ]},
         sendBody: false, options: {}
       }
@@ -247,41 +248,52 @@ const workflow = {
   }
 };
 
-const body = JSON.stringify(workflow);
-const url = new URL(N8N_URL + '/api/v1/workflows');
-
-const options = {
-  hostname: url.hostname,
-  path: url.pathname,
-  method: 'POST',
-  headers: {
-    'X-N8N-API-KEY': API_KEY,
-    'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(body)
-  }
-};
-
-const req = https.request(options, (res) => {
-  let data = '';
-  res.on('data', chunk => data += chunk);
-  res.on('end', () => {
-    try {
-      const result = JSON.parse(data);
-      if (result.id) {
-        console.log('SUCCESS');
-        console.log('Workflow ID:', result.id);
-        console.log('Name:', result.name);
-        console.log('URL: https://noatakhel.app.n8n.cloud/workflow/' + result.id);
-      } else {
-        console.log('ERROR response:');
-        console.log(JSON.stringify(result, null, 2).substring(0, 2000));
-      }
-    } catch(e) {
-      console.log('Parse error. Raw response:');
-      console.log(data.substring(0, 1000));
-    }
+function n8nRequest(method, path, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : '';
+    const u = new URL(N8N_URL + path);
+    const opts = {
+      hostname: u.hostname,
+      path: u.pathname + u.search,
+      method,
+      headers: {
+        'X-N8N-API-KEY': API_KEY,
+        'Content-Type': 'application/json',
+        ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+      },
+    };
+    const req = https.request(opts, (res) => {
+      let data = '';
+      res.on('data', (c) => (data += c));
+      res.on('end', () => {
+        try { resolve(JSON.parse(data || '{}')); } catch { resolve({}); }
+      });
+    });
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
   });
-});
-req.on('error', e => console.error('Request error:', e.message));
-req.write(body);
-req.end();
+}
+
+async function deploy() {
+  const list = await n8nRequest('GET', `/api/v1/workflows?name=${encodeURIComponent(workflow.name)}&limit=250`);
+  const existing = (list.data || []).find((w) => w.name === workflow.name && w.active !== null);
+  let result;
+  if (existing) {
+    result = await n8nRequest('PUT', `/api/v1/workflows/${existing.id}`, workflow);
+    if (!result.id) result = await n8nRequest('POST', '/api/v1/workflows', workflow);
+  } else {
+    result = await n8nRequest('POST', '/api/v1/workflows', workflow);
+  }
+  if (!result.id) {
+    console.log('ERROR:', JSON.stringify(result, null, 2).substring(0, 2000));
+    return;
+  }
+  await n8nRequest('POST', `/api/v1/workflows/${result.id}/activate`);
+  console.log('SUCCESS');
+  console.log('Workflow ID:', result.id);
+  console.log('Name:', result.name);
+  console.log('URL: https://noatakhel.app.n8n.cloud/workflow/' + result.id);
+}
+
+deploy().catch((e) => console.error('Deploy failed:', e.message));

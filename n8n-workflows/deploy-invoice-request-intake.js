@@ -2,6 +2,7 @@ const https = require('https');
 
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiMTkwMWE5My02ZjJjLTRlNzEtOWI4ZC02ZjlhMzVhMjU4NzUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiZjBlZjk1YTYtYzc2MS00Zjc2LWJkZTgtMWU1Y2FiN2UxMjcxIiwiaWF0IjoxNzc2NjY1NjMxfQ.uBo2H0dzui9S0_MktoRxdodKzzE58vcQtXSlu8VpcEY';
+const WORKFLOW_ID = '5XHxhQ7wB2rxE3qz';
 const FALLBACK_STATUS = 'fallback_manual_required';
 const DRAFT_SUCCESS_NOTE = 'draft invoice created';
 const DRAFT_REVIEW_STATUS = 'Draft - Pending John Review';
@@ -16,7 +17,7 @@ const SUCCESS_TRACKER_COLUMNS = {
   'Email Address': '={{ $json.client_email || "" }}',
   'Project Description':
     '={{ (($json.memo || "Structured Slack modal intake") + " | Billing Address: " + ($json.billing_address || "none provided") + " | Invoice Date: " + ($json.invoice_date || "needs review") + " | Payout: " + ($json.payout_raw || "7 day payout") + " | Due Date: " + ($json.due_date || "needs review") + " | Structured Slack modal").slice(0, 500) }}',
-  'Invoice #': '={{ $json.airwallex_invoice_id || $json.request_id }}',
+  'Invoice #': '={{ $json.airwallex_invoice_number || $json.airwallex_invoice_id || $json.request_id }}',
   'Airwallex Customer ID': '={{ $json.airwallex_customer_id }}',
   'Airwallex Invoice ID': '={{ $json.airwallex_invoice_id }}',
   Amount: '={{ $json.subtotal }}',
@@ -26,7 +27,7 @@ const SUCCESS_TRACKER_COLUMNS = {
   'Requested By': '={{ $json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id }}',
 };
 const REQUESTER_SUCCESS_TEXT =
-  "={{ 'Invoice request received. Airwallex draft invoice was created for ' + $json.client_name + ' (' + $json.currency + ' ' + $json.subtotal + '). Invoice Date: ' + $json.invoice_date + '. Payout: ' + ($json.payout_raw || '7 day payout') + '. Due Date: ' + $json.due_date + '. Request ID: ' + $json.request_id }}";
+  "={{ 'Invoice request received. Airwallex draft invoice was created for ' + $('Mark Draft Success').item.json.client_name + ' (' + $('Mark Draft Success').item.json.currency + ' ' + $('Mark Draft Success').item.json.subtotal + '). Invoice Date: ' + $('Mark Draft Success').item.json.invoice_date + '. Payout: ' + ($('Mark Draft Success').item.json.payout_raw || '7 day payout') + '. Due Date: ' + $('Mark Draft Success').item.json.due_date + '. Request ID: ' + $('Mark Draft Success').item.json.request_id }}";
 const FALLBACK_TRACKER_COLUMNS = {
   'Date Created': '={{ $json.submitted_at }}',
   'Client Name': '={{ $json.client_name }}',
@@ -42,11 +43,15 @@ const FALLBACK_TRACKER_COLUMNS = {
   Status: FALLBACK_STATUS,
   'Requested By': '={{ $json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id }}',
 };
+const ORIGIN_CHANNEL_SUCCESS_TEXT =
+  "={{ '✅ Invoice draft created for *' + $('Mark Draft Success').item.json.client_name + '*\\n• Amount: ' + $('Mark Draft Success').item.json.currency + ' ' + $('Mark Draft Success').item.json.subtotal + '\\n• Invoice #: ' + ($('Mark Draft Success').item.json.airwallex_invoice_number || $('Mark Draft Success').item.json.airwallex_invoice_id) + '\\n• Due: ' + $('Mark Draft Success').item.json.due_date + '\\n• Status: Draft — pending John review in Airwallex' }}";
+
 const REQUESTER_FALLBACK_TEXT =
   "={{ 'Invoice request received for ' + $json.client_name + '. Manual Airwallex creation required. Invoice Date: ' + ($json.invoice_date || 'needs review') + '. Payout: ' + ($json.payout_raw || '7 day payout') + '. Due Date: ' + ($json.due_date || 'needs review') + '. Request ID: ' + $json.request_id }}";
 const LINE_ITEMS_PAYLOAD_LABEL = 'Line Items Payload';
 const JOHN_DM_TEXT =
   "={{ 'Invoice intake fallback\\nRequest ID: ' + $json.request_id + '\\nClient: ' + $json.client_name + '\\nRequester: ' + ($json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id) + '\\nInvoice Date: ' + ($json.invoice_date || 'needs review') + '\\nPayout: ' + ($json.payout_raw || '7 day payout') + '\\nDue Date: ' + ($json.due_date || 'needs review') + '\\nSubtotal: ' + $json.currency + ' ' + $json.subtotal + '\\nFailure stage: ' + $json.failure_stage + '\\nFailure reason: ' + $json.failure_reason + '\\n' + '" + LINE_ITEMS_PAYLOAD_LABEL + ": ' + JSON.stringify($json.line_items) }}";
+const LINKED_PAYMENT_ACCOUNT_ID = '098284a3-e595-4c5c-a0bf-dabd4c8b97ec';
 const AIRWALLEX_CLIENT_ID = 'JaQA4uJ1SDSBkTdFigT9sw';
 const AIRWALLEX_API_KEY = '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af5c91666f50b10ee64fd87fa3db7435e8dc5c07721';
 const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
@@ -127,19 +132,15 @@ function parseExplicitDate(input, todayIso) {
 
 function parsePayout(rawValue, invoiceDateIso, todayIso) {
   const raw = String(rawValue || '').trim();
-  const normalized = (raw || '7 day payout').toLowerCase();
+  const normalized = (raw || '7 day payout').toLowerCase().replace(/\s+/g, ' ');
 
-  // Supported payout phrases: 7 day payout, 14 day payout, 30 day payout, due now, due on <date>.
+  // Handles: "7", "30", "7 days", "30 days", "7 day payout", "30 day payout"
+  const daysMatch = normalized.match(/^(\\d+)(\\s+days?(\\s+payout)?)?$/);
+  if (daysMatch) {
+    const days = parseInt(daysMatch[1], 10);
+    return { ok: true, payout_raw: days + ' day payout', due_date: addDays(invoiceDateIso, days) };
+  }
 
-  if (normalized === '7 day payout') {
-    return { ok: true, payout_raw: raw || '7 day payout', due_date: addDays(invoiceDateIso, 7) };
-  }
-  if (normalized === '14 day payout') {
-    return { ok: true, payout_raw: raw, due_date: addDays(invoiceDateIso, 14) };
-  }
-  if (normalized === '30 day payout') {
-    return { ok: true, payout_raw: raw, due_date: addDays(invoiceDateIso, 30) };
-  }
   if (normalized === 'due now') {
     return { ok: true, payout_raw: raw, due_date: invoiceDateIso };
   }
@@ -179,13 +180,14 @@ const resolvedClientName = payload.client_name_or_company_name || payload.client
 const baseRequest = {
   request_id: requestId,
   submitted_at: new Date().toISOString(),
+  origin_channel_id: payload.origin_channel_id || '',
   submitted_by_slack_user_id: payload.submitted_by_slack_user_id || '',
   submitted_by_slack_user_name: payload.submitted_by_slack_user_name || '',
   client_name_or_company_name: resolvedClientName,
   company_name: resolvedClientName,
   client_name: resolvedClientName,
   billing_address: payload.billing_address || '',
-  client_email: '',
+  client_email: payload.client_email || '',
   currency: payload.currency || '',
   payout_raw: payoutResult.payout_raw || '7 day payout',
   invoice_date_input: invoiceDateInput,
@@ -228,151 +230,123 @@ return [{
 }];
 `.trim();
 
-const PREPARE_PRODUCT_CODE = `
-const request = $json;
-
-// Products are request-specific because invoice line items vary per submission.
-const lineItems = Array.isArray(request.line_items) ? request.line_items : [];
-
-return [{
-  json: {
-    ...request,
-    current_line_item: lineItems[0] || {},
-    line_item_count: lineItems.length,
-    request_specific_products: lineItems.map((item, index) => ({
-      request_id: request.request_id,
-      line_index: index,
-      description: item.description || 'Invoice line item',
-      quantity: Number(item.quantity || 0),
-      unit_price: Number(item.unit_price || 0),
-      currency: request.currency,
-      product_name: (request.client_name || request.company_name || 'Client') + ' item ' + (index + 1),
-      memo: request.memo || '',
-    })),
-  }
-}];
-`.trim();
-
 const PREPARE_PRODUCT_REQUEST_CODE = `
-const preparedProducts = Array.isArray($json.request_specific_products) ? $json.request_specific_products : [];
-const firstProduct = preparedProducts[0] || {};
+const customerId = $json.airwallex_customer_id || '';
+const ctx = $('Merge Auth Token').item.json;
+const lineItems = Array.isArray(ctx.line_items) ? ctx.line_items : [];
 
-return {
+return lineItems.map((item, index) => ({
   json: {
-    ...$json,
-    product_payloads: preparedProducts.map((product) => ({
-      active: true,
-      name: product.product_name || 'Invoice line item',
-      description: product.description || 'Invoice line item',
-      request_id: $json.request_id,
-      metadata: {
-        line_index: product.line_index,
-        quantity: product.quantity,
-        unit_price: product.unit_price,
-        currency: product.currency,
-      },
-    })),
+    ...ctx,
+    airwallex_customer_id: customerId,
+    line_item_index: index,
+    line_item: item,
     product_payload: {
       active: true,
-      name: firstProduct.product_name || 'Invoice line item',
-      description: firstProduct.description || 'Invoice line item',
-      request_id: $json.request_id,
+      name: (ctx.client_name || 'Client') + ' — ' + (item.description || ('Item ' + (index + 1))),
+      description: item.description || 'Invoice line item',
+      request_id: (ctx.request_id || '') + '_prod_' + index,
     }
   }
-};
+}));
 `.trim();
 
 const PREPARE_PRICE_CODE = `
-const preparedProducts = Array.isArray($json.request_specific_products) ? $json.request_specific_products : [];
-const firstProduct = preparedProducts[0] || {};
-const productBody = $json.body && $json.body.id ? $json.body : {};
-const productIds = Array.isArray($json.airwallex_product_ids) ? $json.airwallex_product_ids : [];
+const ctx = $('Merge Auth Token').item.json;
+const productId = $json.id || '';
+const prepProduct = $('Prepare Product Payload').item.json;
+const lineItem = prepProduct.line_item || {};
 
 return {
   json: {
-    ...$json,
-    active_product: firstProduct,
-    requested_price_payloads: preparedProducts.map((product, index) => ({
-      currency: $json.currency,
-      product_id: productIds[index] || $json.airwallex_product_id || productBody.id || '',
-      pricing_model: 'PER_UNIT',
-      billing_type: 'IN_ADVANCE',
-      unit_amount: product.unit_price || 0,
-      recurring: null,
-      resolved_price_id_hint: '',
-      metadata: {
-        line_index: product.line_index,
-        quantity: product.quantity,
-        description: product.description || 'Invoice line item',
-      },
-    })),
+    ...ctx,
+    airwallex_customer_id: prepProduct.airwallex_customer_id || '',
+    line_item_index: prepProduct.line_item_index || 0,
+    line_item: lineItem,
+    airwallex_product_id: productId,
     price_payload: {
-      currency: $json.currency,
-      product_id: $json.airwallex_product_id || productBody.id || '',
+      currency: ctx.currency,
+      product_id: productId,
       pricing_model: 'PER_UNIT',
       billing_type: 'IN_ADVANCE',
-      unit_amount: firstProduct.unit_price || 0,
+      unit_amount: lineItem.unit_price || 0,
       recurring: null,
+      request_id: (ctx.request_id || '') + '_price_' + (prepProduct.line_item_index || 0),
     }
   }
 };
 `.trim();
 
+const RESOLVE_CUSTOMER_CODE = `
+const ctx = $('Merge Auth Token').item.json;
+const items = Array.isArray($json.items) ? $json.items : [];
+const clientName = (ctx.client_name || '').toLowerCase().trim();
+const found = items.find(c => (c.name || '').toLowerCase().trim() === clientName);
+return { json: { ...ctx, airwallex_customer_id: found ? found.id : '' } };
+`.trim();
+
+const SET_CUSTOMER_ID_CODE = `
+const ctx = $('Merge Auth Token').item.json;
+return { json: { ...ctx, airwallex_customer_id: $json.id || '' } };
+`.trim();
+
+const AGGREGATE_PRICE_IDS_CODE = `
+const allPriceResults = $input.all();
+const ctx = $('Merge Auth Token').first().json;
+const prepProductCtx = $('Prepare Product Payload').first().json;
+const customerId = prepProductCtx.airwallex_customer_id || '';
+let prepPriceItems = [];
+try { prepPriceItems = $items('Prepare Price Payload', 0, 0) || []; } catch(e) {}
+
+const collectedPrices = allPriceResults.map((item, i) => ({
+  price_id: item.json.id,
+  quantity: (prepPriceItems[i] && prepPriceItems[i].json.line_item && prepPriceItems[i].json.line_item.quantity) || 1,
+}));
+
+return [{ json: { ...ctx, airwallex_customer_id: customerId, collected_prices: collectedPrices } }];
+`.trim();
+
 const PREPARE_INVOICE_CODE = `
-const candidates = Array.isArray($json.customer_candidates) ? $json.customer_candidates : [];
-const existingCustomer = candidates.length === 1 ? candidates[0] : null;
-const createdCustomer = $json.body && $json.body.id ? $json.body : $json;
-const resolvedCustomerId =
-  $json.airwallex_customer_id ||
-  existingCustomer?.id ||
-  createdCustomer.id ||
-  '';
+const ctx = $('Merge Auth Token').item.json;
+const customerId = $json.airwallex_customer_id || ctx.airwallex_customer_id || '';
+const collectedPrices = $json.collected_prices || [];
 
 return {
   json: {
-    ...$json,
-    airwallex_customer_id: resolvedCustomerId,
+    ...ctx,
+    airwallex_customer_id: customerId,
+    collected_prices: collectedPrices,
     invoice_payload: {
-      billing_customer_id: resolvedCustomerId,
-      currency: $json.currency,
-      collection_method: 'OUT_OF_BAND',
-      days_until_due: $json.days_until_due,
-      memo: ($json.memo || '') + ' | Invoice Date: ' + $json.invoice_date + ' | Payout: ' + ($json.payout_raw || '7 day payout') + ' | Due Date: ' + $json.due_date,
-      request_id: $json.request_id,
+      billing_customer_id: customerId,
+      currency: ctx.currency,
+      collection_method: 'CHARGE_ON_CHECKOUT',
+      linked_payment_account_id: '098284a3-e595-4c5c-a0bf-dabd4c8b97ec',
+      days_until_due: ctx.days_until_due,
+      memo: (ctx.memo || '') + ' | Invoice Date: ' + ctx.invoice_date + ' | Payout: ' + (ctx.payout_raw || '7 day payout') + ' | Due Date: ' + ctx.due_date,
+      request_id: ctx.request_id,
     }
   }
 };
 `.trim();
 
 const PREPARE_LINE_ITEMS_CODE = `
-const request = $json;
-const invoiceBody = request.body && request.body.id ? request.body : {};
-const invoiceId = request.airwallex_invoice_id || invoiceBody.id || request.invoice_payload?.invoice_id || '';
-const lineItems = Array.isArray(request.line_items) ? request.line_items : [];
-const priceBody = request.price_body && request.price_body.id ? request.price_body : {};
-const priceId = request.airwallex_price_id || priceBody.id || '';
-const priceIds = Array.isArray(request.airwallex_price_ids)
-  ? request.airwallex_price_ids
-  : Array.isArray(request.requested_price_payloads)
-    ? request.requested_price_payloads.map((item) => item.resolved_price_id_hint || '')
-    : [];
-const preparedLineItems = lineItems.map((item, index) => ({
-  source_line_index: index,
-  description: item.description || 'Invoice line item',
-  quantity: Number(item.quantity || 0),
-  unit_price: Number(item.unit_price || 0),
-  resolved_price_id: priceIds[index] || priceId,
-}));
+const ctx = $('Merge Auth Token').item.json;
+const invoiceId = $json.id || '';
+const invoiceNumber = $json.invoice_number || '';
+const aggregated = $('Aggregate Price IDs').item.json;
+const collectedPrices = aggregated.collected_prices || [];
 
 return {
   json: {
-    ...request,
+    ...ctx,
     airwallex_invoice_id: invoiceId,
-    prepared_line_items: preparedLineItems,
+    airwallex_invoice_number: invoiceNumber,
+    collected_prices: collectedPrices,
     add_line_items_payload: {
-      line_items: preparedLineItems.map((item, index) => ({
-        price_id: item.resolved_price_id,
-        quantity: item.quantity,
+      request_id: (ctx.request_id || '') + '_items',
+      line_items: collectedPrices.map((price, index) => ({
+        price_id: price.price_id,
+        quantity: price.quantity || 1,
         sequence: index + 1,
       }))
     }
@@ -381,12 +355,12 @@ return {
 `.trim();
 
 const DRAFT_SUCCESS_CODE = `
+const ctx = $('Prepare Invoice Line Items').item.json;
 return {
   json: {
-    ...$json,
-    airwallex_customer_id: $json.airwallex_customer_id || ($json.invoice_payload && $json.invoice_payload.billing_customer_id) || '',
-    airwallex_product_id: $json.airwallex_product_id || (($json.body && $json.body.id) || ''),
-    airwallex_invoice_id: $json.airwallex_invoice_id || ($json.body && $json.body.id) || '',
+    ...ctx,
+    airwallex_invoice_id: ctx.airwallex_invoice_id || $json.id || '',
+    airwallex_invoice_number: ctx.airwallex_invoice_number || $json.invoice_number || '',
     status: 'airwallex_created',
     success_note: '${DRAFT_SUCCESS_NOTE}',
   }
@@ -482,11 +456,73 @@ const workflow = {
       },
     },
     {
+      id: 'n_merge_auth',
+      name: 'Merge Auth Token',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1030, 260],
+      parameters: {
+        mode: 'runOnceForEachItem',
+        jsCode: `const normalized = $('Normalize Slack Submission').item.json;\nreturn { json: { ...normalized, token: $json.token } };`,
+      },
+    },
+    {
+      id: 'n_lookup_customer',
+      name: 'Lookup Billing Customer',
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
+      position: [1150, 260],
+      continueOnFail: true,
+      parameters: {
+        method: 'GET',
+        url: 'https://api.airwallex.com/api/v1/billing_customers',
+        sendHeaders: true,
+        headerParameters: {
+          parameters: [
+            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
+            { name: 'x-api-version', value: '2025-06-16' },
+          ],
+        },
+        sendQuery: true,
+        queryParameters: {
+          parameters: [{ name: 'name', value: '={{ $json.client_name }}' }],
+        },
+        options: {},
+      },
+    },
+    {
+      id: 'n_resolve_customer',
+      name: 'Resolve Customer',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1280, 260],
+      parameters: { mode: 'runOnceForEachItem', jsCode: RESOLVE_CUSTOMER_CODE },
+    },
+    {
+      id: 'n_route_customer_exists',
+      name: 'Route Customer Exists',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.2,
+      position: [1410, 260],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, typeValidation: 'strict', version: 2 },
+          conditions: [{
+            id: 'customer-id-empty-check',
+            leftValue: '={{ $json.airwallex_customer_id }}',
+            rightValue: '',
+            operator: { type: 'string', operation: 'equals' },
+          }],
+          combinator: 'and',
+        },
+      },
+    },
+    {
       id: 'n6',
       name: 'Create Billing Customer',
       type: 'n8n-nodes-base.httpRequest',
       typeVersion: 4.2,
-      position: [1140, 260],
+      position: [1560, 180],
       continueOnFail: true,
       parameters: {
         method: 'POST',
@@ -494,15 +530,24 @@ const workflow = {
         sendHeaders: true,
         headerParameters: {
           parameters: [
-            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
+            { name: 'Authorization', value: '={{ "Bearer " + $("Merge Auth Token").item.json.token }}' },
             { name: 'Content-Type', value: 'application/json' },
+            { name: 'x-api-version', value: '2025-06-16' },
           ],
         },
         sendBody: true,
         specifyBody: 'json',
         jsonBody:
-          '={{ { name: $json.company_name || $json.client_name, default_billing_currency: $json.currency, request_id: $json.request_id } }}',
+          '={{ { name: $json.company_name || $json.client_name, email: $json.client_email || undefined, default_billing_currency: $json.currency, request_id: ($json.request_id || "") + "_cust" } }}',
       },
+    },
+    {
+      id: 'n_set_customer_id',
+      name: 'Set Customer ID',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1700, 180],
+      parameters: { mode: 'runOnceForEachItem', jsCode: SET_CUSTOMER_ID_CODE },
     },
     {
       id: 'n7',
@@ -517,8 +562,9 @@ const workflow = {
         sendHeaders: true,
         headerParameters: {
           parameters: [
-            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
+            { name: 'Authorization', value: '={{ "Bearer " + $("Merge Auth Token").item.json.token }}' },
             { name: 'Content-Type', value: 'application/json' },
+            { name: 'x-api-version', value: '2025-06-16' },
           ],
         },
         sendBody: true,
@@ -550,8 +596,9 @@ const workflow = {
         sendHeaders: true,
         headerParameters: {
           parameters: [
-            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
+            { name: 'Authorization', value: '={{ "Bearer " + $("Merge Auth Token").item.json.token }}' },
             { name: 'Content-Type', value: 'application/json' },
+            { name: 'x-api-version', value: '2025-06-16' },
           ],
         },
         sendBody: true,
@@ -572,8 +619,9 @@ const workflow = {
         sendHeaders: true,
         headerParameters: {
           parameters: [
-            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
+            { name: 'Authorization', value: '={{ "Bearer " + $("Merge Auth Token").item.json.token }}' },
             { name: 'Content-Type', value: 'application/json' },
+            { name: 'x-api-version', value: '2025-06-16' },
           ],
         },
         sendBody: true,
@@ -594,8 +642,9 @@ const workflow = {
         sendHeaders: true,
         headerParameters: {
           parameters: [
-            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
+            { name: 'Authorization', value: '={{ "Bearer " + $("Merge Auth Token").item.json.token }}' },
             { name: 'Content-Type', value: 'application/json' },
+            { name: 'x-api-version', value: '2025-06-16' },
           ],
         },
         sendBody: true,
@@ -653,7 +702,8 @@ const workflow = {
       parameters: {
         resource: 'message',
         operation: 'post',
-        channel: REQUESTER_SLACK_FALLBACK_CHANNEL,
+        select: 'channel',
+        channelId: { __rl: true, value: '={{ $json.submitted_by_slack_user_id || "" }}', mode: 'id' },
         text: REQUESTER_SUCCESS_TEXT,
         otherOptions: {},
       },
@@ -668,9 +718,9 @@ const workflow = {
       parameters: {
         resource: 'message',
         operation: 'post',
-        channel: JOHN_DM_CHANNEL,
+        select: 'channel',
+        channelId: { __rl: true, value: JOHN_DM_CHANNEL, mode: 'id' },
         text: JOHN_DM_TEXT,
-        fallbackText: REQUESTER_FALLBACK_TEXT,
         otherOptions: {},
       },
     },
@@ -684,6 +734,14 @@ const workflow = {
         mode: 'runOnceForEachItem',
         jsCode: PREPARE_PRODUCT_REQUEST_CODE,
       },
+    },
+    {
+      id: 'n_aggregate_prices',
+      name: 'Aggregate Price IDs',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [2020, 380],
+      parameters: { mode: 'runOnceForAllItems', jsCode: AGGREGATE_PRICE_IDS_CODE },
     },
     {
       id: 'n17',
@@ -845,8 +903,8 @@ const workflow = {
             },
             {
               id: 'invoice-id-check',
-              leftValue: '={{ ($json.body && $json.body.id) || $json.airwallex_invoice_id || "" }}',
-              rightValue: '',
+              leftValue: '={{ $json.error ? "error" : "" }}',
+              rightValue: 'error',
               operator: {
                 type: 'string',
                 operation: 'equals',
@@ -970,6 +1028,22 @@ const workflow = {
       },
     },
     {
+      id: 'n29',
+      name: 'Post Origin Channel Success',
+      type: 'n8n-nodes-base.slack',
+      typeVersion: 2.3,
+      position: [3120, 220],
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        resource: 'message',
+        operation: 'post',
+        select: 'channel',
+        channelId: { __rl: true, value: '={{ $("Mark Draft Success").item.json.origin_channel_id || $("Mark Draft Success").item.json.submitted_by_slack_user_id }}', mode: 'id' },
+        text: ORIGIN_CHANNEL_SUCCESS_TEXT,
+        otherOptions: {},
+      },
+    },
+    {
       id: 'n28',
       name: 'Hydrate Fallback Context',
       type: 'n8n-nodes-base.code',
@@ -982,149 +1056,113 @@ const workflow = {
     },
   ],
   connections: {
-    'Webhook Trigger': {
-      main: [[{ node: 'Normalize Slack Submission', type: 'main', index: 0 }]],
-    },
-    'Normalize Slack Submission': {
-      main: [[{ node: 'Route Validation Outcome', type: 'main', index: 0 }]],
-    },
-    'Route Validation Outcome': {
-      main: [
-        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
-        [{ node: 'Airwallex Auth', type: 'main', index: 0 }],
-      ],
-    },
-    'Airwallex Auth': {
-      main: [[{ node: 'Route Airwallex Outcome', type: 'main', index: 0 }]],
-    },
-    'Route Airwallex Outcome': {
-      main: [
-        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
-        [{ node: 'Create Billing Customer', type: 'main', index: 0 }],
-      ],
-    },
-    'Create Billing Customer': {
-      main: [[{ node: 'Route Customer Create Outcome', type: 'main', index: 0 }]],
-    },
-    'Route Customer Create Outcome': {
-      main: [
-        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
-        [{ node: 'Prepare Product Payload', type: 'main', index: 0 }],
-      ],
-    },
-    'Prepare Product Payload': {
-      main: [[{ node: 'Create Products', type: 'main', index: 0 }]],
-    },
-    'Create Products': {
-      main: [[{ node: 'Route Product Create Outcome', type: 'main', index: 0 }]],
-    },
-    'Route Product Create Outcome': {
-      main: [
-        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
-        [{ node: 'Prepare Price Payload', type: 'main', index: 0 }],
-      ],
-    },
-    'Prepare Price Payload': {
-      main: [[{ node: 'Create Prices', type: 'main', index: 0 }]],
-    },
-    'Create Prices': {
-      main: [[{ node: 'Route Price Create Outcome', type: 'main', index: 0 }]],
-    },
-    'Route Price Create Outcome': {
-      main: [
-        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
-        [{ node: 'Prepare Draft Invoice Payload', type: 'main', index: 0 }],
-      ],
-    },
-    'Prepare Draft Invoice Payload': {
-      main: [[{ node: 'Create Draft Invoice', type: 'main', index: 0 }]],
-    },
-    'Create Draft Invoice': {
-      main: [[{ node: 'Route Invoice Chain Outcome', type: 'main', index: 0 }]],
-    },
-    'Route Invoice Chain Outcome': {
-      main: [
-        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
-        [{ node: 'Prepare Invoice Line Items', type: 'main', index: 0 }],
-      ],
-    },
-    'Prepare Invoice Line Items': {
-      main: [[{ node: 'Attach Invoice Line Items', type: 'main', index: 0 }]],
-    },
-    'Attach Invoice Line Items': {
-      main: [[{ node: 'Route Line Item Outcome', type: 'main', index: 0 }]],
-    },
-    'Route Line Item Outcome': {
-      main: [
-        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
-        [{ node: 'Mark Draft Success', type: 'main', index: 0 }],
-      ],
-    },
-    'Mark Draft Success': {
-      main: [[{ node: 'Route Fallback Outcome', type: 'main', index: 0 }]],
-    },
-    'Route Fallback Outcome': {
-      main: [
-        [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
-        [{ node: 'Write Tracker Success', type: 'main', index: 0 }],
-      ],
-    },
-    'Hydrate Fallback Context': {
-      main: [[
-        { node: 'Write Tracker Fallback', type: 'main', index: 0 },
-        { node: 'DM John Failure Alert', type: 'main', index: 0 },
-      ]],
-    },
-    'Write Tracker Success': {
-      main: [[{ node: 'Requester Success Confirmation', type: 'main', index: 0 }]],
-    },
+    'Webhook Trigger': { main: [[{ node: 'Normalize Slack Submission', type: 'main', index: 0 }]] },
+    'Normalize Slack Submission': { main: [[{ node: 'Route Validation Outcome', type: 'main', index: 0 }]] },
+    'Route Validation Outcome': { main: [
+      [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
+      [{ node: 'Airwallex Auth', type: 'main', index: 0 }],
+    ]},
+    'Airwallex Auth': { main: [[{ node: 'Route Airwallex Outcome', type: 'main', index: 0 }]] },
+    'Route Airwallex Outcome': { main: [
+      [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
+      [{ node: 'Merge Auth Token', type: 'main', index: 0 }],
+    ]},
+    'Merge Auth Token': { main: [[{ node: 'Lookup Billing Customer', type: 'main', index: 0 }]] },
+    'Lookup Billing Customer': { main: [[{ node: 'Resolve Customer', type: 'main', index: 0 }]] },
+    'Resolve Customer': { main: [[{ node: 'Route Customer Exists', type: 'main', index: 0 }]] },
+    'Route Customer Exists': { main: [
+      [{ node: 'Create Billing Customer', type: 'main', index: 0 }],
+      [{ node: 'Prepare Product Payload', type: 'main', index: 0 }],
+    ]},
+    'Create Billing Customer': { main: [[{ node: 'Route Customer Create Outcome', type: 'main', index: 0 }]] },
+    'Route Customer Create Outcome': { main: [
+      [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
+      [{ node: 'Set Customer ID', type: 'main', index: 0 }],
+    ]},
+    'Set Customer ID': { main: [[{ node: 'Prepare Product Payload', type: 'main', index: 0 }]] },
+    'Prepare Product Payload': { main: [[{ node: 'Create Products', type: 'main', index: 0 }]] },
+    'Create Products': { main: [[{ node: 'Route Product Create Outcome', type: 'main', index: 0 }]] },
+    'Route Product Create Outcome': { main: [
+      [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
+      [{ node: 'Prepare Price Payload', type: 'main', index: 0 }],
+    ]},
+    'Prepare Price Payload': { main: [[{ node: 'Create Prices', type: 'main', index: 0 }]] },
+    'Create Prices': { main: [[{ node: 'Route Price Create Outcome', type: 'main', index: 0 }]] },
+    'Route Price Create Outcome': { main: [
+      [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
+      [{ node: 'Aggregate Price IDs', type: 'main', index: 0 }],
+    ]},
+    'Aggregate Price IDs': { main: [[{ node: 'Prepare Draft Invoice Payload', type: 'main', index: 0 }]] },
+    'Prepare Draft Invoice Payload': { main: [[{ node: 'Create Draft Invoice', type: 'main', index: 0 }]] },
+    'Create Draft Invoice': { main: [[{ node: 'Route Invoice Chain Outcome', type: 'main', index: 0 }]] },
+    'Route Invoice Chain Outcome': { main: [
+      [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
+      [{ node: 'Prepare Invoice Line Items', type: 'main', index: 0 }],
+    ]},
+    'Prepare Invoice Line Items': { main: [[{ node: 'Attach Invoice Line Items', type: 'main', index: 0 }]] },
+    'Attach Invoice Line Items': { main: [[{ node: 'Route Line Item Outcome', type: 'main', index: 0 }]] },
+    'Route Line Item Outcome': { main: [
+      [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
+      [{ node: 'Mark Draft Success', type: 'main', index: 0 }],
+    ]},
+    'Mark Draft Success': { main: [[{ node: 'Route Fallback Outcome', type: 'main', index: 0 }]] },
+    'Route Fallback Outcome': { main: [
+      [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
+      [{ node: 'Write Tracker Success', type: 'main', index: 0 }],
+    ]},
+    'Hydrate Fallback Context': { main: [[
+      { node: 'Write Tracker Fallback', type: 'main', index: 0 },
+      { node: 'DM John Failure Alert', type: 'main', index: 0 },
+    ]]},
+    'Write Tracker Success': { main: [[{ node: 'Requester Success Confirmation', type: 'main', index: 0 }]] },
+    'Requester Success Confirmation': { main: [[{ node: 'Post Origin Channel Success', type: 'main', index: 0 }]] },
   },
 };
 
-const body = JSON.stringify(workflow);
-const url = new URL(N8N_URL + '/api/v1/workflows');
+function n8nRequest(method, path, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : '';
+    const u = new URL(N8N_URL + path);
+    const opts = {
+      hostname: u.hostname,
+      path: u.pathname + u.search,
+      method,
+      headers: {
+        'X-N8N-API-KEY': API_KEY,
+        'Content-Type': 'application/json',
+        ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+      },
+    };
+    const req = https.request(opts, (res) => {
+      let data = '';
+      res.on('data', (c) => (data += c));
+      res.on('end', () => {
+        try { resolve(JSON.parse(data || '{}')); } catch { resolve({}); }
+      });
+    });
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
 
-const options = {
-  hostname: url.hostname,
-  path: url.pathname,
-  method: 'POST',
-  headers: {
-    'X-N8N-API-KEY': API_KEY,
-    'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(body),
-  },
-};
+async function deploy() {
+  const result = await n8nRequest('PUT', `/api/v1/workflows/${WORKFLOW_ID}`, workflow);
+  if (!result.id) {
+    console.log('ERROR:', JSON.stringify(result, null, 2).substring(0, 2000));
+    return;
+  }
+  await n8nRequest('POST', `/api/v1/workflows/${WORKFLOW_ID}/activate`);
+  console.log('SUCCESS');
+  console.log('Workflow ID:', result.id);
+  console.log('Name:', result.name);
+  console.log('URL: https://noatakhel.app.n8n.cloud/workflow/' + result.id);
+  console.log('\nNext: Activate the workflow in n8n, then test via:');
+  console.log('POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-request-intake');
+}
 
 if (require.main === module) {
-  const req = https.request(options, (res) => {
-    let data = '';
-    res.on('data', (chunk) => {
-      data += chunk;
-    });
-    res.on('end', () => {
-      try {
-        const result = JSON.parse(data);
-        if (result.id) {
-          console.log('SUCCESS');
-          console.log('Workflow ID:', result.id);
-          console.log('Name:', result.name);
-          console.log('URL: https://noatakhel.app.n8n.cloud/workflow/' + result.id);
-          console.log('\nNext: Activate the workflow in n8n, then test via:');
-          console.log('POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-request-intake');
-        } else {
-          console.log('ERROR response:');
-          console.log(JSON.stringify(result, null, 2).substring(0, 2000));
-        }
-      } catch (error) {
-        console.log('Parse error. Raw response:');
-        console.log(data.substring(0, 1000));
-      }
-    });
-  });
-
-  req.on('error', (error) => console.error('Request error:', error.message));
-  req.write(body);
-  req.end();
+  deploy().catch((e) => console.error('Deploy failed:', e.message));
 }
 
 module.exports = {
@@ -1134,9 +1172,5 @@ module.exports = {
   FALLBACK_STATUS,
   LINE_ITEMS_PAYLOAD_LABEL,
   N8N_URL,
-  body,
-  https,
-  options,
-  url,
   workflow,
 };

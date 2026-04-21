@@ -1,53 +1,54 @@
 # SOP: Start of Day Report
 
 **Owner:** John (operator)
-**Recipient:** Noa Takhel (via Slack DM)
-**Frequency:** Monday–Friday, automated at 9:00 AM GMT+8
+**Recipient:** Noa Takhel (via Slack DM) and `#airwallexdrafts`
+**Frequency:** Local/manual only for now
 **Skill:** `.claude/skills/sod-report/SKILL.md`
-**Trigger:** `trig_0175RPhNgA1HaPH5w34W3QdN` (UTC hour 01 routing, shared with Hourly Invoice Triage)
+**Trigger:** Manual `n8n` run or `POST /webhook/krave-sod-report`
 
 ---
 
 ## Purpose
 
-Give Noa a clear picture of what's happening today before her deep work block starts at 1:30 PM ICT. Surfaces John's focus goals, carry-overs from yesterday's EOD, any blockers needing her input, and the morning inbox-triage follow-ups when available — delivered automatically, no manual assembly required.
+Give Noa a clear picture of what's happening today before her deep work block starts at 1:30 PM ICT. The workflow surfaces John's focus goals, carry-overs from yesterday's EOD, blockers needing her input, and the morning inbox-triage follow-ups, then posts the same final report to both Noa's DM and `#airwallexdrafts`.
 
 ---
 
 ## How It Works
 
-### Automated Flow (daily)
+### Manual / Webhook Flow
 
 | Time (GMT+8) | Action |
 |---|---|
-| By 9:00 AM | John posts focus goals + context to `#airwallexdrafts` |
-| By 9:00 AM | Inbox Triage Daily posts `Morning Triage` to `#airwallexdrafts` when it runs successfully |
-| 9:00 AM | Remote agent fires (UTC hour 01 slot in hourly trigger) |
-| 9:00 AM | Reads yesterday's EOD from `#airwallexdrafts` for carry-overs |
-| 9:00 AM | Reads John's morning posts for focus goals |
-| 9:00 AM | Reads same-day `Morning Triage` for BAU / inbox follow-ups when available |
-| 9:00 AM | Generates SOD report using template, sends to Noa's DM + `#airwallexdrafts` |
+| Before run | John posts focus goals + context to `#airwallexdrafts` |
+| Before run | Inbox Triage Daily posts same-day `Morning Triage` to `#airwallexdrafts` |
+| Run time | Operator triggers the local/manual workflow or `POST /webhook/krave-sod-report` |
+| Run time | Workflow reads yesterday's EOD from `#airwallexdrafts` for carry-overs |
+| Run time | Workflow reads John's morning posts for focus goals |
+| Run time | Workflow reads same-day `Morning Triage` for BAU / inbox follow-ups |
+| Run time | Workflow validates all three sources before generation |
+| Run time | Workflow generates the SOD report and sends to `#airwallexdrafts` + Noa's DM |
 
 ### Data Sources
 
 | Source | Content | How identified |
 |---|---|---|
-| `#airwallexdrafts` — yesterday | Carry-overs, unresolved blockers | Bot message from yesterday containing "Today's Wrap-up" |
-| `#airwallexdrafts` — today | Focus goals, new blockers | Messages from U0AM5EGRVTP posted after midnight GMT+8 |
-| `#airwallexdrafts` — today | BAU / inbox follow-ups | Bot message from today containing "Morning Triage" |
+| `#airwallexdrafts` - yesterday | Carry-overs, unresolved blockers | Bot message from yesterday containing "Today's Wrap-up" |
+| `#airwallexdrafts` - today | Focus goals, new blockers | Messages from U0AM5EGRVTP posted after midnight GMT+8 |
+| `#airwallexdrafts` - today | BAU / inbox follow-ups | Bot message from today containing `Morning Triage` |
 
 ---
 
 ## SOD Report Template
 
 ```
-### ✍️ Today's Goals
+### Today's Goals
 
 **Focus Goals**
 - [from John's morning dump]
 
 **Carry-over from Yesterday**
-- [from yesterday's EOD Not Completed section — omit if none]
+- [from yesterday's EOD Not Completed section - omit if none]
 
 **Blocker / Input Needed**
 - [from John's dump + unresolved yesterday blockers]
@@ -60,25 +61,37 @@ Give Noa a clear picture of what's happening today before her deep work block st
 
 ## John's Daily Responsibility
 
-Post to `#airwallexdrafts` before 9:00 AM GMT+8. Include:
+Post to `#airwallexdrafts` before the workflow run. Include:
 - What you're focusing on today
 - Any blockers you're already aware of
 - Anything Noa needs to know before her day starts
 
-No format required — free text is fine.
+No format required - free text is fine.
+
+---
+
+## Validation Rules
+
+The workflow must hard-stop if any required source is missing:
+
+- yesterday's EOD message containing `Today's Wrap-up`
+- John's same-day morning dump
+- today's `Morning Triage`
+
+No partial SOD report should be sent when validation fails.
 
 ---
 
 ## Failure Handling
 
-- If John hasn't posted by 9 AM: agent sends carry-overs only, notes missing goals
-- If inbox triage has not posted `Morning Triage` yet: agent sends without it and does not block the SOD report
-- If no yesterday EOD found: agent notes it and sends whatever context is available
-- If Slack send fails: agent retries once, then posts error to `#airwallexdrafts`
-- If agent doesn't fire: manually invoke `/sod-report` in Claude Code
+- If John hasn't posted: workflow stops and alerts `#airwallexdrafts`
+- If inbox triage has not posted `Morning Triage`: workflow stops and alerts `#airwallexdrafts`
+- If no yesterday EOD is found: workflow stops and alerts `#airwallexdrafts`
+- If archive post succeeds but Noa DM fails: workflow raises a failure alert for manual resend
+- If the local/manual workflow is unavailable: use `/sod-report` in Claude Code as manual fallback
 
 ---
 
 ## Manual Override
 
-Run `/sod-report` in Claude Code at any time for an off-schedule send.
+Run `/sod-report` in Claude Code at any time for an off-schedule send or manual resend, keeping delivery to both `#airwallexdrafts` and Noa's DM.

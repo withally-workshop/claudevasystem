@@ -112,17 +112,15 @@ function parseExplicitDate(input, todayIso) {
 
 function parsePayout(rawValue, invoiceDateIso, todayIso) {
   const raw = String(rawValue || '').trim();
-  const normalized = (raw || '7 day payout').toLowerCase();
+  const normalized = (raw || '7 day payout').toLowerCase().replace(/\\s+/g, ' ');
 
-  if (normalized === '7 day payout') {
-    return { ok: true, payout_raw: raw || '7 day payout', due_date: addDays(invoiceDateIso, 7) };
+  // Handles: "7", "30", "7 days", "30 days", "7 day payout", "30 day payout"
+  const daysMatch = normalized.match(/^(\\d+)(\\s+days?(\\s+payout)?)?$/);
+  if (daysMatch) {
+    const days = parseInt(daysMatch[1], 10);
+    return { ok: true, payout_raw: days + ' day payout', due_date: addDays(invoiceDateIso, days) };
   }
-  if (normalized === '14 day payout') {
-    return { ok: true, payout_raw: raw, due_date: addDays(invoiceDateIso, 14) };
-  }
-  if (normalized === '30 day payout') {
-    return { ok: true, payout_raw: raw, due_date: addDays(invoiceDateIso, 30) };
-  }
+
   if (normalized === 'due now') {
     return { ok: true, payout_raw: raw, due_date: invoiceDateIso };
   }
@@ -138,6 +136,7 @@ function parsePayout(rawValue, invoiceDateIso, todayIso) {
   return { ok: false, payout_raw: raw || '7 day payout', reason: 'unparseable payout' };
 }
 
+const originChannelId = payload.view?.private_metadata || '';
 const lineItemsRaw = getValue('line_items_raw');
 const payoutInput = getValue('payout');
 const invoiceDateInput = getValue('invoice_date');
@@ -151,36 +150,44 @@ function parseLineItem(line) {
   const trimmed = line.trim();
   if (!trimmed) return null;
 
+  // Pipe-separated: "description | quantity | unit_price"
   if (trimmed.includes('|')) {
-    const [descriptionPart, quantityPart, unitPricePart] = trimmed.split('|').map((part) => part.trim());
-    const quantity = Number(quantityPart || 1) || 1;
-    const unitPrice = unitPricePart ? Number(String(unitPricePart).replace(/[$,]/g, '')) : null;
+    const parts = trimmed.split('|').map((p) => p.trim());
+    const quantity = Number(parts[1] || 1) || 1;
+    const rawPrice = (parts[2] || '').replace(/[^0-9.]/g, '');
+    const unitPrice = rawPrice ? Number(rawPrice) : null;
     return {
-      description: descriptionPart || trimmed,
+      description: parts[0] || trimmed,
       quantity,
       unit_price: Number.isFinite(unitPrice) ? unitPrice : null,
       raw_text: trimmed,
     };
   }
 
-  const quantityPriceMatch = trimmed.match(/^(.*?)(?:\\s+x\\s*(\\d+))?(?:\\s*@\\s*\\$?([\\d,]+(?:\\.\\d+)?))?$/i);
-  if (quantityPriceMatch && (quantityPriceMatch[2] || quantityPriceMatch[3])) {
-    const description = (quantityPriceMatch[1] || '').trim() || trimmed;
-    const quantity = Number(quantityPriceMatch[2] || 1) || 1;
-    const unitPrice = quantityPriceMatch[3] ? Number(quantityPriceMatch[3].replace(/[$,]/g, '')) : null;
+  // @ format: "Description [x quantity] @ [currency]price[currency]"
+  const atIndex = trimmed.lastIndexOf('@');
+  if (atIndex !== -1) {
+    const pricePart = trimmed.slice(atIndex + 1).trim();
+    const descPart = trimmed.slice(0, atIndex).trim();
+    const xMatch = descPart.match(/^(.*?)\\s+x\\s*(\\d+)\\s*$/i);
+    const description = xMatch ? xMatch[1].trim() : descPart;
+    const quantity = xMatch ? (Number(xMatch[2]) || 1) : 1;
+    const rawPrice = pricePart.replace(/[^0-9.]/g, '');
+    const unitPrice = rawPrice ? Number(rawPrice) : null;
     return {
-      description,
+      description: description || trimmed,
       quantity,
       unit_price: Number.isFinite(unitPrice) ? unitPrice : null,
       raw_text: trimmed,
     };
   }
 
-  const trailingAmountMatch = trimmed.match(/^(.*?)(?:\\s+)(\\$?[\\d,]+(?:\\.\\d+)?)$/);
-  if (trailingAmountMatch) {
-    const unitPrice = Number(trailingAmountMatch[2].replace(/[$,]/g, ''));
+  // Trailing number: "April retainer 2500"
+  const trailingMatch = trimmed.match(/^(.*?)\\s+(\\d[\\d,]*(?:\\.\\d+)?)\\s*$/);
+  if (trailingMatch) {
+    const unitPrice = Number(trailingMatch[2].replace(/,/g, ''));
     return {
-      description: trailingAmountMatch[1].trim() || trimmed,
+      description: trailingMatch[1].trim() || trimmed,
       quantity: 1,
       unit_price: Number.isFinite(unitPrice) ? unitPrice : null,
       raw_text: trimmed,
@@ -204,11 +211,13 @@ const line_items = lineItemsRaw
 
 return {
   json: {
+    origin_channel_id: originChannelId,
     submitted_by_slack_user_id: payload.user?.id || $json.submitted_by_slack_user_id || '',
     submitted_by_slack_user_name: payload.user?.name || payload.user?.username || $json.submitted_by_slack_user_name || '',
     client_name_or_company_name: getValue('client_name_or_company_name'),
     client_name: getValue('client_name_or_company_name'),
     company_name: getValue('client_name_or_company_name'),
+    client_email: getValue('client_email'),
     billing_address: getValue('billing_address'),
     currency: getValue('currency'),
     payout_raw: payoutResult.payout_raw || '7 day payout',
@@ -304,6 +313,7 @@ const workflow = {
             view: {
               type: 'modal',
               callback_id: 'invoice_request_modal',
+              private_metadata: ($json.raw_command_payload && $json.raw_command_payload.channel_id) ? $json.raw_command_payload.channel_id : '',
               title: { type: 'plain_text', text: 'Invoice Request' },
               submit: { type: 'plain_text', text: 'Submit' },
               close: { type: 'plain_text', text: 'Cancel' },
@@ -351,6 +361,17 @@ const workflow = {
                     type: 'plain_text_input',
                     action_id: 'value',
                     placeholder: { type: 'plain_text', text: 'today\\n2026-04-21\\nMay 1, 2026' }
+                  }
+                },
+                {
+                  type: 'input',
+                  block_id: 'client_email',
+                  optional: true,
+                  label: { type: 'plain_text', text: 'Client Email' },
+                  element: {
+                    type: 'plain_text_input',
+                    action_id: 'value',
+                    placeholder: { type: 'plain_text', text: 'billing@client.com' }
                   }
                 },
                 {
@@ -558,60 +579,60 @@ const workflow = {
   },
 };
 
-const body = JSON.stringify(workflow);
-const url = new URL(N8N_URL + '/api/v1/workflows');
-
-const options = {
-  hostname: url.hostname,
-  path: url.pathname,
-  method: 'POST',
-  headers: {
-    'X-N8N-API-KEY': API_KEY,
-    'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(body),
-  },
-};
-
-if (require.main === module) {
-  const req = https.request(options, (res) => {
-    let data = '';
-    res.on('data', (chunk) => {
-      data += chunk;
+function n8nRequest(method, path, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : '';
+    const u = new URL(N8N_URL + path);
+    const opts = {
+      hostname: u.hostname,
+      path: u.pathname + u.search,
+      method,
+      headers: {
+        'X-N8N-API-KEY': API_KEY,
+        'Content-Type': 'application/json',
+        ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+      },
+    };
+    const req = https.request(opts, (res) => {
+      let data = '';
+      res.on('data', (c) => (data += c));
+      res.on('end', () => {
+        try { resolve(JSON.parse(data || '{}')); } catch { resolve({}); }
+      });
     });
-    res.on('end', () => {
-      try {
-        const result = JSON.parse(data);
-        if (result.id) {
-          console.log('SUCCESS');
-          console.log('Workflow ID:', result.id);
-          console.log('Name:', result.name);
-          console.log('URL: https://noatakhel.app.n8n.cloud/workflow/' + result.id);
-          console.log('\nSlack Request URL:');
-          console.log('https://noatakhel.app.n8n.cloud/webhook/slack-invoice-handler');
-        } else {
-          console.log('ERROR response:');
-          console.log(JSON.stringify(result, null, 2).substring(0, 2000));
-        }
-      } catch (error) {
-        console.log('Parse error. Raw response:');
-        console.log(data.substring(0, 1000));
-      }
-    });
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
   });
-
-  req.on('error', (error) => console.error('Request error:', error.message));
-  req.write(body);
-  req.end();
 }
 
-module.exports = {
-  API_KEY,
-  INTAKE_WEBHOOK_URL,
-  N8N_URL,
-  SLACK_CRED_ID,
-  body,
-  https,
-  options,
-  url,
-  workflow,
-};
+async function deploy() {
+  const list = await n8nRequest('GET', `/api/v1/workflows?name=${encodeURIComponent(workflow.name)}&limit=250`);
+  const existing = (list.data || []).find((w) => w.name === workflow.name && w.active !== null);
+  let result;
+  if (existing) {
+    result = await n8nRequest('PUT', `/api/v1/workflows/${existing.id}`, workflow);
+    if (!result.id) {
+      result = await n8nRequest('POST', '/api/v1/workflows', workflow);
+    }
+  } else {
+    result = await n8nRequest('POST', '/api/v1/workflows', workflow);
+  }
+  if (!result.id) {
+    console.log('ERROR:', JSON.stringify(result, null, 2).substring(0, 2000));
+    return;
+  }
+  await n8nRequest('POST', `/api/v1/workflows/${result.id}/activate`);
+  console.log('SUCCESS');
+  console.log('Workflow ID:', result.id);
+  console.log('Name:', result.name);
+  console.log('URL: https://noatakhel.app.n8n.cloud/workflow/' + result.id);
+  console.log('\nSlack Request URL:');
+  console.log('https://noatakhel.app.n8n.cloud/webhook/slack-invoice-handler');
+}
+
+if (require.main === module) {
+  deploy().catch((e) => console.error('Deploy failed:', e.message));
+}
+
+module.exports = { API_KEY, INTAKE_WEBHOOK_URL, N8N_URL, SLACK_CRED_ID, workflow };

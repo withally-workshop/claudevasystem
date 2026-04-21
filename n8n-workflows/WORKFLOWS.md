@@ -13,12 +13,13 @@
 3. [Workflow 1 - Payment Detection](#workflow-1---payment-detection)
 4. [Workflow 2 - Invoice Reminder Cron](#workflow-2---invoice-reminder-cron)
 5. [Workflow 3 - EOD Triage Summary](#workflow-3---eod-triage-summary)
-6. [Workflow 4 - Inbox Triage Daily](#workflow-4---inbox-triage-daily)
-7. [Workflow 5 - Slack Invoice Handler](#workflow-5---slack-invoice-handler)
-8. [Workflow 6 - Invoice Request Intake](#workflow-6---invoice-request-intake)
-9. [Credential Reference](#credential-reference)
-10. [Runbook - Common Scenarios](#runbook---common-scenarios)
-11. [Handover Checklist](#handover-checklist)
+6. [Workflow 4 - Start Of Day Report](#workflow-4---start-of-day-report)
+7. [Workflow 5 - Inbox Triage Daily](#workflow-5---inbox-triage-daily)
+8. [Workflow 6 - Slack Invoice Handler](#workflow-6---slack-invoice-handler)
+9. [Workflow 7 - Invoice Request Intake](#workflow-7---invoice-request-intake)
+10. [Credential Reference](#credential-reference)
+11. [Runbook - Common Scenarios](#runbook---common-scenarios)
+12. [Handover Checklist](#handover-checklist)
 
 ---
 
@@ -28,10 +29,11 @@
 |---|------|----|--------|----------|---------|
 | 1 | Krave - Payment Detection | `grsXd1VCVIL2F8Cv` | Active | 10am + 5pm ICT | Detect Airwallex deposits, match invoices, update tracker |
 | 2 | Krave - Invoice Reminder Cron | `QvHzslWExLjrH0mo` | Active | 10am ICT daily | Send invoice reminders, alert overdue, update tracker |
-| 3 | Krave - EOD Triage Summary | `TBD after deploy` | Planned | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
-| 4 | Krave - Inbox Triage Daily | `3YyEjk1e6oZV786T` | Active | 9am ICT weekdays + manual webhook | Read inbox email, create Gmail drafts, apply labels, keep `EA/Unsure` in inbox, and post summary to `#airwallexdrafts` plus Noa |
-| 5 | Krave - Slack Invoice Handler | `cxHFf6eIkvvBpPBo` | Active | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
-| 6 | Krave - Invoice Request Intake | `DXxPOtrS9d9Ge1Z2` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
+| 3 | Krave - EOD Triage Summary | `9hZcOcAqQdM7o1yZ` | Active | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
+| 4 | Krave - Start Of Day Report | `vUunl0NuBA6t4Gw4` | Active | Manual trigger + `POST /webhook/krave-sod-report` | Build the SOD report from validated Slack inputs and deliver to `#airwallexdrafts` plus Noa DM |
+| 5 | Krave - Inbox Triage Daily | `3YyEjk1e6oZV786T` | Active | 9am ICT weekdays + manual webhook | Read inbox email, create Gmail drafts, apply labels, keep `EA/Unsure` in inbox, and post summary to `#airwallexdrafts` plus Noa |
+| 6 | Krave - Slack Invoice Handler | `OYblaLA5heZjC3Cs` | Inactive | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
+| 7 | Krave - Invoice Request Intake | `5XHxhQ7wB2rxE3qz` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
 
 ---
 
@@ -229,7 +231,7 @@ Replaces manual invoice follow-up. Once daily, it scans every open invoice in th
 
 ## Workflow 3 - EOD Triage Summary
 
-**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/cxHFf6eIkvvBpPBo`  
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/9hZcOcAqQdM7o1yZ`  
 **Deploy script:** `n8n-workflows/deploy-eod-triage-summary.js`
 
 ### Purpose
@@ -308,7 +310,57 @@ Replaces the scheduled Claude-based EOD summary. Every weekday at 6:00 PM ICT, t
 
 ---
 
-## Workflow 4 - Inbox Triage Daily
+## Workflow 4 - Start Of Day Report
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/vUunl0NuBA6t4Gw4`  
+**Deploy script:** `n8n-workflows/deploy-sod-report.js`
+
+### Purpose
+
+Builds Noa's Start Of Day report from `#airwallexdrafts` after all required morning inputs are present. The workflow reads yesterday's EOD carry-over, John's same-day morning dump, and today's `Morning Triage`, then posts the final SOD report to both `#airwallexdrafts` and Noa's Slack DM.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Manual Trigger | Available in the editor for manual execution |
+| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-sod-report` |
+
+### Required Inputs
+
+| Source | Requirement |
+|--------|-------------|
+| Yesterday EOD | Prior-day bot message in `#airwallexdrafts` containing `Today's Wrap-up` |
+| John morning dump | Same-day messages from John in `#airwallexdrafts` before the run |
+| `Morning Triage` | Same-day bot message in `#airwallexdrafts` containing `Morning Triage` |
+
+### Validation
+
+- Hard-stop if yesterday's EOD is missing
+- Hard-stop if John's morning dump is missing
+- Hard-stop if `Morning Triage` is missing
+- On validation failure, post the alert to `#airwallexdrafts` and do not DM Noa
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| All required inputs found | Post report to `#airwallexdrafts`, then DM Noa |
+| Any required input missing | Stop and alert `#airwallexdrafts` |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| Missing yesterday EOD | Stop before generation and alert `#airwallexdrafts` |
+| Missing John morning dump | Stop before generation and alert `#airwallexdrafts` |
+| Missing `Morning Triage` | Stop before generation and alert `#airwallexdrafts` |
+| First Noa DM failure after archive post | Retry once automatically |
+| Second Noa DM failure after archive post | Raise a compact failure alert for manual resend without rerunning generation |
+
+---
+
+## Workflow 5 - Inbox Triage Daily
 
 **n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/3YyEjk1e6oZV786T`  
 **Deploy script:** `n8n-workflows/deploy-inbox-triage-daily.js`
@@ -356,10 +408,12 @@ Reads new inbox email from `noa@kravemedia.co`, classifies each message into the
 
 ---
 
-## Workflow 5 - Slack Invoice Handler
+## Workflow 6 - Slack Invoice Handler
 
-**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/DXxPOtrS9d9Ge1Z2`  
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/OYblaLA5heZjC3Cs`  
 **Deploy script:** `n8n-workflows/deploy-slack-invoice-handler.js`
+
+**Current live state:** present in n8n but currently not active.
 
 ### Purpose
 
@@ -413,9 +467,9 @@ Handles the Slack-facing part of invoice intake. It accepts both the `/invoice-r
 
 ---
 
-## Workflow 6 - Invoice Request Intake
+## Workflow 7 - Invoice Request Intake
 
-**n8n URL:** `TBD after deploy`  
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/5XHxhQ7wB2rxE3qz`  
 **Deploy script:** `n8n-workflows/deploy-invoice-request-intake.js`
 
 ### Purpose
@@ -436,28 +490,52 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
         |
 [Normalize Slack Submission]
         |
-[Airwallex Auth]
-        |
-[Find Billing Customer]
-        |
-[Resolve Billing Customer]
-   | existing            | missing / create
-   v                     v
-[Create Products]   [Create Billing Customer]
-        |                     |
-        +----------+----------+
-                   |
-             [Create Prices]
-                   |
-         [Create Draft Invoice]
-                   |
-      [Attach Invoice Line Items]
-             | success            | failure
-             v                    v
-[Write Tracker Success]   [Write Tracker Fallback]
-             |                    |
-             v                    v
-[Requester Success Confirmation] [DM John Failure Alert]
+[Route Validation Outcome]
+   | invalid                  | valid
+   v                          v
+[Hydrate Fallback Context] [Airwallex Auth]
+        |                          |
+        |                    [Route Airwallex Outcome]
+        |                     | fail           | pass
+        |                     v                v
+        |              [Hydrate Fallback] [Merge Auth Token]
+        |                                       |
+        |                              [Lookup Billing Customer]
+        |                                       |
+        |                                [Resolve Customer]
+        |                                       |
+        |                              [Route Customer Exists]
+        |                               | create     | reuse
+        |                               v            v
+        |                    [Create Billing Customer] [Prepare Product Payload]
+        |                               |                    |
+        |                    [Route Customer Create Outcome]-+
+        |                                                    |
+        |                                             [Create Products]
+        |                                                    |
+        |                                             [Prepare Price Payload]
+        |                                                    |
+        |                                               [Create Prices]
+        |                                                    |
+        |                                           [Aggregate Price IDs]
+        |                                                    |
+        |                                      [Prepare Draft Invoice Payload]
+        |                                                    |
+        |                                            [Create Draft Invoice]
+        |                                                    |
+        |                                         [Prepare Invoice Line Items]
+        |                                                    |
+        |                                        [Attach Invoice Line Items]
+        |                                                    |
+        |                                           [Mark Draft Success]
+        |                                                    |
+        +-------------------------[Write Tracker Fallback]   [Write Tracker Success]
+                                      |                               |
+                                      v                               v
+                           [DM John Failure Alert]       [Requester Success Confirmation]
+                                                                    |
+                                                                    v
+                                                      [Post Origin Channel Success]
 ```
 
 ### Intake Rules
@@ -467,16 +545,15 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 - Captures `Payout` and `Invoice Date`, then computes the final `Due Date` inside intake.
 - Supports payout phrases `7 day payout`, `14 day payout`, `30 day payout`, `due now`, and `due on <date>`.
 - Supports multiple line items per request.
-- Resolves customers by company name or client name rather than email.
-- Ambiguous customer matches do not auto-resolve and instead move to fallback.
+- Looks up existing billing customers by client name and creates one only if no match is found.
+- Posts a success receipt back to the originating Slack channel when a draft is created.
 
 ### Outputs
 
 | Scenario | Action |
 |----------|--------|
-| Draft invoice created | Existing Invoices sheet structure row is updated with Airwallex IDs and the requester gets a success confirmation |
+| Draft invoice created | Existing Invoices sheet structure row is updated with Airwallex IDs, the requester gets a success confirmation, and the originating Slack channel gets a receipt |
 | Validation failure | Tracker fallback row is written for manual follow-up |
-| Ambiguous customer match | Status becomes `fallback_manual_required`, tracker captures the issue, and John DM fires |
 | Any Airwallex failure | Status becomes `fallback_manual_required`, tracker captures `failure_stage` and `failure_reason`, and John DM fires |
 
 ### Error Handling
@@ -506,8 +583,8 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 | Gmail account | Gmail OAuth2 | `vxHex5lFrkakcsPi` | Payment Detection | `noa@kravemedia.co` |
 | Gmail account (john) | Gmail OAuth2 | `vsDW3WpKXqS9HUs3` | Invoice Reminder Cron | `john@kravemedia.co` |
 | Google Sheets account | Google Sheets OAuth2 | `83MQOm78gYDvziTO` | Payment Detection, Invoice Reminder Cron, Invoice Request Intake | `noa@kravemedia.co` |
-| Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | All five workflows | Krave Slack workspace |
-| OpenAI account | OpenAI API | `TBD in n8n` | EOD Triage Summary | OpenAI API |
+| Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | All six workflow scripts, including SOD local/manual runs | Krave Slack workspace |
+| OpenAI account | OpenAI API | `UIREXIYn59JOH1zU` | EOD Triage Summary, Inbox Triage Daily, Start Of Day Report | OpenAI API |
 
 ### Airwallex
 
@@ -547,6 +624,13 @@ curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-eod-triage-summar
   -H "Content-Type: application/json" -d '{}'
 ```
 
+### Trigger SOD report manually
+
+```bash
+curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-sod-report" \
+  -H "Content-Type: application/json" -d '{}'
+```
+
 ### Trigger invoice request intake manually
 
 ```bash
@@ -579,7 +663,7 @@ node n8n-workflows/deploy-eod-triage-summary.js
 node n8n-workflows/deploy-invoice-request-intake.js
 ```
 
-Each deploy script creates a new workflow. Activate the new workflow in n8n and deactivate the old one if replacing an existing live version.
+Most current deploy scripts update the matching live workflow in place and then reactivate it. Older archived copies may still exist in n8n, so confirm the non-archived workflow ID before assuming a stale link is current.
 
 ---
 
@@ -592,6 +676,6 @@ Each deploy script creates a new workflow. Activate the new workflow in n8n and 
 - [ ] Keep all active workflows enabled in n8n
 - [ ] Re-authorize Gmail OAuth2 credentials if email reads or sends stop working
 - [ ] Ensure the Slack bot retains access to all required channels, Noa DM delivery, and John DM testing alerts
-- [ ] Add or confirm an `OpenAI account` credential in n8n before deploying EOD Triage Summary
+- [ ] Add or confirm an `OpenAI account` credential in n8n before deploying EOD or SOD workflows
 - [ ] Treat repo deploy scripts as the source of truth
 - [ ] Test by webhook after any workflow change

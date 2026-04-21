@@ -8,10 +8,11 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 |----------|--------|----------|------|
 | Payment Detection | Active | 10am + 5pm ICT | [payment-detection.workflow.json](payment-detection.workflow.json) |
 | Invoice Reminder Cron | Active | 10am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
-| EOD Triage Summary | Planned | 6pm ICT weekdays | [deploy-eod-triage-summary.js](deploy-eod-triage-summary.js) |
+| EOD Triage Summary | Active | 6pm ICT weekdays | [deploy-eod-triage-summary.js](deploy-eod-triage-summary.js) |
+| Start Of Day Report | Active | Manual trigger + production webhook | `deploy-sod-report.js` |
 | Inbox Triage Daily | Active | 9am ICT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
-| Slack Invoice Handler | Planned | Slack slash command + modal submit | [deploy-slack-invoice-handler.js](deploy-slack-invoice-handler.js) |
-| Invoice Request Intake | Planned | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
+| Slack Invoice Handler | Inactive in n8n | Slack slash command + modal submit | [deploy-slack-invoice-handler.js](deploy-slack-invoice-handler.js) |
+| Invoice Request Intake | Active | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
 
 ---
 
@@ -65,6 +66,8 @@ node n8n-workflows/deploy-invoice-reminder-cron.js
 
 ## EOD Triage Summary
 
+**Workflow ID:** `9hZcOcAqQdM7o1yZ`
+
 Reads same-day Slack activity from `#airwallexdrafts`, `#ad-production-internal`, and `#payments-invoices-updates`, builds a compact AI prompt, uses OpenAI to generate Noa's EOD summary, sends Noa a Slack DM, and posts the same summary to `#airwallexdrafts` for SOD carry-over.
 
 **Webhook (manual trigger):**
@@ -80,6 +83,39 @@ node n8n-workflows/deploy-eod-triage-summary.js
 **Credentials required in n8n:**
 - `Krave Slack Bot` - read/post access for the three source channels and Noa DM
 - `OpenAI account` - OpenAI API credential for the summary node
+
+---
+
+## Start Of Day Report
+
+**Workflow ID:** `vUunl0NuBA6t4Gw4`
+
+Deployed in n8n and kept active so the production webhook stays registered. Run it from the webhook or from the editor once all required morning inputs are already present in `#airwallexdrafts`.
+
+**Webhook (manual trigger):**
+```text
+POST https://noatakhel.app.n8n.cloud/webhook/krave-sod-report
+```
+
+**Deploy from scratch:**
+```bash
+node n8n-workflows/deploy-sod-report.js
+```
+
+**Required inputs before running:**
+- yesterday's EOD message containing `Today's Wrap-up`
+- John's same-day morning dump
+- today's `Morning Triage`
+
+**Validation behavior:** hard-stop if yesterday's EOD, John's morning dump, or `Morning Triage` is missing.
+
+**Outputs:**
+- post the final SOD report to `#airwallexdrafts`
+- send the same report to Noa's Slack DM
+
+**Credentials required in n8n:**
+- `Krave Slack Bot` - read/post access for `#airwallexdrafts` and Noa DM
+- `OpenAI account` - OpenAI API credential for the report generation node
 
 ---
 
@@ -112,6 +148,8 @@ node n8n-workflows/deploy-inbox-triage-daily.js
 
 ## Invoice Request Intake
 
+**Workflow ID:** `5XHxhQ7wB2rxE3qz`
+
 Accepts invoice requests from a **Structured Slack modal**, normalizes the submission, attempts full Airwallex draft invoice creation, writes the result into the existing Invoices sheet structure in the Client Invoice Tracker, and falls back to a manual-ready row plus John DM alert if any Airwallex step fails.
 
 **Draft-only behavior:** v1 stops after the Airwallex `draft invoice created` state. It does not auto-finalize or auto-send.
@@ -140,6 +178,10 @@ node n8n-workflows/deploy-invoice-request-intake.js
 ---
 
 ## Slack Invoice Handler
+
+**Workflow ID:** `OYblaLA5heZjC3Cs`
+
+**Current live state:** deployed in n8n but currently not active.
 
 Receives Slack slash-command and modal submission payloads, opens the invoice modal with `views.open`, normalizes the submitted fields, updates the modal to a submitted confirmation view, posts a structured receipt to `#payments-invoices-updates`, and forwards the final structured JSON into the existing invoice intake workflow.
 
