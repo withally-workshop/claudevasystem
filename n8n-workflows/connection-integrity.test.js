@@ -20,14 +20,11 @@ function getConnectionKeys(source) {
 }
 
 const workflowFiles = [
-  'deploy-invoice-reminder-cron.js',
-  'deploy-invoice-request-intake.js',
-  'deploy-slack-invoice-handler.js',
-  'deploy-inbox-triage-daily.js',
-  'deploy-sod-report.js',
-]
-  .map((fileName) => path.join(__dirname, fileName))
-  .filter((filePath) => fs.existsSync(filePath));
+  path.join(__dirname, 'deploy-invoice-reminder-cron.js'),
+  path.join(__dirname, 'deploy-invoice-request-intake.js'),
+  path.join(__dirname, 'deploy-slack-invoice-handler.js'),
+  path.join(__dirname, 'deploy-inbox-triage-daily.js'),
+];
 
 for (const filePath of workflowFiles) {
   const source = fs.readFileSync(filePath, 'utf8');
