@@ -11,7 +11,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | EOD Triage Summary | Active | 6pm ICT weekdays | [deploy-eod-triage-summary.js](deploy-eod-triage-summary.js) |
 | Start Of Day Report | Active | Manual trigger + production webhook | `deploy-sod-report.js` |
 | Inbox Triage Daily | Active | 9am ICT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
-| Slack Invoice Handler | Inactive in n8n | Slack slash command + modal submit | [deploy-slack-invoice-handler.js](deploy-slack-invoice-handler.js) |
+| Slack Invoice Handler | Active | Slack slash command + modal submit | [deploy-slack-invoice-handler.js](deploy-slack-invoice-handler.js) |
 | Invoice Request Intake | Active | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
 
 ---
@@ -181,7 +181,7 @@ node n8n-workflows/deploy-invoice-request-intake.js
 
 **Workflow ID:** `OYblaLA5heZjC3Cs`
 
-**Current live state:** deployed in n8n but currently not active.
+**Current live state:** deployed in n8n and currently active.
 
 Receives Slack slash-command and modal submission payloads, opens the invoice modal with `views.open`, normalizes the submitted fields, updates the modal to a submitted confirmation view, posts a structured receipt to `#payments-invoices-updates`, and forwards the final structured JSON into the existing invoice intake workflow.
 

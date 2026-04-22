@@ -23,6 +23,7 @@ assert.match(deploySource, /path:\s+'krave-inbox-triage-daily'/, 'Expected manua
 assert.match(deploySource, /'Schedule 9am ICT Weekdays'/, 'Expected schedule trigger node');
 assert.match(deploySource, /'Webhook Trigger'/, 'Expected manual webhook node');
 assert.match(deploySource, /'Search Inbox'/, 'Expected Gmail search node');
+assert.match(deploySource, /'Get Gmail Labels'/, 'Expected Gmail label lookup node');
 assert.match(deploySource, /'Fetch Message Details'/, 'Expected Gmail detail node');
 assert.match(deploySource, /'Build Slack Summary'/, 'Expected summary node');
 assert.match(deploySource, /'Post to Airwallex Drafts'/, 'Expected channel summary node');
@@ -63,6 +64,24 @@ assert.match(deploySource, /Draft ready in Gmail/i, 'Expected summary wording fo
 assert.match(deploySource, /'Create Gmail Draft'/, 'Expected Gmail draft node');
 assert.match(deploySource, /'Apply Tier Label'/, 'Expected Gmail tier label node');
 assert.match(deploySource, /'Apply Context Label'/, 'Expected Gmail context label node');
+assert.match(deploySource, /tier_label_id/, 'Expected resolved Gmail tier label ids');
+assert.match(deploySource, /context_label_id/, 'Expected resolved Gmail context label ids');
+assert.ok(
+  !deploySource.includes("labelIds: '={{ [$json.tier_label_name] }}'"),
+  'Expected Gmail tier label application to stop sending label names where Gmail requires label ids'
+);
+assert.ok(
+  !deploySource.includes("labelIds: '={{ $json.context_label_name ? [$json.context_label_name] : [] }}'"),
+  'Expected Gmail context label application to stop sending label names where Gmail requires label ids'
+);
+assert.ok(
+  deploySource.includes("labelIds: '={{ $json.tier_label_id ? [$json.tier_label_id] : [] }}'"),
+  'Expected Gmail tier label application to use resolved label ids'
+);
+assert.ok(
+  deploySource.includes("labelIds: '={{ $json.context_label_id ? [$json.context_label_id] : [] }}'"),
+  'Expected Gmail context label application to use resolved label ids'
+);
 assert.match(deploySource, /'Archive Non-Unsure'/, 'Expected Gmail archive node');
 assert.match(deploySource, /EA\/Unsure/, 'Expected unsure branch handling');
 assert.match(deploySource, /removeLabelIds/i, 'Expected archive step to remove INBOX');

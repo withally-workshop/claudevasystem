@@ -146,11 +146,25 @@ const DRAFT_PROMPT_PREFIX = [
 ].join('\n');
 
 const PREPARE_GMAIL_MUTATION_CODE = `
+const labels = $("Get Gmail Labels").all().flatMap((item) => {
+  const json = item.json || {};
+  if (Array.isArray(json.labels)) return json.labels;
+  return [json];
+});
+
+const labelIdByName = Object.fromEntries(
+  labels
+    .map((label) => [String(label.name || '').trim(), String(label.id || '').trim()])
+    .filter(([name, id]) => name && id)
+);
+
 return {
   json: {
     ...$json,
     tier_label_name: $json.tier,
     context_label_name: $json.context_label || '',
+    tier_label_id: labelIdByName[$json.tier] || '',
+    context_label_id: labelIdByName[$json.context_label || ''] || '',
     archive_after_triage: $json.tier !== 'EA/Unsure',
     draft_subject: 'Re: ' + ($json.subject || ''),
     summary_draft_note: $json.draft_required ? 'Draft ready in Gmail' : ''
@@ -249,6 +263,19 @@ const workflow = {
         filters: {
           q: '={{ $json.query || "in:inbox after:1970/01/01" }}',
         },
+      },
+    },
+    {
+      id: 'n4b',
+      name: 'Get Gmail Labels',
+      type: 'n8n-nodes-base.gmail',
+      typeVersion: 2.1,
+      position: [680, 120],
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
+      parameters: {
+        resource: 'label',
+        operation: 'getAll',
+        returnAll: true,
       },
     },
     {
@@ -377,7 +404,7 @@ const workflow = {
         resource: 'message',
         operation: 'addLabels',
         messageId: '={{ $json.message_id }}',
-        labelIds: '={{ [$json.tier_label_name] }}',
+        labelIds: '={{ $json.tier_label_id ? [$json.tier_label_id] : [] }}',
       },
     },
     {
@@ -391,7 +418,7 @@ const workflow = {
         resource: 'message',
         operation: 'addLabels',
         messageId: '={{ $json.message_id }}',
-        labelIds: '={{ $json.context_label_name ? [$json.context_label_name] : [] }}',
+        labelIds: '={{ $json.context_label_id ? [$json.context_label_id] : [] }}',
       },
     },
     {
@@ -542,7 +569,12 @@ const workflow = {
   connections: {
     'Schedule 9am ICT Weekdays': { main: [[{ node: 'Build Gmail Query', type: 'main', index: 0 }]] },
     'Webhook Trigger': { main: [[{ node: 'Build Gmail Query', type: 'main', index: 0 }]] },
-    'Build Gmail Query': { main: [[{ node: 'Search Inbox', type: 'main', index: 0 }]] },
+    'Build Gmail Query': {
+      main: [
+        [{ node: 'Search Inbox', type: 'main', index: 0 }],
+        [{ node: 'Get Gmail Labels', type: 'main', index: 0 }],
+      ],
+    },
     'Search Inbox': { main: [[{ node: 'Fetch Message Details', type: 'main', index: 0 }]] },
     'Fetch Message Details': { main: [[{ node: 'Normalize Email', type: 'main', index: 0 }]] },
     'Normalize Email': { main: [[{ node: 'Rules Classifier', type: 'main', index: 0 }]] },

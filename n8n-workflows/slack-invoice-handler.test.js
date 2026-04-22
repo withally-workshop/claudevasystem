@@ -155,6 +155,11 @@ assert.match(
 assert.match(readmeDoc, /Slack Invoice Handler/, 'Expected handler workflow listed in README');
 assert.match(
   readmeDoc,
+  /Slack Invoice Handler \| Active|Current live state:\s*deployed in n8n and currently active/i,
+  'Expected README to reflect that the live Slack invoice handler is active'
+);
+assert.match(
+  readmeDoc,
   /same Request URL.*Slash Commands.*Interactivity/i,
   'Expected README to explain using the same request URL for Slack app setup'
 );
@@ -170,6 +175,11 @@ assert.match(readmeDoc, /Invoice Date/i, 'Expected README to document invoice da
 assert.match(readmeDoc, /7 day payout/i, 'Expected README to document payout default');
 assert.match(readmeDoc, /freeform/i, 'Expected README to document freeform line items');
 assert.match(workflowsDoc, /Slack Invoice Handler/, 'Expected handler workflow listed in WORKFLOWS.md');
+assert.match(
+  workflowsDoc,
+  /\| 6 \| Krave - Slack Invoice Handler \| `OYblaLA5heZjC3Cs` \| Active \|/i,
+  'Expected WORKFLOWS.md index row to reflect the active Slack invoice handler'
+);
 assert.match(workflowsDoc, /slack-invoice-handler/, 'Expected shared Slack handler webhook documented');
 assert.match(
   workflowsDoc,

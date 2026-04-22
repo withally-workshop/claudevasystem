@@ -32,7 +32,7 @@
 | 3 | Krave - EOD Triage Summary | `9hZcOcAqQdM7o1yZ` | Active | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
 | 4 | Krave - Start Of Day Report | `vUunl0NuBA6t4Gw4` | Active | Manual trigger + `POST /webhook/krave-sod-report` | Build the SOD report from validated Slack inputs and deliver to `#airwallexdrafts` plus Noa DM |
 | 5 | Krave - Inbox Triage Daily | `3YyEjk1e6oZV786T` | Active | 9am ICT weekdays + manual webhook | Read inbox email, create Gmail drafts, apply labels, keep `EA/Unsure` in inbox, and post summary to `#airwallexdrafts` plus Noa |
-| 6 | Krave - Slack Invoice Handler | `OYblaLA5heZjC3Cs` | Inactive | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
+| 6 | Krave - Slack Invoice Handler | `OYblaLA5heZjC3Cs` | Active | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
 | 7 | Krave - Invoice Request Intake | `5XHxhQ7wB2rxE3qz` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
 
 ---
@@ -413,7 +413,7 @@ Reads new inbox email from `noa@kravemedia.co`, classifies each message into the
 **n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/OYblaLA5heZjC3Cs`  
 **Deploy script:** `n8n-workflows/deploy-slack-invoice-handler.js`
 
-**Current live state:** present in n8n but currently not active.
+**Current live state:** present in n8n and currently active.
 
 ### Purpose
 
