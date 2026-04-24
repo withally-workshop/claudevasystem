@@ -47,9 +47,8 @@ const MATCH_CODE = `
 const parsedData = $('Parse All Emails').first().json;
 const emails = parsedData.emails || [];
 const today = new Date().toISOString().split('T')[0];
-if (emails.length === 0) {
-  return [{ json: { matched: false, noEmails: true, date: today } }];
-}
+// No emails — exit silently (hourly runs produce no noise when nothing to do)
+if (emails.length === 0) return [];
 const allRows = $input.all();
 const openRows = allRows.filter(r => {
   const s = (r.json['Status'] || '').toString().trim();
@@ -78,8 +77,11 @@ for (const email of emails) {
       airwallexInvoiceId: match.json['Airwallex Invoice ID'] || '',
       amount: email.amount, currency: email.currency, paymentDate: today });
   } else {
-    results.push({ matched: false, noEmails: false, confidence,
-      amount: email.amount, currency: email.currency, subject: email.subject, date: today });
+    // Only surface unmatched deposits that have an amount — skip indeterminate emails silently
+    if (email.amount) {
+      results.push({ matched: false, confidence,
+        amount: email.amount, currency: email.currency, subject: email.subject, date: today });
+    }
   }
 }
 return results.map(r => ({ json: r }));
@@ -87,7 +89,7 @@ return results.map(r => ({ json: r }));
 
 const SLACK_CONFIRMED_TEXT = "={{ '✅ *Payment Received — ' + $('Match Deposits To Invoices').item.json.clientName + '*\\n• Invoice: ' + $('Match Deposits To Invoices').item.json.invoiceNumber + '\\n• Amount: ' + $('Match Deposits To Invoices').item.json.amount + ' ' + $('Match Deposits To Invoices').item.json.currency + '\\n• Confirmed: ' + $('Match Deposits To Invoices').item.json.paymentDate + '\\n• Tracker: Updated to Payment Complete' }}";
 
-const SLACK_ALERT_TEXT = "={{ $json.noEmails ? '✅ Payment check complete — ' + $json.date + ' — no Airwallex deposit emails found.' : '⚠️ *Unmatched Deposit Detected*\\n• Amount: ' + $json.amount + ' ' + $json.currency + '\\n• Date: ' + $json.date + '\\n• Email: ' + $json.subject + '\\n• Action: Match to invoice manually in tracker' }}";
+const SLACK_ALERT_TEXT = "={{ '⚠️ *Unmatched Deposit Detected*\\n• Amount: ' + $json.amount + ' ' + $json.currency + '\\n• Date: ' + $json.date + '\\n• Email: ' + $json.subject + '\\n• Action: Match to invoice manually in tracker' }}";
 
 const AW_MARK_PAID_URL = "={{ 'https://api.airwallex.com/api/v1/invoices/' + $('Match Deposits To Invoices').item.json.airwallexInvoiceId + '/mark_as_paid' }}";
 const AW_BEARER = "={{ 'Bearer ' + $json.token }}";
@@ -97,10 +99,17 @@ const workflow = {
   settings: { executionOrder: 'v1', saveManualExecutions: true },
   nodes: [
     {
-      id: 'n1', name: 'Daily 9AM ICT',
+      id: 'n1', name: 'Hourly',
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
-      position: [240, 300],
-      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 2 * * *' }] } }
+      position: [240, 200],
+      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 * * * *' }] } }
+    },
+    {
+      id: 'n12', name: 'Webhook Trigger',
+      type: 'n8n-nodes-base.webhook', typeVersion: 2,
+      position: [240, 400],
+      webhookId: 'krave-payment-detection',
+      parameters: { httpMethod: 'POST', path: 'krave-payment-detection', responseMode: 'onReceived', options: {} }
     },
     {
       id: 'n2', name: 'Search Airwallex Emails',
@@ -233,7 +242,8 @@ const workflow = {
     }
   ],
   connections: {
-    'Daily 9AM ICT': { main: [[{ node: 'Search Airwallex Emails', type: 'main', index: 0 }]] },
+    'Hourly':          { main: [[{ node: 'Search Airwallex Emails', type: 'main', index: 0 }]] },
+    'Webhook Trigger': { main: [[{ node: 'Search Airwallex Emails', type: 'main', index: 0 }]] },
     'Search Airwallex Emails': { main: [[{ node: 'Parse All Emails', type: 'main', index: 0 }]] },
     'Parse All Emails': { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
     'Get Invoice Tracker': { main: [[{ node: 'Match Deposits To Invoices', type: 'main', index: 0 }]] },

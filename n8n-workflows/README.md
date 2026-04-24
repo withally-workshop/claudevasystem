@@ -6,8 +6,8 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 
 | Workflow | Status | Schedule | File |
 |----------|--------|----------|------|
-| Payment Detection | Active | 10am + 5pm ICT | [payment-detection.workflow.json](payment-detection.workflow.json) |
-| Invoice Reminder Cron | Active | 10am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
+| Payment Detection | Active | Every hour | [deploy-payment-detection.js](deploy-payment-detection.js) |
+| Invoice Reminder Cron | Active | 9am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
 | EOD Triage Summary | Active | 6pm ICT weekdays | [deploy-eod-triage-summary.js](deploy-eod-triage-summary.js) |
 | Start Of Day Report | Active | Manual trigger + production webhook | `deploy-sod-report.js` |
 | Inbox Triage Daily | Active | 9am ICT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
@@ -18,7 +18,9 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 
 ## Payment Detection
 
-Scans `noa@kravemedia.co` for Airwallex deposit emails, matches them to open invoices, updates the Client Invoice Tracker, and posts confirmations to `#payments-invoices-updates`.
+Scans `noa@kravemedia.co` for Airwallex deposit emails every hour, matches them to open invoices, updates the Client Invoice Tracker, and posts confirmations to `#payments-invoices-updates`. Silent when no new deposits found.
+
+**Workflow ID:** `WqIvJqpKaLXPDfe3`
 
 **Webhook (manual trigger):**
 ```text
@@ -39,11 +41,13 @@ node n8n-workflows/deploy-payment-detection.js
 
 ## Invoice Reminder Cron
 
-Scans the Client Invoice Tracker daily at 10am ICT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker.
+Scans the Client Invoice Tracker daily at 9am ICT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker.
 
 **Silent when nothing to do.** Slack alerts only fire for `due-today`, `overdue`, `late-fee`, `collections`, or missing client email.
 
 **Strategist tagging:** Reads Col K (`Requested By`) and maps it to the Slack user ID used in overdue alerts.
+
+**Workflow ID:** `Q3IqqLvmX9H49NdE`
 
 **Webhook (manual trigger):**
 ```text
@@ -59,8 +63,6 @@ node n8n-workflows/deploy-invoice-reminder-cron.js
 - `Gmail account` - `john@kravemedia.co` OAuth2
 - `Google Sheets account` - access to Client Invoice Tracker
 - `Krave Slack Bot` - bot token for `#payments-invoices-updates`
-
-**Workflow ID:** `QvHzslWExLjrH0mo`
 
 ---
 
