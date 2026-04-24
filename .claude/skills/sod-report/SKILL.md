@@ -1,6 +1,6 @@
 # Skill: Start of Day Report
 
-**Purpose:** Generate Noa's daily Start of Day Report from validated Slack inputs - yesterday's EOD carry-over, John's morning goals dump, and today's `Morning Triage` - then deliver the finished report to both `#airwallexdrafts` and Noa's DM.
+**Purpose:** Generate Noa's daily Start of Day Report from validated Slack inputs - yesterday's EOD carry-over, John's morning goals dump, and, when available, today's `Morning Triage` - then deliver the finished report to both `#airwallexdrafts` and Noa's DM.
 
 **Automated:** Local/manual only for now. Run the `n8n` workflow manually or via `POST /webhook/krave-sod-report` only after all required inputs are present in `#airwallexdrafts`.
 
@@ -12,7 +12,7 @@
 
 Post your focus goals and context for the day to `#airwallexdrafts` before running the workflow. No specific format required - just dump what you're focusing on, any blockers you're aware of, and anything you want Noa to know about your day's priorities.
 
-The workflow reads your post + yesterday's EOD carry-overs + today's `Morning Triage` in `#airwallexdrafts`, validates that all three exist, then builds the report.
+The workflow reads your post + yesterday's EOD carry-overs + today's `Morning Triage` in `#airwallexdrafts`, validates the required sources, then builds the report.
 
 ---
 
@@ -47,13 +47,14 @@ Split messages into three groups:
 
 ### Step 1 - Validate required inputs
 
-All three sources are mandatory:
+These sources are mandatory:
 
 - yesterday's EOD containing `Today's Wrap-up`
 - John's same-day morning dump
-- today's `Morning Triage`
 
-If any source is missing, stop and alert `#airwallexdrafts`. Do not draft or send a partial SOD report.
+If either required source is missing, stop and alert `#airwallexdrafts`. Do not draft or send a partial SOD report.
+
+`Morning Triage` is optional. If it is missing, continue and omit inbox-triage follow-ups from the report.
 
 ### Step 2 - Collect additional context (manual only)
 
@@ -85,7 +86,7 @@ Rules:
 - Group by business only if multi-business.
 - Omit any section with zero items.
 - If John posted no morning dump: stop and alert. Do not send the report.
-- If no `Morning Triage` summary is found yet: stop and alert. Do not send the report.
+- If no `Morning Triage` summary is found yet: continue and omit inbox-triage follow-ups.
 - If no yesterday EOD found: stop and alert. Do not send the report.
 
 ### Step 4 - Send via Slack MCP

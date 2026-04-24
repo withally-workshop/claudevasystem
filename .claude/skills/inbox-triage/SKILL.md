@@ -94,10 +94,11 @@ Post this summary to John's private channel (C0AQZGJDR38), not to Noa.
 
 ## MODE 2: Daily Triage (~9 AM ICT)
 
-### Step 1 — Fetch new inbox emails
+### Step 1 — Fetch last-24-hours inbox emails
 ```
-gmail_list_messages with q: "in:inbox after:[yesterday's date]"
+gmail_list_messages with q: "in:inbox newer_than:1d"
 ```
+Include both read and unread emails that are still in the inbox. Do not scan the whole inbox by default.
 If Gmail MCP is not connected: ask the user to paste email threads manually.
 
 ### Step 2 — Classify each email (two layers)
@@ -123,10 +124,15 @@ Assign the best-fit context label from the confirmed taxonomy. If none fits clea
 
 ### Step 3 — Draft replies (Urgent + Needs-Reply only)
 For each email in these tiers:
-1. Draft a reply in Noa's voice — direct, outcome-oriented, no filler
-2. Apply the **3-and-1 Framework** if a decision is needed: list 3 options, mark the recommendation
-3. Save via `gmail_create_draft` — do NOT send
-4. Note draft subject in the Slack summary
+1. Check whether the thread is already in motion:
+   - Noa already replied
+   - a draft already exists
+   - the thread already has an `EA/*` label
+2. If the thread is already actioned, still classify it and repair labels if needed, but do not create a fresh draft
+3. If the thread is not already actioned, draft a reply in Noa's voice
+4. Apply the **3-and-1 Framework** if a decision is needed: list 3 options, mark the recommendation
+5. Save via `gmail_create_draft` — do NOT send
+6. Note draft subject in the Slack summary when a new draft is created
 
 **Noa's voice:**
 - No: "Hope this helps", "Let me know", "Great question!", "I hope you're doing well"
@@ -136,6 +142,7 @@ For each email in these tiers:
 
 ### Step 4 — Apply labels + move out of inbox
 - Apply both tier + context labels to every email
+- Repair tier/context labels even when an email is already actioned and the fresh classification is better
 - Remove from inbox via `removeLabelIds: ["INBOX"]` for all tiers except `EA/Unsure`
 - `EA/Unsure` emails: label applied, remain in inbox
 
@@ -163,6 +170,8 @@ John reviews and forwards to Noa manually — do NOT post directly to Noa's DM.
 
 Inbox: [N] (unsure items only, or 0 ✓)
 ```
+
+Already-actioned emails stay in their normal sections with inline notes like `[already replied]`, `[draft exists]`, or `[already labeled]`. If a thread is already in motion and still urgent, keep it in `URGENT` with the note attached.
 
 Omit sections with 0 items. Always include Auto-Sorted count.
 If deep work block is active (1:30–7:00 PM ICT): do not post — queue for 7:00 PM.

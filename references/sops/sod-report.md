@@ -10,7 +10,7 @@
 
 ## Purpose
 
-Give Noa a clear picture of what's happening today before her deep work block starts at 1:30 PM ICT. The workflow surfaces John's focus goals, carry-overs from yesterday's EOD, blockers needing her input, and the morning inbox-triage follow-ups, then posts the same final report to both Noa's DM and `#airwallexdrafts`.
+Give Noa a clear picture of what's happening today before her deep work block starts at 1:30 PM ICT. The workflow surfaces John's focus goals, carry-overs from yesterday's EOD, blockers needing her input, and, when available, the morning inbox-triage follow-ups, then posts the same final report to both Noa's DM and `#airwallexdrafts`.
 
 ---
 
@@ -21,12 +21,11 @@ Give Noa a clear picture of what's happening today before her deep work block st
 | Time (GMT+8) | Action |
 |---|---|
 | Before run | John posts focus goals + context to `#airwallexdrafts` |
-| Before run | Inbox Triage Daily posts same-day `Morning Triage` to `#airwallexdrafts` |
 | Run time | Operator triggers the local/manual workflow or `POST /webhook/krave-sod-report` |
 | Run time | Workflow reads yesterday's EOD from `#airwallexdrafts` for carry-overs |
 | Run time | Workflow reads John's morning posts for focus goals |
-| Run time | Workflow reads same-day `Morning Triage` for BAU / inbox follow-ups |
-| Run time | Workflow validates all three sources before generation |
+| Run time | Workflow reads same-day `Morning Triage` for BAU / inbox follow-ups when available |
+| Run time | Workflow validates the required sources before generation |
 | Run time | Workflow generates the SOD report and sends to `#airwallexdrafts` + Noa's DM |
 
 ### Data Sources
@@ -72,20 +71,19 @@ No format required - free text is fine.
 
 ## Validation Rules
 
-The workflow must hard-stop if any required source is missing:
+The workflow must hard-stop if either required source is missing:
 
 - yesterday's EOD message containing `Today's Wrap-up`
 - John's same-day morning dump
-- today's `Morning Triage`
 
-No partial SOD report should be sent when validation fails.
+If `Morning Triage` is missing, the workflow should still send the report and omit inbox-triage follow-ups for that run.
 
 ---
 
 ## Failure Handling
 
 - If John hasn't posted: workflow stops and alerts `#airwallexdrafts`
-- If inbox triage has not posted `Morning Triage`: workflow stops and alerts `#airwallexdrafts`
+- If inbox triage has not posted `Morning Triage`: workflow still sends without inbox-triage follow-ups
 - If no yesterday EOD is found: workflow stops and alerts `#airwallexdrafts`
 - If archive post succeeds but Noa DM fails: workflow raises a failure alert for manual resend
 - If the local/manual workflow is unavailable: use `/sod-report` in Claude Code as manual fallback

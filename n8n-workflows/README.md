@@ -105,9 +105,11 @@ node n8n-workflows/deploy-sod-report.js
 **Required inputs before running:**
 - yesterday's EOD message containing `Today's Wrap-up`
 - John's same-day morning dump
+
+**Optional input:**
 - today's `Morning Triage`
 
-**Validation behavior:** hard-stop if yesterday's EOD, John's morning dump, or `Morning Triage` is missing.
+**Validation behavior:** hard-stop if yesterday's EOD or John's morning dump is missing. If `Morning Triage` is missing, the workflow still sends the report and simply omits inbox-triage follow-ups.
 
 **Outputs:**
 - post the final SOD report to `#airwallexdrafts`
@@ -121,13 +123,19 @@ node n8n-workflows/deploy-sod-report.js
 
 ## Inbox Triage Daily
 
-Reads new inbox email from `noa@kravemedia.co`, classifies each message into the `EA/*` tier model, creates Gmail drafts for `EA/Urgent` and `EA/Needs-Reply`, applies Gmail labels, leaves `EA/Unsure` in the inbox, and posts the final summary to both `#airwallexdrafts` and Noa's Slack DM.
+Reads inbox email from the last 24 hours in `noa@kravemedia.co`, classifies each message into the `EA/*` tier model, creates Gmail drafts for `EA/Urgent` and `EA/Needs-Reply` only when the thread is not already in motion, repairs Gmail labels when needed, leaves `EA/Unsure` in the inbox, and posts the final summary to both `#airwallexdrafts` and Noa's Slack DM.
 
 **Workflow ID:** `3YyEjk1e6oZV786T`
 
 **Draft-only behavior:** creates Gmail drafts only and never sends email automatically.
 
 **Inbox retention:** `EA/Unsure` stays in the inbox for manual review after triage.
+
+**Search scope:** `in:inbox newer_than:1d` so the run covers the last 24 hours of inbox mail, including both read and unread messages that are still in the inbox.
+
+**Already-actioned detection:** if Noa already replied, a draft already exists, or the thread already has an `EA/*` label, the workflow still classifies the email and repairs labels if needed, but it does not create a duplicate draft.
+
+**Morning Triage notes:** already-actioned emails stay in their normal sections with inline notes such as `already replied`, `draft exists`, or `already labeled`.
 
 **Webhook (manual trigger):**
 ```text

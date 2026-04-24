@@ -317,7 +317,7 @@ Replaces the scheduled Claude-based EOD summary. Every weekday at 6:00 PM ICT, t
 
 ### Purpose
 
-Builds Noa's Start Of Day report from `#airwallexdrafts` after all required morning inputs are present. The workflow reads yesterday's EOD carry-over, John's same-day morning dump, and today's `Morning Triage`, then posts the final SOD report to both `#airwallexdrafts` and Noa's Slack DM.
+Builds Noa's Start Of Day report from `#airwallexdrafts` after the required morning inputs are present. The workflow reads yesterday's EOD carry-over, John's same-day morning dump, and, when available, today's `Morning Triage`, then posts the final SOD report to both `#airwallexdrafts` and Noa's Slack DM.
 
 ### Triggers
 
@@ -332,13 +332,18 @@ Builds Noa's Start Of Day report from `#airwallexdrafts` after all required morn
 |--------|-------------|
 | Yesterday EOD | Prior-day bot message in `#airwallexdrafts` containing `Today's Wrap-up` |
 | John morning dump | Same-day messages from John in `#airwallexdrafts` before the run |
-| `Morning Triage` | Same-day bot message in `#airwallexdrafts` containing `Morning Triage` |
+
+### Optional Input
+
+| Source | Requirement |
+|--------|-------------|
+| `Morning Triage` | Same-day bot message in `#airwallexdrafts` containing `Morning Triage`, used when available for BAU / inbox follow-ups |
 
 ### Validation
 
 - Hard-stop if yesterday's EOD is missing
 - Hard-stop if John's morning dump is missing
-- Hard-stop if `Morning Triage` is missing
+- If `Morning Triage` is missing, continue without inbox-triage follow-ups
 - On validation failure, post the alert to `#airwallexdrafts` and do not DM Noa
 
 ### Outputs
@@ -346,6 +351,7 @@ Builds Noa's Start Of Day report from `#airwallexdrafts` after all required morn
 | Scenario | Action |
 |----------|--------|
 | All required inputs found | Post report to `#airwallexdrafts`, then DM Noa |
+| `Morning Triage` missing | Post report to `#airwallexdrafts`, then DM Noa, omitting inbox-triage follow-ups |
 | Any required input missing | Stop and alert `#airwallexdrafts` |
 
 ### Error Handling
@@ -354,7 +360,7 @@ Builds Noa's Start Of Day report from `#airwallexdrafts` after all required morn
 |---------|-----------|
 | Missing yesterday EOD | Stop before generation and alert `#airwallexdrafts` |
 | Missing John morning dump | Stop before generation and alert `#airwallexdrafts` |
-| Missing `Morning Triage` | Stop before generation and alert `#airwallexdrafts` |
+| Missing `Morning Triage` | Continue without inbox-triage follow-ups |
 | First Noa DM failure after archive post | Retry once automatically |
 | Second Noa DM failure after archive post | Raise a compact failure alert for manual resend without rerunning generation |
 
@@ -367,7 +373,7 @@ Builds Noa's Start Of Day report from `#airwallexdrafts` after all required morn
 
 ### Purpose
 
-Reads new inbox email from `noa@kravemedia.co`, classifies each message into the `EA/Urgent`, `EA/Needs-Reply`, `EA/FYI`, `EA/Auto-Sorted`, and `EA/Unsure` tier model, creates Gmail drafts for reply-needed messages, applies Gmail labels, leaves `EA/Unsure` in the inbox, and posts the final summary to both `#airwallexdrafts` and Noa's Slack DM.
+Reads inbox email from the last 24 hours in `noa@kravemedia.co`, classifies each message into the `EA/Urgent`, `EA/Needs-Reply`, `EA/FYI`, `EA/Auto-Sorted`, and `EA/Unsure` tier model, creates Gmail drafts for reply-needed messages only when the thread is not already in motion, repairs Gmail labels when needed, leaves `EA/Unsure` in the inbox, and posts the final summary to both `#airwallexdrafts` and Noa's Slack DM.
 
 ### Triggers
 
@@ -390,11 +396,24 @@ Reads new inbox email from `noa@kravemedia.co`, classifies each message into the
 
 `Krave`, `IM8`, `Halo-Home`, `Skyvane`, `Invoices`, `Contracts`, `Receipts`, `Suppliers`
 
+### Search Scope
+
+- Gmail query: `in:inbox newer_than:1d`
+- Includes both read and unread emails that are still in the inbox
+- Does not scan the full inbox by default
+
+### Already-Actioned Detection
+
+- Treat a thread as already actioned if Noa already replied, a draft already exists, or the thread already has an `EA/*` label
+- Still classify and repair labels when the fresh classification is better
+- Do not create a duplicate draft for already-actioned threads
+- Keep already-actioned items in their normal Morning Triage sections with inline notes like `already replied`, `draft exists`, or `already labeled`
+
 ### Outputs
 
 | Scenario | Action |
 |----------|--------|
-| `EA/Urgent` / `EA/Needs-Reply` | Create Gmail drafts, apply labels, include `Draft ready in Gmail` in summary |
+| `EA/Urgent` / `EA/Needs-Reply` | Create Gmail drafts when not already actioned, apply labels, include `Draft ready in Gmail` in summary |
 | `EA/FYI` / `EA/Auto-Sorted` | Apply labels, archive after triage |
 | `EA/Unsure` | Apply labels, keep in inbox, surface under `Review These` |
 

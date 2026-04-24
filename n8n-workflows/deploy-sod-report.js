@@ -17,15 +17,18 @@ const TIMEZONE = 'Asia/Manila';
 const JOHN_USER_ID = 'U0AM5EGRVTP';
 
 function cleanText(value) {
-  return (value || '')
-    .replace(/<#[A-Z0-9]+\\\\|([^>]+)>/g, '#$1')
+  return String(value || '')
+    .replace(/<#[A-Z0-9]+\\|([^>]+)>/g, '#$1')
     .replace(/<@[A-Z0-9]+>/g, '@user')
-    .replace(/<([^|>]+)\\\\|([^>]+)>/g, '$2')
+    .replace(/<([^|>]+)\\|([^>]+)>/g, '$2')
     .replace(/<([^>]+)>/g, '$1')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
-    .replace(/\\\\s+/g, ' ')
+    .replace(/\\r\\n/g, '\\n')
+    .split(/\\n/)
+    .map((line) => line.replace(/[ \\t]+/g, ' ').trimEnd())
+    .join('\\n')
     .trim();
 }
 
@@ -63,6 +66,7 @@ function normalizeMessages(items) {
         rawTs: msg.ts || '',
         date: ts ? toLocalDate(ts) : '',
         user: msg.user || '',
+        subtype: msg.subtype || '',
         botId: msg.bot_id || '',
         username: msg.username || '',
         text,
@@ -76,30 +80,41 @@ function normalizeMessages(items) {
 function extractSectionItems(text, headings) {
   if (!text) return [];
 
+  function normalizeHeading(value) {
+    return String(value || '')
+      .toLowerCase()
+      .replace(/^#+\\s*/, '')
+      .replace(/^\\*+\\s*/, '')
+      .replace(/\\*+$/, '')
+      .replace(/^[^a-z0-9\\[]+/, '')
+      .replace(/\\s*\\(\\d+\\)\\s*$/g, '')
+      .replace(/\\s+/g, ' ')
+      .trim();
+  }
+
   const lines = text
-    .split(/\\\\r?\\\\n/)
+    .split(/\\r?\\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 
-  const headingSet = new Set(headings.map((heading) => heading.toLowerCase()));
+  const headingSet = new Set(headings.map((heading) => normalizeHeading(heading)));
   const items = [];
   let active = false;
 
   for (const line of lines) {
-    const lower = line.toLowerCase();
-    const normalizedLine = lower.replace(/^#+\\\\s*/, '').replace(/^\\*\\*(.*)\\*\\*$/, '$1').trim();
+    const normalizedLine = normalizeHeading(line);
 
     if (headingSet.has(normalizedLine)) {
       active = true;
       continue;
     }
 
-    if (active && /^(#+\\s|\\*\\*.+\\*\\*$)/.test(line)) {
+    if (active && /^(#+\\s|\\*+.+\\*+$)/.test(line)) {
       break;
     }
 
-    if (active && /^[-*]/.test(line)) {
-      items.push(line.replace(/^[-*]\\s*/, '').trim());
+    if (active && /^[-*]\\s+/.test(line)) {
+      items.push(line.replace(/^[-*]\\s+/, '').trim());
     }
   }
 
@@ -138,13 +153,36 @@ const today = new Intl.DateTimeFormat('en-CA', {
   month: '2-digit',
   day: '2-digit',
 }).format(now);
+const yesterdayDate = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+const yesterday = new Intl.DateTimeFormat('en-CA', {
+  timeZone: TIMEZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+}).format(yesterdayDate);
 
 const messages = normalizeMessages($input.all());
+const previousDayMessages = messages.filter((msg) => msg.date === yesterday);
 
-const eodMessage = [...messages].reverse().find((msg) =>
-  msg.date !== today &&
-  msg.text.includes("Today's Wrap-up")
-);
+function isLikelyArchivedBotMessage(msg) {
+  return Boolean(
+    msg.botId ||
+    msg.subtype === 'bot_message' ||
+    String(msg.username || '').toLowerCase().includes('bot')
+  );
+}
+
+function isEodWrapUpMessage(msg) {
+  return /today['’]s wrap-up|wrap-up/i.test(msg.text || '');
+}
+
+const eodMessage =
+  [...previousDayMessages].reverse().find((msg) =>
+    isLikelyArchivedBotMessage(msg) && isEodWrapUpMessage(msg)
+  ) ||
+  [...previousDayMessages].reverse().find((msg) =>
+    isEodWrapUpMessage(msg)
+  );
 
 const johnMessages = messages.filter((msg) =>
   msg.date === today &&
@@ -157,7 +195,7 @@ const morningTriageMessage = [...messages].reverse().find((msg) =>
 );
 
 const johnLines = johnMessages
-  .flatMap((msg) => msg.text.split(/\\\\r?\\\\n/))
+  .flatMap((msg) => msg.text.split(/\\r?\\n/))
   .map((line) => line.trim())
   .filter((line) => /^[-*]/.test(line))
   .map((line) => line.replace(/^[-*]\\s*/, '').trim());
@@ -242,10 +280,6 @@ if (!payload.johnMorning || !payload.johnMorning.messageCount) {
   missing.push('John morning dump');
 }
 
-if (!payload.morningTriage || !payload.morningTriage.sourceText) {
-  missing.push('Morning Triage');
-}
-
 return [{
   json: {
     ...payload,
@@ -264,14 +298,14 @@ const payload = $input.first().json;
 function bulletList(items) {
   const safeItems = (items || []).filter(Boolean);
   if (!safeItems.length) return '- None';
-  return safeItems.map((item) => '- ' + item).join('\\\\n');
+  return safeItems.map((item) => '- ' + item).join('\\n');
 }
 
 const johnHasStructuredContext =
   (payload.johnMorning?.focusGoals || []).length ||
   (payload.johnMorning?.blockers || []).length ||
   (payload.johnMorning?.notes || []).length;
-const johnRawFallback = (payload.johnMorning?.rawTexts || []).join('\\\\n\\\\n');
+const johnRawFallback = (payload.johnMorning?.rawTexts || []).join('\\n\\n');
 const johnContextSection = johnHasStructuredContext
   ? []
   : [
@@ -329,7 +363,7 @@ const prompt = [
     ...(payload.morningTriage?.reviewThese || []),
     ...(payload.morningTriage?.bauFollowUps || []),
   ]),
-].join('\\\\n');
+].join('\\n');
 
 return [{
   json: {
@@ -392,8 +426,7 @@ const workflow = {
           mode: 'list',
           cachedResultName: 'airwallexdrafts',
         },
-        returnAll: false,
-        limit: 100,
+        returnAll: true,
         filters: {},
       },
     },

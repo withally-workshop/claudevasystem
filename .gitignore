@@ -4,3 +4,5 @@ CLAUDE.local.md
 .claude/settings.json
 .mcp.json
 node_modules/
+archives/caveman/
+projects/krave-ops-showcase/

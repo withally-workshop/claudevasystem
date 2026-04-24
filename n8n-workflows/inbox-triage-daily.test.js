@@ -19,11 +19,22 @@ assert.match(deploySource, /const GMAIL_CRED_ID = 'vxHex5lFrkakcsPi'/, 'Expected
 assert.match(deploySource, /const AIRWALLEX_DRAFTS = 'C0AQZGJDR38'/, 'Expected #airwallexdrafts channel id');
 assert.match(deploySource, /const NOA_USER_ID = 'U06TBGX9L93'/, 'Expected Noa DM user id');
 assert.match(deploySource, /const TIMEZONE = 'Asia\/Manila'/, 'Expected Manila timezone constant');
+assert.match(deploySource, /const WORKFLOW_ID = '3YyEjk1e6oZV786T'/, 'Expected deploy script to target the existing inbox triage workflow id');
 assert.match(deploySource, /path:\s+'krave-inbox-triage-daily'/, 'Expected manual webhook path');
 assert.match(deploySource, /'Schedule 9am ICT Weekdays'/, 'Expected schedule trigger node');
 assert.match(deploySource, /'Webhook Trigger'/, 'Expected manual webhook node');
 assert.match(deploySource, /'Search Inbox'/, 'Expected Gmail search node');
 assert.match(deploySource, /'Get Gmail Labels'/, 'Expected Gmail label lookup node');
+assert.match(
+  deploySource,
+  /'Build Gmail Query':\s*\{[\s\S]*node:\s+'Get Gmail Labels'/,
+  'Expected label lookup to run in the inbox path before downstream mutation steps'
+);
+assert.match(
+  deploySource,
+  /'Get Gmail Labels':\s*\{[\s\S]*node:\s+'Search Inbox'/,
+  'Expected label lookup output to feed into Search Inbox so the labels node always executes in the same path'
+);
 assert.match(deploySource, /'Fetch Message Details'/, 'Expected Gmail detail node');
 assert.match(deploySource, /'Build Slack Summary'/, 'Expected summary node');
 assert.match(deploySource, /'Post to Airwallex Drafts'/, 'Expected channel summary node');
@@ -34,6 +45,15 @@ assert.match(deploySource, /gmailOAuth2/, 'Expected Gmail OAuth credential wirin
 assert.match(deploySource, /slack/i, 'Expected Slack integration in deploy script');
 assert.match(deploySource, /openAi/i, 'Expected OpenAI integration in deploy script');
 assert.match(deploySource, /in:inbox after:/, 'Expected inbox-after-date Gmail query');
+assert.match(
+  deploySource,
+  /in:inbox newer_than:1d/,
+  'Expected Inbox Triage Daily to search only last-24-hours inbox mail'
+);
+assert.ok(
+  deploySource.includes("$(\\'Build Gmail Query\\').first().json.query") || deploySource.includes("$('Build Gmail Query').first().json.query"),
+  'Expected Search Inbox to read the Gmail query from Build Gmail Query after the labels node is inserted inline'
+);
 assert.match(deploySource, /gmail-message-id|message_id/, 'Expected normalized message id field');
 assert.match(deploySource, /thread_id/, 'Expected normalized thread id field');
 assert.match(deploySource, /from_name/, 'Expected normalized sender name field');
@@ -53,6 +73,25 @@ assert.match(deploySource, /Amanda|Shin|Joshua|Amy|Shuo Shimpa|IM8/i, 'Expected 
 assert.match(deploySource, /legal|contract|overdue|deadline today|payment risk/i, 'Expected urgent keyword guardrails');
 assert.match(deploySource, /newsletter|receipt|noreply@|no-reply@/i, 'Expected auto-sorted keyword guardrails');
 assert.match(deploySource, /never auto-sort known contacts|known contacts/i, 'Expected explicit known-contact comment or code');
+assert.match(deploySource, /'Detect Existing Handling'/, 'Expected explicit action-state detection node');
+assert.match(deploySource, /'Need AI\?'/, 'Expected explicit AI gate node');
+assert.match(deploySource, /'Merge Final Classification'/, 'Expected merge node for rules or AI output');
+assert.match(deploySource, /'Should Draft\?'/, 'Expected explicit draft gate node');
+assert.match(
+  deploySource,
+  /already_replied|draft_exists|already_labeled|already_actioned/,
+  'Expected explicit already-actioned state fields'
+);
+assert.match(
+  deploySource,
+  /already replied|draft exists|already labeled|action-state unknown/i,
+  'Expected inline summary note support for already-actioned threads'
+);
+assert.match(
+  deploySource,
+  /summary_status_note[\s\S]*\[[^'\n]*summary_status_note|statusSuffix = row\.summary_status_note/i,
+  'Expected Morning Triage summaries to annotate already-actioned items inline'
+);
 assert.match(deploySource, /'AI Classifier'/, 'Expected AI classifier node');
 assert.match(deploySource, /'Draft Reply'/, 'Expected draft-generation node');
 assert.match(deploySource, /Return JSON only/i, 'Expected structured AI response instructions');
@@ -62,6 +101,18 @@ assert.match(deploySource, /3-and-1 Framework/, 'Expected 3-and-1 drafting instr
 assert.match(deploySource, /No filler|direct|outcome-oriented/i, 'Expected Noa voice guidance');
 assert.match(deploySource, /Draft ready in Gmail/i, 'Expected summary wording for drafted messages');
 assert.match(deploySource, /'Create Gmail Draft'/, 'Expected Gmail draft node');
+assert.ok(
+  deploySource.includes("resource: 'draft'"),
+  'Expected Gmail draft creation to use the Draft resource'
+);
+assert.ok(
+  deploySource.includes("operation: 'create'"),
+  'Expected Gmail draft creation to use the Create draft operation'
+);
+assert.ok(
+  !deploySource.includes("operation: 'createDraft'"),
+  'Expected invalid message createDraft operation to be removed'
+);
 assert.match(deploySource, /'Apply Tier Label'/, 'Expected Gmail tier label node');
 assert.match(deploySource, /'Apply Context Label'/, 'Expected Gmail context label node');
 assert.match(deploySource, /tier_label_id/, 'Expected resolved Gmail tier label ids');
@@ -104,10 +155,13 @@ assert.match(readmeDoc, /Gmail drafts/i, 'Expected README to document draft-only
 assert.match(readmeDoc, /EA\/Unsure/i, 'Expected README to document inbox retention for unsure emails');
 assert.match(readmeDoc, /#airwallexdrafts/i, 'Expected README to document archive channel summary');
 assert.match(readmeDoc, /Noa/i, 'Expected README to document Noa DM delivery');
+assert.match(readmeDoc, /newer_than:1d|last 24 hours/i, 'Expected README to document last-24-hours inbox scope');
+assert.match(readmeDoc, /already replied|draft exists|already labeled/i, 'Expected README to document inline already-actioned notes');
 assert.match(workflowsDoc, /Inbox Triage Daily/, 'Expected workflow listed in WORKFLOWS.md');
 assert.match(workflowsDoc, /krave-inbox-triage-daily/, 'Expected manual webhook documented');
 assert.match(workflowsDoc, /EA\/Urgent[\s\S]*EA\/Needs-Reply[\s\S]*EA\/FYI[\s\S]*EA\/Auto-Sorted[\s\S]*EA\/Unsure/, 'Expected tier model documented');
 assert.match(workflowsDoc, /Krave|IM8|Halo-Home|Skyvane|Invoices|Contracts|Receipts|Suppliers/, 'Expected starter context labels documented');
 assert.match(workflowsDoc, /draft only|never send/i, 'Expected non-sending behavior documented');
+assert.match(workflowsDoc, /already replied|draft exists|already labeled/i, 'Expected WORKFLOWS.md to document inline in-motion notes');
 
 console.log('Inbox triage daily workflow contract check passed.');

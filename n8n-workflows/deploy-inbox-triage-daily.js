@@ -2,6 +2,7 @@ const https = require('https');
 
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiMTkwMWE5My02ZjJjLTRlNzEtOWI4ZC02ZjlhMzVhMjU4NzUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiZjBlZjk1YTYtYzc2MS00Zjc2LWJkZTgtMWU1Y2FiN2UxMjcxIiwiaWF0IjoxNzc2NjY1NjMxfQ.uBo2H0dzui9S0_MktoRxdodKzzE58vcQtXSlu8VpcEY';
+const WORKFLOW_ID = '3YyEjk1e6oZV786T';
 const GMAIL_CRED_ID = 'vxHex5lFrkakcsPi';
 const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
 const OPENAI_CRED_ID = 'UIREXIYn59JOH1zU';
@@ -36,7 +37,7 @@ const d = String(todayUtc.getUTCDate()).padStart(2, '0');
 
 return [{
   json: {
-    query: 'in:inbox after:' + y + '/' + m + '/' + d,
+    query: 'in:inbox newer_than:1d',
     today_iso: todayIso,
     after_date: y + '/' + m + '/' + d
   }
@@ -63,12 +64,40 @@ return {
   json: {
     message_id: $json.id || 'gmail-message-id',
     thread_id: $json.threadId || '',
+    label_ids: Array.isArray($json.labelIds) ? $json.labelIds : [],
+    label_names: Array.isArray($json.labelNames) ? $json.labelNames : [],
     from_name: sender.from_name,
     from_email: sender.from_email,
     subject: headerValue(payload.headers, 'Subject'),
     snippet: $json.snippet || '',
     body_preview: ($json.textPlain || $json.textHtml || '').replace(/\\s+/g, ' ').trim().slice(0, 800),
     received_at: headerValue(payload.headers, 'Date') || ''
+  }
+};
+`.trim();
+
+const DETECT_EXISTING_HANDLING_CODE = `
+const labelNames = ($json.label_names || $json.labelNames || []).map((value) => String(value || '').trim());
+const alreadyLabeled = labelNames.some((name) => /^EA\\//.test(name));
+const draftExists = Boolean($json.draft_exists || false);
+const alreadyReplied = Boolean($json.already_replied || false);
+
+const reasons = [];
+if (alreadyReplied) reasons.push('already replied');
+if (draftExists) reasons.push('draft exists');
+if (alreadyLabeled) reasons.push('already labeled');
+
+const statusNote = reasons.join(', ') || 'action-state unknown';
+
+return {
+  json: {
+    ...$json,
+    already_labeled: alreadyLabeled,
+    draft_exists: draftExists,
+    already_replied: alreadyReplied,
+    already_actioned: reasons.length > 0,
+    already_actioned_reason: reasons.join(', '),
+    summary_status_note: statusNote
   }
 };
 `.trim();
@@ -145,6 +174,46 @@ const DRAFT_PROMPT_PREFIX = [
   'Do not send. Draft only.',
 ].join('\n');
 
+const MERGE_FINAL_CLASSIFICATION_CODE = `
+function parseAiPayload(json) {
+  const candidates = [
+    json.message?.content,
+    json.content,
+    json.text,
+    json.output_text,
+    json.response?.text,
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {}
+  }
+
+  return null;
+}
+
+const aiPayload = parseAiPayload($json);
+const finalTier = aiPayload?.tier || $json.tier || 'EA/Unsure';
+const finalContextLabel = aiPayload?.context_label || $json.context_label || '';
+const finalReason = aiPayload?.reason || $json.reason || 'Classification merged without AI output';
+const finalDraftRequired = typeof aiPayload?.draft_required === 'boolean'
+  ? aiPayload.draft_required
+  : Boolean($json.draft_required);
+const finalSummaryLine = aiPayload?.summary_line || $json.summary_line || finalReason;
+
+return {
+  json: {
+    ...$json,
+    tier: finalTier,
+    context_label: finalContextLabel,
+    reason: finalReason,
+    draft_required: finalDraftRequired,
+    summary_line: finalSummaryLine
+  }
+};
+`.trim();
+
 const PREPARE_GMAIL_MUTATION_CODE = `
 const labels = $("Get Gmail Labels").all().flatMap((item) => {
   const json = item.json || {};
@@ -200,7 +269,10 @@ const rows = $input.all().map((item) => item.json);
 function linesFor(tier) {
   return rows
     .filter((row) => row.tier === tier)
-    .map((row) => '- ' + row.from_name + ' | ' + row.subject + ' - ' + (row.summary_line || row.reason || '') + (row.summary_draft_note ? ' -> ' + row.summary_draft_note : ''));
+    .map((row) => {
+      const statusSuffix = row.summary_status_note ? ' [' + row.summary_status_note + ']' : '';
+      return '- ' + row.from_name + ' | ' + row.subject + ' - ' + (row.summary_line || row.reason || '') + statusSuffix + (row.summary_draft_note ? ' -> ' + row.summary_draft_note : '');
+    });
 }
 
 const urgent = linesFor('EA/Urgent');
@@ -261,7 +333,7 @@ const workflow = {
         operation: 'getAll',
         limit: 50,
         filters: {
-          q: '={{ $json.query || "in:inbox after:1970/01/01" }}',
+          q: '={{ $(\'Build Gmail Query\').first().json.query || "in:inbox after:1970/01/01" }}',
         },
       },
     },
@@ -302,18 +374,44 @@ const workflow = {
     },
     {
       id: 'n7',
-      name: 'Rules Classifier',
+      name: 'Detect Existing Handling',
       type: 'n8n-nodes-base.code',
       typeVersion: 2,
       position: [1340, 260],
+      parameters: { mode: 'runOnceForEachItem', jsCode: DETECT_EXISTING_HANDLING_CODE },
+    },
+    {
+      id: 'n7b',
+      name: 'Rules Classifier',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1560, 260],
       parameters: { mode: 'runOnceForEachItem', jsCode: RULES_CLASSIFIER_CODE },
     },
     {
       id: 'n8',
+      name: 'Need AI?',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.1,
+      position: [1780, 260],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 1 },
+          conditions: [{
+            leftValue: '={{ $json.ai_needed }}',
+            rightValue: true,
+            operator: { type: 'boolean', operation: 'equals' },
+          }],
+          combinator: 'and',
+        },
+      },
+    },
+    {
+      id: 'n8b',
       name: 'AI Classifier',
       type: '@n8n/n8n-nodes-langchain.openAi',
       typeVersion: 1.8,
-      position: [1560, 180],
+      position: [2000, 160],
       credentials: { openAiApi: { id: OPENAI_CRED_ID, name: 'OpenAI account' } },
       parameters: {
         modelId: {
@@ -341,10 +439,43 @@ const workflow = {
     },
     {
       id: 'n9',
+      name: 'Merge Final Classification',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [2220, 260],
+      parameters: { mode: 'runOnceForEachItem', jsCode: MERGE_FINAL_CLASSIFICATION_CODE },
+    },
+    {
+      id: 'n9b',
+      name: 'Should Draft?',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.1,
+      position: [2440, 260],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 1 },
+          conditions: [
+            {
+              leftValue: '={{ $json.draft_required }}',
+              rightValue: true,
+              operator: { type: 'boolean', operation: 'equals' },
+            },
+            {
+              leftValue: '={{ $json.already_actioned }}',
+              rightValue: false,
+              operator: { type: 'boolean', operation: 'equals' },
+            }
+          ],
+          combinator: 'and',
+        },
+      },
+    },
+    {
+      id: 'n9c',
       name: 'Draft Reply',
       type: '@n8n/n8n-nodes-langchain.openAi',
       typeVersion: 1.8,
-      position: [1560, 340],
+      position: [2660, 160],
       credentials: { openAiApi: { id: OPENAI_CRED_ID, name: 'OpenAI account' } },
       parameters: {
         modelId: {
@@ -375,7 +506,7 @@ const workflow = {
       name: 'Prepare Gmail Mutation',
       type: 'n8n-nodes-base.code',
       typeVersion: 2,
-      position: [1800, 140],
+      position: [2880, 260],
       parameters: { mode: 'runOnceForEachItem', jsCode: PREPARE_GMAIL_MUTATION_CODE },
     },
     {
@@ -383,11 +514,11 @@ const workflow = {
       name: 'Create Gmail Draft',
       type: 'n8n-nodes-base.gmail',
       typeVersion: 2.1,
-      position: [2020, 80],
+      position: [3100, 80],
       credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
-        resource: 'message',
-        operation: 'createDraft',
+        resource: 'draft',
+        operation: 'create',
         subject: '={{ $json.draft_subject }}',
         message: '={{ $json.message?.content || "" }}',
         emailType: 'text',
@@ -398,7 +529,7 @@ const workflow = {
       name: 'Apply Tier Label',
       type: 'n8n-nodes-base.gmail',
       typeVersion: 2.1,
-      position: [2020, 180],
+      position: [3100, 180],
       credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
         resource: 'message',
@@ -412,7 +543,7 @@ const workflow = {
       name: 'Apply Context Label',
       type: 'n8n-nodes-base.gmail',
       typeVersion: 2.1,
-      position: [2020, 280],
+      position: [3100, 280],
       credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
         resource: 'message',
@@ -426,7 +557,7 @@ const workflow = {
       name: 'Archive Decision',
       type: 'n8n-nodes-base.code',
       typeVersion: 2,
-      position: [2240, 280],
+      position: [3320, 280],
       parameters: { mode: 'runOnceForEachItem', jsCode: ARCHIVE_DECISION_CODE },
     },
     {
@@ -434,7 +565,7 @@ const workflow = {
       name: 'Archive Non-Unsure',
       type: 'n8n-nodes-base.gmail',
       typeVersion: 2.1,
-      position: [2460, 280],
+      position: [3540, 280],
       credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
         resource: 'message',
@@ -448,7 +579,7 @@ const workflow = {
       name: 'Build Slack Summary',
       type: 'n8n-nodes-base.code',
       typeVersion: 2,
-      position: [2680, 260],
+      position: [3760, 260],
       parameters: {
         jsCode: BUILD_SUMMARY_CODE,
       },
@@ -458,7 +589,7 @@ const workflow = {
       name: 'Post to Airwallex Drafts',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
-      position: [2900, 200],
+      position: [3980, 200],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       continueOnFail: true,
       parameters: {
@@ -473,7 +604,7 @@ const workflow = {
       name: 'DM Noa Summary',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
-      position: [2900, 320],
+      position: [3980, 320],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       continueOnFail: true,
       parameters: {
@@ -488,7 +619,7 @@ const workflow = {
       name: 'Did Channel Send Fail?',
       type: 'n8n-nodes-base.if',
       typeVersion: 2.1,
-      position: [3120, 200],
+      position: [4200, 200],
       parameters: {
         conditions: {
           options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 1 },
@@ -507,7 +638,7 @@ const workflow = {
       name: 'Retry Channel Send',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
-      position: [3340, 140],
+      position: [4420, 140],
       continueOnFail: true,
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
@@ -522,7 +653,7 @@ const workflow = {
       name: 'Did Noa DM Fail?',
       type: 'n8n-nodes-base.if',
       typeVersion: 2.1,
-      position: [3120, 320],
+      position: [4200, 320],
       parameters: {
         conditions: {
           options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 1 },
@@ -541,7 +672,7 @@ const workflow = {
       name: 'Retry Noa DM',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
-      position: [3340, 320],
+      position: [4420, 320],
       continueOnFail: true,
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
@@ -556,7 +687,7 @@ const workflow = {
       name: 'Post Failure Alert',
       type: 'n8n-nodes-base.slack',
       typeVersion: 2.3,
-      position: [3560, 230],
+      position: [4640, 230],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
         select: 'channel',
@@ -571,15 +702,29 @@ const workflow = {
     'Webhook Trigger': { main: [[{ node: 'Build Gmail Query', type: 'main', index: 0 }]] },
     'Build Gmail Query': {
       main: [
-        [{ node: 'Search Inbox', type: 'main', index: 0 }],
         [{ node: 'Get Gmail Labels', type: 'main', index: 0 }],
       ],
     },
+    'Get Gmail Labels': { main: [[{ node: 'Search Inbox', type: 'main', index: 0 }]] },
     'Search Inbox': { main: [[{ node: 'Fetch Message Details', type: 'main', index: 0 }]] },
     'Fetch Message Details': { main: [[{ node: 'Normalize Email', type: 'main', index: 0 }]] },
-    'Normalize Email': { main: [[{ node: 'Rules Classifier', type: 'main', index: 0 }]] },
-    'Rules Classifier': { main: [[{ node: 'AI Classifier', type: 'main', index: 0 }]] },
-    'AI Classifier': { main: [[{ node: 'Draft Reply', type: 'main', index: 0 }]] },
+    'Normalize Email': { main: [[{ node: 'Detect Existing Handling', type: 'main', index: 0 }]] },
+    'Detect Existing Handling': { main: [[{ node: 'Rules Classifier', type: 'main', index: 0 }]] },
+    'Rules Classifier': { main: [[{ node: 'Need AI?', type: 'main', index: 0 }]] },
+    'Need AI?': {
+      main: [
+        [{ node: 'AI Classifier', type: 'main', index: 0 }],
+        [{ node: 'Merge Final Classification', type: 'main', index: 0 }],
+      ],
+    },
+    'AI Classifier': { main: [[{ node: 'Merge Final Classification', type: 'main', index: 0 }]] },
+    'Merge Final Classification': { main: [[{ node: 'Should Draft?', type: 'main', index: 0 }]] },
+    'Should Draft?': {
+      main: [
+        [{ node: 'Draft Reply', type: 'main', index: 0 }],
+        [{ node: 'Prepare Gmail Mutation', type: 'main', index: 0 }],
+      ],
+    },
     'Draft Reply': { main: [[{ node: 'Prepare Gmail Mutation', type: 'main', index: 0 }]] },
     'Prepare Gmail Mutation': {
       main: [
@@ -607,4 +752,53 @@ const workflow = {
   },
 };
 
-module.exports = { workflow };
+function n8nRequest(method, path, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : '';
+    const url = new URL(N8N_URL + path);
+    const req = https.request({
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      method,
+      headers: {
+        'X-N8N-API-KEY': API_KEY,
+        'Content-Type': 'application/json',
+        ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data || '{}')); } catch { resolve({ raw: data }); }
+      });
+    });
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+async function deploy() {
+  let result = await n8nRequest('PUT', `/api/v1/workflows/${WORKFLOW_ID}`, workflow);
+  if (!result.id) {
+    const refreshed = await n8nRequest('GET', `/api/v1/workflows/${WORKFLOW_ID}`);
+    result = refreshed && refreshed.id ? refreshed : result;
+  }
+  if (!result.id) {
+    console.log('ERROR:', JSON.stringify(result, null, 2).substring(0, 2000));
+    return;
+  }
+  await n8nRequest('POST', `/api/v1/workflows/${WORKFLOW_ID}/activate`);
+  console.log('SUCCESS');
+  console.log('Workflow ID:', result.id);
+  console.log('Name:', result.name);
+  console.log('URL: https://noatakhel.app.n8n.cloud/workflow/' + result.id);
+  console.log('\nManual test via:');
+  console.log('POST https://noatakhel.app.n8n.cloud/webhook/krave-inbox-triage-daily');
+}
+
+if (require.main === module) {
+  deploy().catch((e) => console.error('Deploy failed:', e.message));
+}
+
+module.exports = { WORKFLOW_ID, workflow };

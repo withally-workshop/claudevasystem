@@ -253,7 +253,7 @@ Confirm one of:
 - [ ] **Step 3: Sync operator docs to the actual shipped behavior**
 
 Update the skill and SOP so they reflect:
-- `Morning Triage` hard-stop requirement
+- `Morning Triage` optional-input behavior
 - John raw-text fallback behavior
 - archive-first then DM
 - one DM retry
