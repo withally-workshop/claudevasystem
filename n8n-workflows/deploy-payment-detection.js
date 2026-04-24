@@ -216,9 +216,9 @@ const workflow = {
     },
     {
       id: 'n10', name: 'Slack Payment Confirmed',
-      type: 'n8n-nodes-base.slack', typeVersion: 2.3,
+      type: 'n8n-nodes-base.slack', typeVersion: 2.2,
       position: [2220, 160],
-      credentials: { slackOAuth2Api: { id: 'h7XcndYHgbhdAzkp', name: 'Slack account' } },
+      credentials: { slackApi: { id: 'Bn2U6Cwe1wdiCXzD', name: 'Krave Slack Bot' } },
       parameters: {
         resource: 'message', operation: 'post',
         select: 'channel',
@@ -229,9 +229,9 @@ const workflow = {
     },
     {
       id: 'n11', name: 'Slack Alert',
-      type: 'n8n-nodes-base.slack', typeVersion: 2.3,
+      type: 'n8n-nodes-base.slack', typeVersion: 2.2,
       position: [1560, 460],
-      credentials: { slackOAuth2Api: { id: 'h7XcndYHgbhdAzkp', name: 'Slack account' } },
+      credentials: { slackApi: { id: 'Bn2U6Cwe1wdiCXzD', name: 'Krave Slack Bot' } },
       parameters: {
         resource: 'message', operation: 'post',
         select: 'channel',

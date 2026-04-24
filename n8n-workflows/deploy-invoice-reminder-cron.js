@@ -162,7 +162,7 @@ const workflow = {
       id: 'n1', name: 'Schedule 10am ICT',
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [240, 260],
-      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 3 * * *' }] } }
+      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 2 * * *' }] } }
     },
     {
       id: 'n2', name: 'Webhook Trigger',
@@ -270,7 +270,8 @@ const workflow = {
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
         resource: 'message', operation: 'post',
-        channel: SLACK_CHANNEL,
+        select: 'channel',
+        channelId: { __rl: true, value: SLACK_CHANNEL, mode: 'id' },
         text: "={{ $('Process Invoices').item.json.slackMessage }}",
         otherOptions: {}
       }
@@ -282,7 +283,8 @@ const workflow = {
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
         resource: 'message', operation: 'post',
-        channel: SLACK_CHANNEL,
+        select: 'channel',
+        channelId: { __rl: true, value: SLACK_CHANNEL, mode: 'id' },
         text: '={{ $json.slackMessage }}',
         otherOptions: {}
       }
