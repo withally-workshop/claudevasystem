@@ -12,7 +12,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Start Of Day Report | Active | Manual trigger + production webhook | `deploy-sod-report.js` |
 | Inbox Triage Daily | Active | 9am ICT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
 | Slack Invoice Handler | Active | Slack slash command + modal submit | [deploy-slack-invoice-handler.js](deploy-slack-invoice-handler.js) |
-| Invoice Request Intake | Active | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
+| Invoice Request Intake | Paused (testing) | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
 
 ---
 
@@ -187,7 +187,7 @@ node n8n-workflows/deploy-invoice-request-intake.js
 
 ## Slack Invoice Handler
 
-**Workflow ID:** `OYblaLA5heZjC3Cs`
+**Workflow ID:** `t7MMhlUo5H4HQmgL`
 
 **Current live state:** deployed in n8n and currently active.
 
@@ -195,7 +195,7 @@ Receives Slack slash-command and modal submission payloads, opens the invoice mo
 
 **Slack app setup:** use the same Request URL for both `Slash Commands` and `Interactivity & Shortcuts`.
 
-**Modal fields:** `Client Name or Company Name`, `Billing Address`, `Currency`, `Payout`, `Invoice Date`, `Memo / Project Description`, and freeform `Line Items`. Freeform line items support inputs like `Krave Media x1 @ 1300`, `UGC package x2 @ 500`, or `April retainer 2500`. If quantity is omitted, the handler defaults it to `1`.
+**Modal fields:** `Client Name or Company Name`, `Billing Address`, `Email`, `Currency`, `Payout`, `Invoice Date`, `Memo / Project Description`, and freeform `Line Items`. Freeform line items support inputs like `Krave Media x1 @ 1300`, `UGC package x2 @ 500`, or `April retainer 2500`. If quantity is omitted, the handler defaults it to `1`.
 
 **Helper examples:** payout helper copy shows `7 day payout`, `14 day payout`, and `30 day payout`. Blank payout defaults to `7 day payout`. Invoice-date helper copy shows `today`, `2026-04-21`, and `May 1, 2026`.
 
