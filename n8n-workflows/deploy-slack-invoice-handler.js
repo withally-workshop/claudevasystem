@@ -452,6 +452,7 @@ const workflow = {
       type: 'n8n-nodes-base.httpRequest',
       typeVersion: 4.2,
       position: [1580, 380],
+      onError: 'continueRegularOutput',
       parameters: {
         method: 'POST',
         url: INTAKE_WEBHOOK_URL,
@@ -481,6 +482,7 @@ const workflow = {
           '\\n- Payout: ' + ($json.payout_raw || '7 day payout') +
           '\\n- Due Date: ' + ($json.due_date || 'Needs review') +
           '\\n- Memo: ' + ($json.memo || '-') +
+          '\\n- Email: ' + ($json.client_email || '-') +
           '\\n- Line Items: ' + $json.line_items.map((item) => item.raw_text || (item.description + ' x' + (item.quantity || 1) + (item.unit_price == null ? '' : ' @ ' + item.unit_price))).join('; ') +
           '\\n- Status: ' + ($json.date_parse_status === 'parsed' ? 'Received and processing' : 'Received, needs date review')
         }}`,

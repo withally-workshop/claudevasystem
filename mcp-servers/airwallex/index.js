@@ -4,6 +4,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { randomUUID } from "crypto";
 
 const BASE_URL = "https://api.airwallex.com";
 const CLIENT_ID = process.env.AIRWALLEX_CLIENT_ID;
@@ -201,11 +202,12 @@ const TOOLS = [
   {
     name: "airwallex_list_customers",
     description:
-      "List billing customers in Airwallex. Use this to find a customer's billing_customer_id before creating an invoice.",
+      "List billing customers in Airwallex. Use this to find a customer's billing_customer_id before creating an invoice. Filter by email (exact match) or name (partial match).",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Filter by customer name (partial match)" },
+        email: { type: "string", description: "Filter by customer email (exact match)" },
         page_size: { type: "number", description: "Results per page (default 20)" },
       },
     },
@@ -298,6 +300,7 @@ async function handleTool(name, args) {
 
     case "airwallex_create_invoice": {
       const body = {
+        request_id: randomUUID(),
         billing_customer_id: args.billing_customer_id,
         currency: args.currency,
         collection_method: args.collection_method || "CHARGE_ON_CHECKOUT",
@@ -310,17 +313,17 @@ async function handleTool(name, args) {
     }
 
     case "airwallex_create_product": {
-      const body = { name: args.name };
+      const body = { request_id: randomUUID(), name: args.name };
       if (args.description) body.description = args.description;
       return await airwallexRequest("POST", "/api/v1/products/create", body);
     }
 
     case "airwallex_create_price": {
       const body = {
+        request_id: randomUUID(),
         product_id: args.product_id,
         currency: args.currency,
         unit_amount: args.unit_amount,
-        recurring: false,
       };
       if (args.nickname) body.nickname = args.nickname;
       return await airwallexRequest("POST", "/api/v1/prices/create", body);
@@ -328,6 +331,7 @@ async function handleTool(name, args) {
 
     case "airwallex_add_invoice_line_items": {
       const body = {
+        request_id: randomUUID(),
         line_items: args.line_items.map((item) => ({
           price_id: item.price_id,
           quantity: item.quantity || 1,
@@ -340,12 +344,13 @@ async function handleTool(name, args) {
       return await airwallexRequest(
         "POST",
         `/api/v1/invoices/${args.invoice_id}/finalize`,
-        {}
+        { request_id: randomUUID() }
       );
     }
 
     case "airwallex_create_customer": {
       const body = {
+        request_id: randomUUID(),
         name: args.name,
         type: args.type || "BUSINESS",
       };
@@ -362,6 +367,7 @@ async function handleTool(name, args) {
 
     case "airwallex_list_customers": {
       const params = new URLSearchParams();
+      if (args.email) params.set("email", args.email);
       if (args.name) params.set("name", args.name);
       if (args.page_size) params.set("page_size", args.page_size);
       const query = params.toString() ? `?${params}` : "";

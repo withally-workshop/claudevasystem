@@ -1,24 +1,22 @@
 # Skill: Client Invoice Creation
-**Trigger:** Strategist @tags Claude EA in #payments-invoices-updates with billing details
-**Channel:** #payments-invoices-updates (C09HN2EBPR7)
-**SOP:** references/sops/client-invoice-creation.md
 
----
-
-## Trigger Rules
-- Strategists must **@tag Claude EA** in #payments-invoices-updates to trigger invoice creation
-- Messages without a Claude EA @mention are informational — do NOT process them
-- No invoice attachment required for client invoices
+**Trigger:** Run this skill to process pending invoice requests and approvals.
+**Channels monitored:**
+- C0AQZGJDR38 — John's private channel (approval replies)
+- C09HN2EBPR7 — #payments-invoices-updates (form submission receipts)
 
 ---
 
 ## Key Data
-- VA handle: @U0AM5EGRVTP
-- Noa handle: @U06TBGX9L93
+
+- John's Slack ID: @U0AM5EGRVTP
+- Noa's Slack ID: @U06TBGX9L93
 - John's private channel: C0AQZGJDR38
+- #payments-invoices-updates: C09HN2EBPR7
 - Late fee: always USD $200/month, starting 1 week after due date
 - **Client Invoice Tracker Sheet ID:** `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`
 - **Client Invoice Tracker Tab:** `Invoices`
+- **Linked payment account:** `098284a3-e595-4c5c-a0bf-dabd4c8b97ec` (SGD Global Account — DBS)
 
 ---
 
@@ -28,155 +26,240 @@
 |-----|-------|-------|
 | A | Date Created | |
 | B | Client Name | |
-| C | Email Address | Client billing email — used for sending invoice email |
-| D | Project Description | |
+| C | Email Address | Client billing email |
+| D | Project Description | Line items summary or memo |
 | E | Invoice # | From Airwallex response |
-| F | Airwallex Invoice ID | From Airwallex response |
-| G | Amount | |
+| F | Airwallex Invoice ID | From Airwallex response — used as lookup key |
+| G | Amount | Total of all line items |
 | H | Currency | |
-| I | Due Date | today + payout days (default 7) |
+| I | Due Date | From form receipt |
 | J | Status | State machine — read/write |
-| K | Requested By | Strategist name |
+| K | Requested By | Strategist Slack username from receipt |
 | L | Reminders Sent | Append-only log |
 | M | Payment Confirmed Date | Written by payment-detection skill |
 | N | Status (display) | Formula-driven — **NEVER write to this column** |
 
 ---
 
-## Mode 1: Invoice Creation
+## Routing
 
-### Step 1 — Pull New Requests from Slack
-Read recent messages in C09HN2EBPR7. Look for:
-- Messages from strategists with Claude EA @mention requesting invoice creation
-- Extract: client name, project description, amount, currency, payout terms
-- Skip: ✅ white_check_mark reacted messages (already actioned), casual replies
+On every run, check channels in this order:
 
-### Step 2 — Validate Required Fields
-Before drafting, check:
-- Client name present? ✓/✗
-- Amount present? ✓/✗
-- Currency present? ✓/✗ — if missing, ask. Do NOT assume.
-- Payout terms not stated? → **Default to 7 days.** No need to ask.
+1. **C0AQZGJDR38** — scan for "approve" replies in invoice notification threads that do NOT yet have a ✅ reaction → **Mode 2**
+2. **C09HN2EBPR7** — scan for form receipt messages that do NOT yet have a ✅ reaction → **Mode 1**
 
-If client name, amount, or currency missing → reply in thread:
-```
-Missing info needed to create this invoice:
-• [list what's missing]
-Please provide and re-tag me.
-```
-Do NOT draft.
+Process Mode 2 first (approval is time-sensitive), then Mode 1.
+If nothing pending in either channel → exit cleanly.
 
-If all required fields present → proceed to Step 3.
-
-### Step 3 — Reply to Sender
-Post a reply in the message thread immediately:
-```
-Got it! Drafting invoice for [Client Name] — [Amount] [Currency]. Will have it ready for John's review shortly.
-```
-
-### Step 4 — Draft in Airwallex
-⚠️ **Airwallex Billing API is in Beta — not yet enabled on this account.**
-Invoice creation via API is blocked until the Account Manager enables the Billing module.
-
-**Current workaround:**
-Skip API creation. Instead, post to John's private channel (C0AQZGJDR38) with all details needed to create the invoice manually in Airwallex:
-
-```
-📋 *New Invoice Request — manual creation needed*
-• Client: [Client Name]
-• Amount: [Amount] [Currency]
-• Project: [Project Description]
-• Due: [Due Date] ([N]-day terms)
-• Collection method: CHARGE_ON_CHECKOUT (digital invoice)
-• Requested by: [Strategist]
-
-Create in Airwallex → Invoices → New Invoice, then reply with the Invoice ID.
-```
-
-**Once Billing API is enabled (contact Account Manager):**
-
-Fixed IDs (already confirmed):
-- `linked_payment_account_id`: `098284a3-e595-4c5c-a0bf-dabd4c8b97ec` (SGD Global Account — DBS)
-- `legal_entity_id`: omit on first attempt — Airwallex may auto-resolve from account
-
-**Step 4a — Customer lookup:**
-1. `airwallex_list_customers(name: client_name)` — search for existing billing customer
-   - Found → use `billing_customer_id`
-   - Not found → `airwallex_create_customer(name, email, type: BUSINESS, default_billing_currency: currency)` → get new ID
-
-**Step 4b — Create product:**
-`airwallex_create_product(name: project_description)` → get `product_id`
-- This represents the service being invoiced (e.g. "Krave Media Starter Pack")
-
-**Step 4c — Create one-time price:**
-`airwallex_create_price(product_id, currency, unit_amount: amount)` → get `price_id`
-- Must be one-time (non-recurring) — the tool sets `recurring: false` automatically
-
-**Step 4d — Create invoice (no line items yet):**
-`airwallex_create_invoice`:
-- `billing_customer_id`: from 4a
-- `currency`: from request
-- `days_until_due`: payout terms (default 7)
-- `collection_method`: `CHARGE_ON_CHECKOUT`
-- `linked_payment_account_id`: `098284a3-e595-4c5c-a0bf-dabd4c8b97ec`
-- `legal_entity_id`: omit (add only if API returns a missing field error)
-
-**Step 4e — Add line items:**
-`airwallex_add_invoice_line_items(invoice_id, line_items)`:
-- `price_id`: from 4c
-- `quantity`: 1
-
-Note the invoice ID returned from Step 4d.
-
-### Step 5 — Log to Client Invoice Tracker
-Use `sheets_append_row` with Sheet ID `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`, tab `Invoices`:
-
-| Col | Value |
-|-----|-------|
-| A — Date Created | Today (YYYY-MM-DD) |
-| B — Client Name | From request |
-| C — Email Address | Leave blank — not available at creation time |
-| D — Project Description | From request |
-| E — Invoice # | From Airwallex response |
-| F — Airwallex Invoice ID | From Airwallex response |
-| G — Amount | From request |
-| H — Currency | From request |
-| I — Due Date | today + payout days (YYYY-MM-DD) |
-| J — Status | `Draft — Pending John Review` |
-| K — Requested By | Strategist name from Slack |
-| L — Reminders Sent | (blank) |
-| M — Payment Confirmed Date | (blank) |
-
-### Step 6 — React and Notify John
-1. React ✅ to the original Slack message
-2. Post to John's private channel (C0AQZGJDR38):
-```
-📋 *New Invoice Draft — [Client Name]*
-• Amount: [Amount] [Currency]
-• Project: [Project Description]
-• Due: [Due Date] ([N]-day terms)
-• Requested by: [Strategist]
-• Invoice ID: [inv_xxx]
-• Airwallex Invoice #: [invoice_number]
-
-Reply *approve* in this thread to finalize and send.
-```
+**Dedup signal:** ✅ (`white_check_mark`) reaction on the message = already actioned. Never process a ✅-reacted message.
 
 ---
 
-## Mode 2: Payment Detection Callback
+## Mode 1: Invoice Creation
+
+Triggered by form receipts in #payments-invoices-updates posted by the `/invoice-request` Slack modal.
+
+### Step 1 — Read receipts
+
+`mcp__slack__slack_get_channel_history(channel: C09HN2EBPR7)`
+
+Look for messages matching this format. Skip any already ✅-reacted.
+
+```
+✅ Invoice request received
+- Requester: [slack_username]
+- Client: [client_name]
+- Billing Address: [address or -]
+- Amount: [CURRENCY] [total]
+- Invoice Date: [YYYY-MM-DD or 'Needs review']
+- Payout: [payout_string]
+- Due Date: [YYYY-MM-DD or 'Needs review']
+- Memo: [text or -]
+- Email: [email or -]
+- Line Items: [raw_text; raw_text; ...]
+- Status: Received and processing
+```
+
+### Step 2 — Parse and validate
+
+Extract from each unprocessed receipt:
+
+| Field | Source |
+|-------|--------|
+| `client_name` | "- Client:" line |
+| `client_email` | "- Email:" line — **required**; if "-" or missing → post in thread asking for email, skip receipt, do NOT proceed |
+| `currency` | "- Amount:" line — prefix before space (e.g. "USD") |
+| `due_date` | "- Due Date:" line |
+| `days_until_due` | difference between Invoice Date and Due Date in days; default 7 if either is "Needs review" |
+| `memo` | "- Memo:" line (use "-" as empty) |
+| `requester` | "- Requester:" line (Slack username) |
+| `requester_id` | Resolve via `mcp__slack__slack_get_users` — match `name` or `display_name` to `requester` → get `id`. Use `<@{id}>` for all Slack mentions. Fall back to `@{requester}` only if lookup fails. |
+| `receipt_ts` | message timestamp — retain for ✅ react and thread replies |
+| `line_items` | "- Line Items:" line — split by "; ", then parse each entry freeform: |
+
+**Line item parsing (freeform, in order of attempt):**
+1. Pipe: `description | quantity | unit_price`
+2. @ format: `description x quantity @ unit_price`
+3. Trailing number: `description unit_price` (quantity = 1)
+4. Natural language: use judgment to extract description, quantity, unit_price
+
+If any line item has no parseable `unit_price` after all attempts → post note in the receipt thread asking requester to clarify that specific item, skip the entire receipt, do NOT proceed.
+
+### Step 3 — React to receipt
+
+`mcp__slack__slack_add_reaction(channel: C09HN2EBPR7, timestamp: receipt_ts, reaction: white_check_mark)`
+
+Do this immediately before any API calls to prevent double-processing.
+
+### Step 4 — Airwallex API flow
+
+**4a — Customer lookup/create:**
+1. `mcp__krave-airwallex__airwallex_list_customers(email: client_email)` — email-first lookup
+2. If no results → `airwallex_list_customers(name: client_name)` — name fallback
+3. If still no results → `airwallex_create_customer(name: client_name, email: client_email, type: BUSINESS)`
+4. → get `billing_customer_id`
+
+**4b — Per line item (create product + price):**
+For each parsed line item:
+- `airwallex_create_product(name: "[client_name] — [description]")` → `product_id`
+- `airwallex_create_price(product_id, currency, unit_amount: unit_price)` → `price_id`
+
+Retain `{price_id, quantity}` for each item.
+
+**4c — Create invoice shell:**
+`airwallex_create_invoice`:
+- `billing_customer_id`: from 4a
+- `currency`: from receipt
+- `days_until_due`: from receipt (default 7)
+- `collection_method`: `CHARGE_ON_CHECKOUT`
+- `memo`: from receipt (omit if "-")
+→ `invoice_id`
+
+Note: `linked_payment_account_id` is omitted — the API auto-assigns the account's default payment account.
+
+**4d — Add line items:**
+`airwallex_add_invoice_line_items(invoice_id, [{price_id, quantity}, ...])`
+
+**Do NOT finalize yet.** Draft holds for John's approval.
+
+### Step 5 — Log to tracker
+
+`mcp__google-sheets__sheets_append_row` — Sheet ID `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`, tab `Invoices`:
+
+| Col | Value |
+|-----|-------|
+| A | Today YYYY-MM-DD |
+| B | client_name |
+| C | client_email |
+| D | Line items summary (descriptions joined by ", ") or memo if no items |
+| E | Invoice number from Airwallex response |
+| F | invoice_id (e.g. `inv_xxx`) |
+| G | Total amount (sum of quantity × unit_price across all line items) |
+| H | currency |
+| I | due_date |
+| J | `Draft — Pending John Review` |
+| K | requester username |
+| L | (blank) |
+| M | (blank) |
+
+### Step 6 — Notify John
+
+`mcp__slack__slack_post_message(channel: C0AQZGJDR38)`:
+
+```
+📋 *New Invoice Draft — [client_name]*
+• Amount: [total] [currency]
+• Line Items: [descriptions summary]
+• Client email: [client_email]
+• Due: [due_date] ([days_until_due]-day terms)
+• Invoice ID: [invoice_id]
+• Airwallex Invoice #: [invoice_number]
+• Requested by: <@[requester_id]>
+• 🔗 Request thread: https://krave.slack.com/archives/C09HN2EBPR7/p[receipt_ts with dots removed]
+
+Reply *approve* in this thread to finalize and share payment link with requester.
+```
+
+The thread link encodes `receipt_ts` so Mode 2 can extract it without a separate lookup.
+
+---
+
+## Mode 2: Invoice Approval
+
+Triggered by John replying "approve" in an invoice notification thread in C0AQZGJDR38.
+
+### Step 1 — Detect pending approvals
+
+`mcp__slack__slack_get_channel_history(channel: C0AQZGJDR38)`
+
+Find messages containing "New Invoice Draft" (Mode 1 notifications). For each, check replies via `mcp__slack__slack_get_thread_replies`. Look for replies containing "approve" that do NOT have a ✅ reaction.
+
+Extract from the parent notification message:
+- `invoice_id` — from "Invoice ID:" line (format `inv_xxx`)
+- `receipt_ts` — from the 🔗 thread URL (the digits after `/p`, re-insert dot before last 6 digits)
+- `requester` — from "Requested by:" line
+- `client_name`, `currency`, `due_date` — from respective lines
+- `approval_reply_ts` — timestamp of John's "approve" reply
+
+### Step 2 — React to approval reply
+
+`mcp__slack__slack_add_reaction(channel: C0AQZGJDR38, timestamp: approval_reply_ts, reaction: white_check_mark)`
+
+Do this immediately to prevent double-processing.
+
+### Step 3 — Finalize invoice
+
+`mcp__krave-airwallex__airwallex_finalize_invoice(invoice_id: invoice_id)`
+
+→ status becomes OPEN/UNPAID.
+
+### Step 4 — Get payment link
+
+`mcp__krave-airwallex__airwallex_get_billing_invoice(invoice_id: invoice_id)`
+
+→ extract `hosted_invoice_url`
+
+### Step 5 — Reply to original request thread
+
+`mcp__slack__slack_reply_to_thread(channel: C09HN2EBPR7, thread_ts: receipt_ts)`:
+
+```
+<@[requester_id]> Invoice finalized. Here's the payment link:
+[hosted_invoice_url]
+Due: [due_date]
+
+Please download the file and send to the client along with the digital invoice link.
+```
+
+### Step 6 — Update tracker
+
+`mcp__google-sheets__sheets_find_row(spreadsheet_id: 1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50, sheet_name: Invoices, column: F, value: invoice_id)`
+→ `mcp__google-sheets__sheets_update_row(...)`:
+- Col J → `Sent — Awaiting Payment`
+
+---
+
+## Mode 3: Payment Detection Callback
+
 Called by the `payment-detection` skill when a payment is confirmed.
 
-When payment-detection confirms a match:
-- Update Col J (Status) → `Payment Complete`
-- Update Col M (Payment Confirmed Date) → confirmed date
-- Post to #payments-invoices-updates: `✅ [Client] — [Invoice #] — [Amount] [Currency] paid`
+- Col J → `Payment Complete`
+- Col M → confirmed date (YYYY-MM-DD)
+- Post to #payments-invoices-updates: `✅ [client_name] — [Invoice #] — [Amount] [Currency] paid`
 
 ---
 
 ## Known Recurring Invoices
+
 Already set up as Airwallex subscriptions — no action needed:
+
 | Invoice | Amount | Status |
 |---------|--------|--------|
 | Nancy Creative Engine — Krave | SGD $6,877 | Airwallex subscription, starts 2026-05-01 |
 | IM8 Creative Engine — Krave | USD $5,250 | Airwallex subscription, starts 2026-05-01 |
+
+---
+
+## WhatsApp Client Exception
+
+One client communicates via WhatsApp only and does not use the Slack form. That client is handled manually outside this skill entirely. The skill enforces email as required — no exceptions within the skill flow.
