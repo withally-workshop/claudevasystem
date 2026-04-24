@@ -4,11 +4,11 @@ const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiMTkwMWE5My02ZjJjLTRlNzEtOWI4ZC02ZjlhMzVhMjU4NzUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiZjBlZjk1YTYtYzc2MS00Zjc2LWJkZTgtMWU1Y2FiN2UxMjcxIiwiaWF0IjoxNzc2NjY1NjMxfQ.uBo2H0dzui9S0_MktoRxdodKzzE58vcQtXSlu8VpcEY';
 
 // Credential IDs in n8n
-const GMAIL_CRED_ID = 'vsDW3WpKXqS9HUs3';   // Gmail account (john@kravemedia.co)
-const SHEETS_CRED_ID = '83MQOm78gYDvziTO';  // Google Sheets account
-const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';   // Krave Slack Bot
+const GMAIL_CRED_ID  = 'vsDW3WpKXqS9HUs3';   // Gmail account (john@kravemedia.co)
+const SHEETS_CRED_ID = '83MQOm78gYDvziTO';   // Google Sheets account
+const SLACK_CRED_ID  = 'Bn2U6Cwe1wdiCXzD';   // Krave Slack Bot
 
-const SHEET_ID = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50';
+const SHEET_ID      = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50';
 const SLACK_CHANNEL = 'C09HN2EBPR7';
 
 const PROCESS_CODE = `
@@ -27,50 +27,53 @@ const STRAT_SLACK = {
   John: 'U0AM5EGRVTP'
 };
 const AMANDA_ID = 'U07J8SRCPGU';
-const NOA_ID = 'U06TBGX9L93';
+const NOA_ID    = 'U06TBGX9L93';
 
-const today = new Date();
+const today    = new Date();
 const todayStr = today.toISOString().split('T')[0];
-const msDay = 86400000;
-const rows = $input.all();
-const actions = [];
+const msDay    = 86400000;
+const rows     = $input.all();
+const actions  = [];
 
 for (const row of rows) {
-  const j = row.json;
+  const j      = row.json;
   const status = (j['Status'] || '').toString().trim();
+
+  // Skip completed, escalated, or not-yet-sent invoices
   if (
-    ['Payment Complete', 'Collections', 'Draft - Pending John Review', 'Draft — Pending John Review']
-      .includes(status)
+    status === 'Payment Complete' ||
+    status === 'Collections'      ||
+    status.startsWith('Draft')
   ) continue;
   if (!j['Invoice #'] || !j['Due Date']) continue;
 
   const dueDateStr = j['Due Date'].toString().trim();
-  const dueDate = new Date(dueDateStr);
+  const dueDate    = new Date(dueDateStr);
   if (isNaN(dueDate.getTime())) continue;
 
   const daysDiff = Math.round((dueDate.getTime() - today.getTime()) / msDay);
 
-  const clientName  = (j['Client Name']         || '').toString().trim();
-  const clientEmail = (j['Email Address']        || '').toString().trim();
-  const invoiceNum  = (j['Invoice #']            || '').toString().trim();
-  const amount      = (j['Amount']               || '').toString().trim();
-  const currency    = (j['Currency']             || '').toString().trim();
-  const requestedBy = (j['Requested By']         || '').toString().trim();
-  const remindersLog= (j['Reminders Sent']       || '').toString().trim();
+  const clientName   = (j['Client Name']   || '').toString().trim();
+  const clientEmail  = (j['Email Address'] || '').toString().trim();
+  const invoiceNum   = (j['Invoice #']     || '').toString().trim();
+  const amount       = (j['Amount']        || '').toString().trim();
+  const currency     = (j['Currency']      || '').toString().trim();
+  const requestedBy  = (j['Requested By']  || '').toString().trim();
+  const remindersLog = (j['Reminders Sent']|| '').toString().trim();
 
   let reminderType = null;
-  if      (daysDiff === 7)                      reminderType = '7d';
-  else if (daysDiff === 5)                      reminderType = '5d';
-  else if (daysDiff === 3)                      reminderType = '3d';
-  else if (daysDiff === 1)                      reminderType = '1d';
-  else if (daysDiff === 0)                      reminderType = 'due-today';
-  else if (daysDiff < 0 && daysDiff >= -6)      reminderType = 'overdue';
-  else if (daysDiff === -7)                     reminderType = 'late-fee';
-  else if (daysDiff < -7 && daysDiff > -60)     reminderType = 'late-fee-followup';
-  else if (daysDiff <= -60)                     reminderType = 'collections';
+  if      (daysDiff === 7)                   reminderType = '7d';
+  else if (daysDiff === 5)                   reminderType = '5d';
+  else if (daysDiff === 3)                   reminderType = '3d';
+  else if (daysDiff === 1)                   reminderType = '1d';
+  else if (daysDiff === 0)                   reminderType = 'due-today';
+  else if (daysDiff < 0 && daysDiff >= -6)   reminderType = 'overdue';
+  else if (daysDiff === -7)                  reminderType = 'late-fee';
+  else if (daysDiff < -7 && daysDiff > -60)  reminderType = 'late-fee-followup';
+  else if (daysDiff <= -60)                  reminderType = 'collections';
   else continue;
 
-  // Deduplication — skip if same reminder type sent within 2 days (7 days for late-fee-followup)
+  // Deduplication — skip if same type sent within 2 days (7 days for late-fee-followup)
   let alreadySent = false;
   for (const e of remindersLog.split('|').map(s => s.trim()).filter(Boolean)) {
     const parts = e.split(' ');
@@ -84,9 +87,9 @@ for (const row of rows) {
   }
   if (alreadySent) continue;
 
-  const stratEmail  = STRAT_EMAILS[requestedBy] || null;
-  const stratSlackId= STRAT_SLACK[requestedBy]  || null;
-  const unknownStrat= !!(requestedBy && !stratEmail);
+  const stratEmail   = STRAT_EMAILS[requestedBy] || null;
+  const stratSlackId = STRAT_SLACK[requestedBy]  || null;
+  const unknownStrat = !!(requestedBy && !stratEmail);
   const ccArr = [];
   if (stratEmail && stratEmail !== 'john@kravemedia.co') ccArr.push(stratEmail);
   if (!ccArr.includes('noa@kravemedia.co')) ccArr.push('noa@kravemedia.co');
@@ -95,7 +98,7 @@ for (const row of rows) {
   const daysOverdue = daysDiff < 0 ? Math.abs(daysDiff) : 0;
 
   let subject = '', body = '';
-  const sig = '\\n\\nBest regards,\\nKrave Media';
+  const sig = '\\n\\nBest regards,\\nJohn\\nKrave Media';
   if (['7d','5d','3d','1d'].includes(reminderType)) {
     subject = 'Payment Reminder — ' + invoiceNum + ' — ' + clientName;
     body    = 'Hi ' + clientName + ',\\n\\nJust a reminder that invoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ' is due on ' + dueDateStr + '.\\n\\nPlease arrange payment at your earliest convenience.' + sig;
@@ -106,15 +109,15 @@ for (const row of rows) {
     subject = 'Overdue Invoice — ' + invoiceNum + ' — ' + clientName;
     body    = 'Hi ' + clientName + ',\\n\\nInvoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ' was due on ' + dueDateStr + ' and remains unpaid.\\n\\nPlease arrange payment immediately. A USD $200 late fee will be applied after 7 days overdue per our payment terms.' + sig;
   } else if (reminderType === 'late-fee' || reminderType === 'late-fee-followup') {
-    subject = 'Updated Invoice — Late Fee Applied — ' + invoiceNum + ' — ' + clientName;
-    body    = 'Hi ' + clientName + ',\\n\\nAs payment for invoice ' + invoiceNum + ' has not been received, a late fee of USD $200 has been applied per our payment terms.\\n\\nPlease arrange payment at your earliest convenience to avoid additional fees.' + sig;
+    subject = 'Late Fee Applied — ' + invoiceNum + ' — ' + clientName;
+    body    = 'Hi ' + clientName + ',\\n\\nAs payment for invoice ' + invoiceNum + ' has not been received, a late fee of USD $200 has been applied per our payment terms.\\n\\nUpdated invoice total: ' + amount + ' ' + currency + ' + USD $200.\\n\\nPlease arrange payment at your earliest convenience to avoid additional fees.' + sig;
   } else if (reminderType === 'collections') {
-    subject = 'FINAL NOTICE — Overdue Invoice — ' + invoiceNum + ' — ' + clientName;
-    body    = 'Hi ' + clientName + ',\\n\\nDespite multiple reminders, invoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ' (due ' + dueDateStr + ') remains unpaid.\\n\\nThis account has been flagged for collections. Please contact us immediately.' + sig;
+    subject = 'Final Notice — ' + invoiceNum + ' — ' + clientName;
+    body    = 'Hi ' + clientName + ',\\n\\nInvoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ' has been outstanding for more than 60 days. This matter has been escalated for collections.\\n\\nPlease arrange immediate payment to avoid further action.' + sig;
   }
 
   let newStatus = status;
-  if (reminderType === 'late-fee')   newStatus = 'Late Fee Applied — ' + todayStr;
+  if (reminderType === 'late-fee')    newStatus = 'Late Fee Applied — ' + todayStr;
   if (reminderType === 'collections') newStatus = 'Collections';
 
   const newReminders = remindersLog
@@ -124,16 +127,16 @@ for (const row of rows) {
   const needsSlack = ['due-today','overdue','late-fee','late-fee-followup','collections'].includes(reminderType);
   let slackMessage = '';
   if (needsSlack || !clientEmail) {
-    const stratMention = stratSlackId ? '<@' + stratSlackId + '>' : (requestedBy || 'Unknown');
+    const stratMention  = stratSlackId ? '<@' + stratSlackId + '>' : (requestedBy || 'Unknown');
     const amandaMention = '<@' + AMANDA_ID + '>';
     if (!clientEmail) {
       slackMessage = '⚠️ No client email on file for ' + clientName + ' (' + invoiceNum + ') — reminder not sent. Add to Col C in tracker.';
     } else if (reminderType === 'collections') {
-      slackMessage = '⛔ *Collections Flagged — ' + clientName + '*\\n• Invoice: ' + invoiceNum + '\\n• Amount: ' + amount + ' ' + currency + '\\n• Due: ' + dueDateStr + ' (' + daysOverdue + ' days overdue)\\n• Assigned: ' + stratMention + ' ' + amandaMention + ' <@' + NOA_ID + '>\\n• Action: Escalate to collections immediately';
+      slackMessage = '⛔ *Collections Flagged — ' + clientName + '*\\n• Invoice: ' + invoiceNum + '\\n• Amount: ' + amount + ' ' + currency + '\\n• Due: ' + dueDateStr + ' (' + daysOverdue + ' days overdue)\\n• ' + stratMention + ' ' + amandaMention + ' <@' + NOA_ID + '>';
     } else if (reminderType === 'late-fee' || reminderType === 'late-fee-followup') {
-      slackMessage = '⚠️ *Late Fee Applied — ' + clientName + '*\\n• Invoice: ' + invoiceNum + '\\n• Amount: ' + amount + ' ' + currency + '\\n• Due: ' + dueDateStr + ' (' + daysOverdue + ' days overdue)\\n• Assigned: ' + stratMention + ' ' + amandaMention + '\\n• Action: Add late fee line item in Airwallex';
+      slackMessage = '⚠️ *Late Fee Needed — ' + clientName + '*\\n• Invoice: ' + invoiceNum + '\\n• Amount: ' + amount + ' ' + currency + '\\n• ' + daysOverdue + ' days overdue\\n• Add \\"Late Payment Fee — USD $200\\" line item in Airwallex → Invoices\\n• ' + stratMention + ' ' + amandaMention;
     } else {
-      slackMessage = '🔔 *Overdue Invoice — ' + clientName + '*\\n• Invoice: ' + invoiceNum + '\\n• Amount: ' + amount + ' ' + currency + '\\n• Due: ' + dueDateStr + ' (' + daysOverdue + ' days overdue)\\n• Assigned: ' + stratMention + ' ' + amandaMention;
+      slackMessage = '🔔 *Overdue Invoice — ' + clientName + '*\\n• Invoice: ' + invoiceNum + '\\n• Amount: ' + amount + ' ' + currency + '\\n• Due: ' + dueDateStr + ' (' + daysOverdue + ' days overdue)\\n• ' + stratMention + ' ' + amandaMention;
     }
     if (unknownStrat) slackMessage += '\\n• ⚠️ Unknown strategist "' + requestedBy + '" on record — CC not sent';
   }
@@ -287,15 +290,15 @@ const workflow = {
   ],
   connections: {
     'Schedule 10am ICT':   { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
-    'Webhook Trigger':        { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
-    'Get Invoice Tracker':    { main: [[{ node: 'Process Invoices',    type: 'main', index: 0 }]] },
-    'Process Invoices':       { main: [[{ node: 'Has Client Email?',   type: 'main', index: 0 }]] },
+    'Webhook Trigger':     { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
+    'Get Invoice Tracker': { main: [[{ node: 'Process Invoices',    type: 'main', index: 0 }]] },
+    'Process Invoices':    { main: [[{ node: 'Has Client Email?',   type: 'main', index: 0 }]] },
     'Has Client Email?': { main: [
-      [{ node: 'Send Reminder Email',        type: 'main', index: 0 }],  // TRUE
-      [{ node: 'Slack Missing Email Warning', type: 'main', index: 0 }]  // FALSE
+      [{ node: 'Send Reminder Email',         type: 'main', index: 0 }],  // TRUE
+      [{ node: 'Slack Missing Email Warning',  type: 'main', index: 0 }]  // FALSE
     ]},
-    'Send Reminder Email': { main: [[{ node: 'Update Tracker Row',   type: 'main', index: 0 }]] },
-    'Update Tracker Row':  { main: [[{ node: 'Needs Slack Alert?',   type: 'main', index: 0 }]] },
+    'Send Reminder Email': { main: [[{ node: 'Update Tracker Row',  type: 'main', index: 0 }]] },
+    'Update Tracker Row':  { main: [[{ node: 'Needs Slack Alert?',  type: 'main', index: 0 }]] },
     'Needs Slack Alert?': { main: [
       [{ node: 'Slack Overdue Alert', type: 'main', index: 0 }],  // TRUE
       []                                                            // FALSE — silent
@@ -331,7 +334,7 @@ function n8nRequest(method, path, body) {
 }
 
 async function deploy() {
-  const list = await n8nRequest('GET', `/api/v1/workflows?name=${encodeURIComponent(workflow.name)}&limit=250`);
+  const list     = await n8nRequest('GET', `/api/v1/workflows?name=${encodeURIComponent(workflow.name)}&limit=250`);
   const existing = (list.data || []).find((w) => w.name === workflow.name && w.active !== null);
   let result;
   if (existing) {
