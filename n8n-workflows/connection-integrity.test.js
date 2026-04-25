@@ -24,6 +24,7 @@ const workflowFiles = [
   path.join(__dirname, 'deploy-invoice-request-intake.js'),
   path.join(__dirname, 'deploy-slack-invoice-handler.js'),
   path.join(__dirname, 'deploy-inbox-triage-daily.js'),
+  path.join(__dirname, 'deploy-client-invoice-creation.js'),
 ];
 
 for (const filePath of workflowFiles) {

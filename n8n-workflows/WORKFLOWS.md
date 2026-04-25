@@ -34,6 +34,7 @@
 | 5 | Krave - Inbox Triage Daily | `3YyEjk1e6oZV786T` | Active | 9am ICT weekdays + manual webhook | Read inbox email, create Gmail drafts, apply labels, keep `EA/Unsure` in inbox, and post summary to `#airwallexdrafts` plus Noa |
 | 6 | Krave - Slack Invoice Handler | `OYblaLA5heZjC3Cs` | Active | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
 | 7 | Krave - Invoice Request Intake | `5XHxhQ7wB2rxE3qz` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
+| 8 | Krave — Client Invoice Creation | `TBD` | Active | Every 2 hrs Mon–Fri 9am–5pm PHT + `POST /webhook/krave-client-invoice-creation` | Poll tracker for pending drafts, detect John's "approve" replies, finalize in Airwallex, send payment link to strategist, email client |
 
 ---
 
@@ -620,6 +621,95 @@ Hardcoded in the Payment Detection HTTP Request nodes:
 
 ---
 
+## Workflow 8 - Client Invoice Creation
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/TBD` _(update after first deploy)_
+**Deploy script:** `n8n-workflows/deploy-client-invoice-creation.js`
+
+### Purpose
+
+Automates the approval and finalization leg of the invoice ops flow. Polls the tracker for drafts pending John's approval, scans his DM channel for "approve" replies, finalizes the Airwallex invoice, retrieves the payment link, replies to the strategist in #payments-invoices-updates, and emails the client. Replaces the manual `invoice-approval-polling` skill run.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Schedule | `0 1,3,5,7,9 * * 1-5` — every 2 hrs, Mon–Fri, 9 AM–5 PM PHT |
+| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-client-invoice-creation` |
+
+### Node Flow
+
+```
+[Schedule / Webhook Trigger]
+  ↓
+[Read Invoice Tracker] — Google Sheets, all rows A:N
+  ↓
+[Is Draft Pending?] — filter: Status = "Draft - Pending John Review"
+  ↓ (true per row)
+[Get John Channel History] — conversations.history on C0AQZGJDR38
+  ↓
+[Find Draft Notification] — code: search for bot message containing invoice_id
+  ↓
+[Notification Found?] — skip if no message in channel yet
+  ↓
+[Get Thread Replies] — conversations.replies on notification_ts
+  ↓
+[Find Approve Reply] — code: scan replies for "approve", no ✅ reaction
+  ↓
+[Approve Reply Found?] — skip if no unprocessed approve reply
+  ↓
+[Airwallex Auth] — POST /authentication/login (creds from process.env)
+  ↓
+[Auth OK?] — token present → continue; absent → Alert Auth Failed
+  ↓
+[Finalize Invoice] — POST /api/v1/invoices/{id}/finalize
+  ↓
+[Get Invoice] — GET /api/v1/invoices/{id} for payment link
+  ↓
+[Extract Payment Link] — code: hosted_invoice_url → digital_invoice_link → payment_link → checkout_url
+  ↓
+[Update Tracker] — appendOrUpdate, match Invoice #, set Status = "Invoice Sent"
+  ↓
+[Reply in John Thread] — chat.postMessage to C0AQZGJDR38 thread
+  ↓
+[Notify Strategist] — Slack post to C09HN2EBPR7
+  ↓
+[Has Client Email?] — check Col C
+  ↓ (true)
+[Email Client] — Gmail from john@kravemedia.co to Col C
+```
+
+### Approval Detection Logic
+
+- Source of truth for pending drafts: tracker Col J = `Draft - Pending John Review`
+- For each pending draft, search C0AQZGJDR38 (John's DM with bot) for bot message containing the Airwallex Invoice ID (Col F, format `inv_xxx`)
+- Dedup: skip replies that already have a ✅ (`white_check_mark`) reaction
+- "approve" match is case-insensitive — "Approve", "APPROVE", "approved" all count
+- Processes all pending drafts in one execution (n8n fan-out per tracker row)
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| Pending draft found, approve reply present | Finalize in Airwallex, get link, update tracker to `Invoice Sent`, reply in John's thread, notify strategist, email client if email on file |
+| No pending drafts in tracker | Silent exit |
+| Pending draft found but no approve reply yet | Skip that draft, check next |
+| Notification message not found in C0AQZGJDR38 | Skip that draft |
+| Payment link not in Airwallex response | Notify in thread: retrieve manually from Airwallex dashboard |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| Airwallex auth fails (no token) | `continueOnFail: true`; Auth OK? routes to Alert Auth Failed node; posts ⚠️ to C0AQZGJDR38 with invoice_id; manual finalization required |
+| Finalize returns error (already finalized, etc.) | `continueOnFail: true`; Get Invoice still runs; payment link retrieved from current invoice state |
+| `hosted_invoice_url` absent from all checked fields | `link_found: false`; thread reply and strategist post note ⚠️ to retrieve link from Airwallex dashboard |
+| Slack reply or notify fails | `continueOnFail: true`; tracker update already wrote `Invoice Sent`; no re-processing on next run |
+| Email Client fails | `continueOnFail: true`; logged in n8n execution history; tracker + Slack notifications already written |
+| Google Sheets read fails | `continueOnFail: true`; no items flow downstream; silent exit |
+
+---
+
 ## Runbook - Common Scenarios
 
 ### Trigger payment detection manually
@@ -657,6 +747,13 @@ curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-invoice-request-i
   -H "Content-Type: application/json" -d '{}'
 ```
 
+### Trigger client invoice approval polling manually
+
+```bash
+curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-client-invoice-creation" \
+  -H "Content-Type: application/json" -d '{}'
+```
+
 ### Payment matched but Airwallex mark paid failed
 
 The Sheets row still shows `Payment Complete` and Slack still shows the confirmation. Log into Airwallex and mark the invoice paid manually.
@@ -680,6 +777,7 @@ node n8n-workflows/deploy-payment-detection.js
 node n8n-workflows/deploy-invoice-reminder-cron.js
 node n8n-workflows/deploy-eod-triage-summary.js
 node n8n-workflows/deploy-invoice-request-intake.js
+node n8n-workflows/deploy-client-invoice-creation.js
 ```
 
 Most current deploy scripts update the matching live workflow in place and then reactivate it. Older archived copies may still exist in n8n, so confirm the non-archived workflow ID before assuming a stale link is current.

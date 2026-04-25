@@ -13,6 +13,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Inbox Triage Daily | Active | 9am ICT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
 | Slack Invoice Handler | Active | Slack slash command + modal submit | [deploy-slack-invoice-handler.js](deploy-slack-invoice-handler.js) |
 | Invoice Request Intake | Paused (testing) | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
+| Client Invoice Creation | Active | Every 2 hrs Mon–Fri 9am–5pm PHT + manual webhook | [deploy-client-invoice-creation.js](deploy-client-invoice-creation.js) |
 
 ---
 
