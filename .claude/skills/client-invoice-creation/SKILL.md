@@ -1,6 +1,7 @@
 # Skill: Client Invoice Creation
 
 **Trigger:** Run this skill to process pending invoice requests and approvals.
+**Manual invoke:** `/client-invoice-creation`
 **Channels monitored:**
 - C0AQZGJDR38 — John's private channel (approval replies)
 - C09HN2EBPR7 — #payments-invoices-updates (form submission receipts)
