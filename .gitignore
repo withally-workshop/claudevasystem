@@ -6,3 +6,4 @@ CLAUDE.local.md
 node_modules/
 archives/caveman/
 projects/krave-ops-showcase/
+.playwright-mcp/
