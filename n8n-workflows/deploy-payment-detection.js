@@ -3,6 +3,19 @@ const https = require('https');
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = process.env.N8N_API_KEY;
 
+// Reads n8n workflow static data for the last run timestamp, claims the new window
+// by writing nowTs back immediately, then builds the time-windowed Gmail query.
+// Static data persists across executions with no external storage required.
+const CLAIM_WINDOW_CODE = `
+const staticData = $getWorkflowStaticData('global');
+const lastRunTs = staticData.lastRunTs || 0;
+const nowTs = Math.floor(Date.now() / 1000);
+staticData.lastRunTs = nowTs;
+const afterFilter = lastRunTs > 0 ? 'after:' + lastRunTs : 'newer_than:1d';
+const gmailQuery = 'from:airwallex.com (subject:payment OR subject:deposit OR subject:received) ' + afterFilter;
+return [{ json: { lastRunTs, nowTs, gmailQuery } }];
+`.trim();
+
 const PARSE_CODE = `
 const items = $input.all();
 const emails = [];
@@ -47,7 +60,6 @@ const MATCH_CODE = `
 const parsedData = $('Parse All Emails').first().json;
 const emails = parsedData.emails || [];
 const today = new Date().toISOString().split('T')[0];
-// No emails — exit silently (hourly runs produce no noise when nothing to do)
 if (emails.length === 0) return [];
 const allRows = $input.all();
 const openRows = allRows.filter(r => {
@@ -71,17 +83,11 @@ for (const email of emails) {
     else if (hits.length > 1) confidence = 'ambiguous';
   }
   if (match) {
-    results.push({ matched: true, confidence,
+    results.push({
       clientName: match.json['Client Name'] || '',
       invoiceNumber: match.json['Invoice #'] || '',
       airwallexInvoiceId: match.json['Airwallex Invoice ID'] || '',
       amount: email.amount, currency: email.currency, paymentDate: today });
-  } else {
-    // Only surface unmatched deposits that have an amount — skip indeterminate emails silently
-    if (email.amount) {
-      results.push({ matched: false, confidence,
-        amount: email.amount, currency: email.currency, subject: email.subject, date: today });
-    }
   }
 }
 return results.map(r => ({ json: r }));
@@ -89,7 +95,6 @@ return results.map(r => ({ json: r }));
 
 const SLACK_CONFIRMED_TEXT = "={{ '✅ *Payment Received — ' + $('Match Deposits To Invoices').item.json.clientName + '*\\n• Invoice: ' + $('Match Deposits To Invoices').item.json.invoiceNumber + '\\n• Amount: ' + $('Match Deposits To Invoices').item.json.amount + ' ' + $('Match Deposits To Invoices').item.json.currency + '\\n• Confirmed: ' + $('Match Deposits To Invoices').item.json.paymentDate + '\\n• Tracker: Updated to Payment Complete' }}";
 
-const SLACK_ALERT_TEXT = "={{ '⚠️ *Unmatched Deposit Detected*\\n• Amount: ' + $json.amount + ' ' + $json.currency + '\\n• Date: ' + $json.date + '\\n• Email: ' + $json.subject + '\\n• Action: Match to invoice manually in tracker' }}";
 
 const AW_MARK_PAID_URL = "={{ 'https://api.airwallex.com/api/v1/invoices/' + $('Match Deposits To Invoices').item.json.airwallexInvoiceId + '/mark_as_paid' }}";
 const AW_BEARER = "={{ 'Bearer ' + $json.token }}";
@@ -112,27 +117,35 @@ const workflow = {
       parameters: { httpMethod: 'POST', path: 'krave-payment-detection', responseMode: 'onReceived', options: {} }
     },
     {
+      // Reads lastRunTs from n8n static data, writes nowTs back immediately to
+      // claim the window, then outputs the time-windowed Gmail query.
+      id: 'n13', name: 'Claim Window',
+      type: 'n8n-nodes-base.code', typeVersion: 2,
+      position: [460, 300],
+      parameters: { mode: 'runOnceForAllItems', jsCode: CLAIM_WINDOW_CODE }
+    },
+    {
       id: 'n2', name: 'Search Airwallex Emails',
       type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
-      position: [460, 300],
+      position: [680, 300],
       credentials: { gmailOAuth2: { id: 'vxHex5lFrkakcsPi', name: 'Gmail account' } },
       parameters: {
         resource: 'message', operation: 'getAll',
         returnAll: false, limit: 20,
-        filters: { q: 'from:airwallex.com (subject:payment OR subject:deposit OR subject:received) newer_than:7d' },
+        filters: { q: "={{ $('Claim Window').first().json.gmailQuery }}" },
         options: { format: 'full' }
       }
     },
     {
       id: 'n3', name: 'Parse All Emails',
       type: 'n8n-nodes-base.code', typeVersion: 2,
-      position: [680, 300],
+      position: [900, 300],
       parameters: { mode: 'runOnceForAllItems', jsCode: PARSE_CODE }
     },
     {
       id: 'n4', name: 'Get Invoice Tracker',
       type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5,
-      position: [900, 300],
+      position: [1120, 300],
       credentials: { googleSheetsOAuth2Api: { id: '83MQOm78gYDvziTO', name: 'Google Sheets account' } },
       parameters: {
         resource: 'sheet', operation: 'read',
@@ -144,26 +157,13 @@ const workflow = {
     {
       id: 'n5', name: 'Match Deposits To Invoices',
       type: 'n8n-nodes-base.code', typeVersion: 2,
-      position: [1120, 300],
-      parameters: { mode: 'runOnceForAllItems', jsCode: MATCH_CODE }
-    },
-    {
-      id: 'n6', name: 'Match Found?',
-      type: 'n8n-nodes-base.if', typeVersion: 2.1,
       position: [1340, 300],
-      parameters: {
-        conditions: {
-          options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
-          conditions: [{ id: 'c1', leftValue: '={{ $json.matched }}', rightValue: true, operator: { type: 'boolean', operation: 'equals' } }],
-          combinator: 'and'
-        },
-        options: {}
-      }
+      parameters: { mode: 'runOnceForAllItems', jsCode: MATCH_CODE }
     },
     {
       id: 'n7', name: 'Airwallex Auth',
       type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-      position: [1560, 160],
+      position: [1780, 160],
       continueOnFail: true,
       parameters: {
         method: 'POST',
@@ -179,7 +179,7 @@ const workflow = {
     {
       id: 'n8', name: 'Airwallex Mark Paid',
       type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-      position: [1780, 160],
+      position: [2000, 160],
       continueOnFail: true,
       parameters: {
         method: 'POST', url: AW_MARK_PAID_URL,
@@ -195,7 +195,7 @@ const workflow = {
     {
       id: 'n9', name: 'Update Invoice Status',
       type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5,
-      position: [2000, 160],
+      position: [2220, 160],
       credentials: { googleSheetsOAuth2Api: { id: '83MQOm78gYDvziTO', name: 'Google Sheets account' } },
       parameters: {
         resource: 'sheet', operation: 'appendOrUpdate',
@@ -217,7 +217,7 @@ const workflow = {
     {
       id: 'n10', name: 'Slack Payment Confirmed',
       type: 'n8n-nodes-base.slack', typeVersion: 2.2,
-      position: [2220, 160],
+      position: [2440, 160],
       credentials: { slackApi: { id: 'Bn2U6Cwe1wdiCXzD', name: 'Krave Slack Bot' } },
       parameters: {
         resource: 'message', operation: 'post',
@@ -227,31 +227,15 @@ const workflow = {
         otherOptions: {}
       }
     },
-    {
-      id: 'n11', name: 'Slack Alert',
-      type: 'n8n-nodes-base.slack', typeVersion: 2.2,
-      position: [1560, 460],
-      credentials: { slackApi: { id: 'Bn2U6Cwe1wdiCXzD', name: 'Krave Slack Bot' } },
-      parameters: {
-        resource: 'message', operation: 'post',
-        select: 'channel',
-        channelId: { __rl: true, value: 'C09HN2EBPR7', mode: 'id' },
-        text: SLACK_ALERT_TEXT,
-        otherOptions: {}
-      }
-    }
   ],
   connections: {
-    'Hourly':          { main: [[{ node: 'Search Airwallex Emails', type: 'main', index: 0 }]] },
-    'Webhook Trigger': { main: [[{ node: 'Search Airwallex Emails', type: 'main', index: 0 }]] },
+    'Hourly':          { main: [[{ node: 'Claim Window', type: 'main', index: 0 }]] },
+    'Webhook Trigger': { main: [[{ node: 'Claim Window', type: 'main', index: 0 }]] },
+    'Claim Window':    { main: [[{ node: 'Search Airwallex Emails', type: 'main', index: 0 }]] },
     'Search Airwallex Emails': { main: [[{ node: 'Parse All Emails', type: 'main', index: 0 }]] },
     'Parse All Emails': { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
     'Get Invoice Tracker': { main: [[{ node: 'Match Deposits To Invoices', type: 'main', index: 0 }]] },
-    'Match Deposits To Invoices': { main: [[{ node: 'Match Found?', type: 'main', index: 0 }]] },
-    'Match Found?': { main: [
-      [{ node: 'Airwallex Auth', type: 'main', index: 0 }],
-      [{ node: 'Slack Alert', type: 'main', index: 0 }]
-    ]},
+    'Match Deposits To Invoices': { main: [[{ node: 'Airwallex Auth', type: 'main', index: 0 }]] },
     'Airwallex Auth': { main: [[{ node: 'Airwallex Mark Paid', type: 'main', index: 0 }]] },
     'Airwallex Mark Paid': { main: [[{ node: 'Update Invoice Status', type: 'main', index: 0 }]] },
     'Update Invoice Status': { main: [[{ node: 'Slack Payment Confirmed', type: 'main', index: 0 }]] }
@@ -304,6 +288,7 @@ async function deploy() {
   console.log('Workflow ID:', result.id);
   console.log('Name:', result.name);
   console.log('URL: https://noatakhel.app.n8n.cloud/workflow/' + result.id);
+  console.log('Last-run timestamp is stored in n8n workflow static data — no external setup required.');
 }
 
 deploy().catch((e) => console.error('Deploy failed:', e.message));

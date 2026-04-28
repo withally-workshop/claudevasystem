@@ -10,7 +10,7 @@
 - **URL:** `https://noatakhel.app.n8n.cloud/webhook/krave-payment-detection`
 - **Method:** POST
 - **Auth:** none (webhook is public — URL is the secret)
-- **Workflow:** Krave — Payment Detection (ID: `grsXd1VCVIL2F8Cv`)
+- **Workflow:** Krave — Payment Detection (ID: `NurOLZkg3J6rur5Q`)
 - **n8n instance:** `https://noatakhel.app.n8n.cloud`
 
 ---

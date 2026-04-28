@@ -105,18 +105,17 @@ Replaces the manual daily task of checking whether clients have paid. It scans `
 ```text
 [Schedule / Webhook]
         |
-[Search Airwallex Emails]
+[Claim Window]          ← reads/writes lastRunTs via n8n static data; builds after:{ts} query
+        |
+[Search Airwallex Emails]   ← time-windowed: only emails since last run
         |
 [Parse All Emails]
         |
 [Get Invoice Tracker]
         |
-[Match Deposits To Invoices]
+[Match Deposits To Invoices]   ← unmatched emails exit silently
         |
-[Match Found?]
-   | true               | false
-   v                    v
-[Airwallex Auth]      [silent exit]
+[Airwallex Auth]
         |
 [Airwallex Mark Paid]
         |
@@ -130,7 +129,8 @@ Replaces the manual daily task of checking whether clients have paid. It scans `
 1. Invoice number match against Col E.
 2. Exact amount + currency match against a single open invoice.
 3. Ambiguous matches are skipped silently.
-4. Unmatched deposits are skipped silently.
+4. Unmatched deposits are skipped silently — no Slack alert.
+5. **Time-windowing:** Gmail query uses `after:{lastRunTs}` so each run only sees emails that arrived since the previous run. The timestamp is stored in n8n workflow static data (`$getWorkflowStaticData('global').lastRunTs`). First run falls back to `newer_than:1d`.
 
 ### Outputs
 
@@ -138,13 +138,14 @@ Replaces the manual daily task of checking whether clients have paid. It scans `
 |---------|--------|
 | Match found | Sheets updated, Airwallex marked paid, Slack confirmation |
 | No emails found | Silent |
-| Unmatched deposit | Silent |
+| Unmatched deposit | Silent — no alert |
 | Shopify / payout noise | Skipped silently |
 
 ### Error Handling
 
 | Failure | Behaviour |
 |---------|-----------|
+| First run (no static data yet) | `lastRunTs` defaults to 0 — falls back to `newer_than:1d`, workflow continues normally |
 | Airwallex auth fails | `continueOnFail: true` - Sheets and Slack still continue |
 | Airwallex mark paid fails | `continueOnFail: true` - Sheets still update |
 | Gmail auth error | Workflow errors and n8n emails the instance owner |

@@ -6,7 +6,7 @@
 ---
 
 ## Purpose
-Scan noa@kravemedia.co for Airwallex deposit notification emails, match each deposit to an open invoice in the Client Invoice Tracker, update statuses, and notify the team in Slack. Eliminates the manual "check with Noa" loop for Amanda.
+Scan noa@kravemedia.co for Airwallex deposit notification emails **received since the last run**, match each deposit to an open invoice in the Client Invoice Tracker, update statuses, and notify the team in Slack only when a payment status changes. Eliminates the manual "check with Noa" loop for Amanda.
 
 ---
 
@@ -40,16 +40,21 @@ Scan noa@kravemedia.co for Airwallex deposit notification emails, match each dep
 
 ## Execution Steps
 
+### Step 0 — Determine Search Window
+For **manual skill runs**, use `newer_than:1d` as the search window — this is safe since manual runs are occasional and intentional.
+
+The n8n automated workflow uses `$getWorkflowStaticData('global').lastRunTs` for precise time-windowing between runs. That state is internal to n8n and not accessible here.
+
 ### Step 1 — Scan Noa's Gmail for Deposit Notifications
 Search noa@kravemedia.co for Airwallex payment confirmation emails:
 
 ```
-from:airwallex.com subject:payment OR subject:deposit OR subject:received newer_than:7d
+from:airwallex.com (subject:payment OR subject:deposit OR subject:received) newer_than:1d
 ```
 
 Also try:
 ```
-from:no-reply@airwallex.com newer_than:7d
+from:no-reply@airwallex.com newer_than:1d
 ```
 
 For each result, call `gmail_get_message` (or `gmail_read_message`) to extract:
@@ -121,28 +126,14 @@ For each matched payment, post to #payments-invoices-updates (C09HN2EBPR7):
 
 This gives Amanda and the team full visibility without going through Noa.
 
-### Step 7 — Handle Unmatched Deposits
-For any deposit email with no invoice match:
-
-```
-⚠️ *Unmatched Deposit Detected*
-• Amount: [Amount] [Currency]
-• Date: [Date]
-• Email subject: [Subject]
-• Action needed: Match this to an invoice manually and confirm in tracker
-```
-
-Post to #payments-invoices-updates and tag @john (or VA).
-
-### Step 8 — Output Run Summary
+### Step 7 — Output Run Summary
 After processing all emails, output a summary:
 
 ```
 *Payment Detection Run — [DATE]*
 ✅ Matched & updated: [n] invoices
-⚠️ Unmatched deposits: [n] (posted to Slack)
 ⚠️ Airwallex manual updates needed: [n]
-⏭️ Shopify payments skipped: [n]
+⏭️ Skipped (Shopify / unmatched / ambiguous): [n]
 ```
 
 ---
@@ -159,4 +150,6 @@ If `mcp__gmail-noa__gmail_search_messages` returns an auth error:
 - Run daily at 9 AM ICT via cron (see: `.claude/skills/invoice-reminder-cron/SKILL.md`)
 - Can also be triggered manually: "check for payments" or "/payment-detection"
 - Shopify deposits are NOT client invoice payments — always skip for matching purposes
-- If the same deposit email is seen twice across runs, deduplicate by checking if Column J is already `Payment Complete`
+- **Time-windowed scanning (n8n):** the automated workflow uses `$getWorkflowStaticData('global').lastRunTs` to track the last run Unix timestamp, so each hourly run only searches emails that arrived in the new window. No external setup required.
+- **Manual skill runs:** use `newer_than:1d` — safe for occasional manual use.
+- **No duplicate Slack noise:** matched invoices are deduped by filtering out `Payment Complete` rows. Time-windowed queries prevent the same unmatched deposit from being re-alerted across runs.
