@@ -91,76 +91,27 @@ Strategist notified in #payments-invoices-updates.
 
 If no payment link retrieved: omit the link line, add `⚠️ Payment link unavailable — retrieve from Airwallex dashboard.`
 
-### Step 6 — Notify Strategist in #payments-invoices-updates
-Post to C09HN2EBPR7 as a **reply to the origin thread** (use Col P — Origin Thread TS as `thread_ts`).
+### Step 6 — Tag Requester in Origin Thread (#payments-invoices-updates)
+Reply to C09HN2EBPR7 using Col P (Origin Thread TS) as `thread_ts`.
 
-If Col P is blank, post as a new message (no thread).
+If Col P is blank, post as a new message.
 
 ```
-✅ *Invoice sent — [Client Name]*
+✅ *Invoice approved and ready to send — [Client Name]*
 • Invoice #: [Invoice #]
 • Amount: [Amount] [Currency]
 • Due: [Due Date]
-• Requested by: [if Col K starts with "U" → <@[Col K]>, else display as plain text]
 • Payment link: [digital_invoice_link]
-• Client email: [see rules below]
+
+<@[Col K]> please download the invoice from the link above and email it to the client[(Col C email if on file)] with:
+  - The payment link
+  - The downloaded invoice file as an attachment
+  CC: john@kravemedia.co, noa@kravemedia.co
 ```
 
-**Client email line rules:**
-- Email sent successfully → `Sent to [Col C]`
-- Col C blank → `No email on file — please share the payment link with the client directly`
-- Email failed → `Email to [Col C] failed — please share the payment link with the client directly`
-
-### Step 7 — Email Client (if email on file)
-Check Col C (Email Address) of the tracker row.
-
-**If Col C is blank:** skip email silently. The Step 6 strategist message already instructs them to share the link.
-
-**If Col C has an email address:**
-
-First, look up the requester's email via `slack_get_user_profile` on the Slack user_id in Col K.
-
-Use `mcp__gmail-john__gmail_send` (or create draft then send):
-
-```
-From: john@kravemedia.co
-To: [Col C — client email]
-Cc: noa@kravemedia.co, [requester email from Col K Slack profile]
-Subject: Invoice [Invoice #] - [Client Name] - [Amount] [Currency]
-```
-
-**Email body — generate dynamically** using client name, project description (Col D), amount, currency, due date, invoice #, and payment link. Tone: professional, warm, concise — Krave Media creative agency voice. No generic filler.
-
-Content must cover:
-- Invoice is ready for the project (Col D)
-- Invoice # and amount
-- Due date
-- Payment link — tell client they can view, download, and pay from this link
-- Close: `Best regards, / John / Krave Media`
-
-**Reference structure (not a rigid template):**
-```
-Hi [Client Name],
-
-Your invoice for [Project Description] is ready.
-
-Invoice #: [Invoice #]
-Amount: [Amount] [Currency]
-Due: [Due Date]
-
-View, download, and pay your invoice here:
-[digital_invoice_link]
-
-Best regards,
-John
-Krave Media
-```
-
-**On email failure:**
-- Flag in John's channel: `⚠️ Email to [client email] failed for [Invoice #] — send manually`
-- Update the Step 6 strategist message to include: `⚠️ Email failed — please share the payment link with the client directly`
-
-**n8n note:** When porting to n8n, add an OpenAI AI Agent node (GPT-4o) before the Gmail node to generate the email body using the guidelines above as the system prompt.
+- Col K tag: if starts with `U` → `<@Col K>`, else plain text
+- If Col C has an email, include it in the instruction so the requester knows where to send it
+- If no payment link retrieved: replace link line with `⚠️ Payment link unavailable — retrieve from Airwallex dashboard`
 
 ### Step 8 — Run Summary
 After processing all pending drafts, output:

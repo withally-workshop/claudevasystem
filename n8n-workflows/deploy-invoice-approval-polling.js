@@ -7,8 +7,6 @@ const WORKFLOW_ID = process.env.INVOICE_APPROVAL_POLLING_WORKFLOW_ID || null; //
 const SHEET_ID = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50';
 const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
 const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
-const GMAIL_JOHN_CRED_ID = 'vsDW3WpKXqS9HUs3';
-const OPENAI_CRED_ID = 'UIREXIYn59JOH1zU';
 const JOHN_APPROVAL_CHANNEL = 'C0AQZGJDR38';
 const PAYMENTS_CHANNEL = 'C09HN2EBPR7';
 const AW_CLIENT_ID = process.env.AIRWALLEX_CLIENT_ID || 'JaQA4uJ1SDSBkTdFigT9sw';
@@ -70,37 +68,6 @@ const ctx = $('Find Approve Reply').item.json;
 return [{ json: { ...ctx, payment_link: link, link_found: !!link } }];
 `.trim();
 
-const BUILD_EMAIL_PROMPT_CODE = `
-const ctx = $('Extract Payment Link').item.json;
-const clientName = ctx['Client Name'] || '';
-const projectDesc = ctx['Project Description'] || '';
-const invoiceNum = ctx['Invoice #'] || '';
-const amount = ctx['Amount'] || '';
-const currency = ctx['Currency'] || '';
-const dueDate = ctx['Due Date'] || '';
-const paymentLink = ctx.payment_link || '';
-const prompt = [
-  'Write a professional, warm, concise invoice email on behalf of John at Krave Media.',
-  'Do not use generic filler like "I hope this finds you well".',
-  '',
-  'Client name: ' + clientName,
-  'Project: ' + projectDesc,
-  'Invoice #: ' + invoiceNum,
-  'Amount: ' + amount + ' ' + currency,
-  'Due: ' + dueDate,
-  'Payment link: ' + paymentLink,
-  '',
-  'The email must:',
-  '- Open with "Hi [Client Name],"',
-  '- State the invoice is ready for the project',
-  '- List invoice #, amount, and due date',
-  '- Tell the client they can view, download, and pay at the payment link',
-  '- Close with: Best regards,\\nJohn\\nKrave Media',
-  '',
-  'Output only the email body — no subject line, no extra commentary.',
-].join('\\n');
-return [{ json: { ...ctx, email_prompt: prompt } }];
-`.trim();
 
 const BUILD_JOHN_THREAD_REPLY_CODE = `
 const ctx = $('Extract Payment Link').item.json;
@@ -125,7 +92,6 @@ return [{ json: { ...ctx, john_reply_text: lines.join('\\n') } }];
 
 const BUILD_STRATEGIST_MESSAGE_CODE = `
 const ctx = $('Extract Payment Link').item.json;
-const emailResult = $input.item.json;
 const clientName = ctx['Client Name'] || '';
 const invoiceNum = ctx['Invoice #'] || '';
 const amount = ctx['Amount'] || '';
@@ -137,23 +103,17 @@ const requesterTag = colK.match(/^U[A-Z0-9]{8,}$/) ? '<@' + colK + '>' : (colK |
 const colC = (ctx['Email Address'] || '').trim();
 const originThreadTs = (ctx['Origin Thread TS'] || '').trim();
 
-let emailLine = '';
-if (!colC) {
-  emailLine = 'No email on file — please share the payment link with the client directly';
-} else if (emailResult.email_status === 'sent') {
-  emailLine = 'Sent to ' + colC;
-} else {
-  emailLine = 'Email to ' + colC + ' failed — please share the payment link with the client directly';
-}
-
 const lines = [
-  '✅ *Invoice sent — ' + clientName + '*',
+  '✅ *Invoice approved and ready to send — ' + clientName + '*',
   '• Invoice #: ' + invoiceNum,
   '• Amount: ' + amount + ' ' + currency,
   '• Due: ' + dueDate,
-  '• Requested by: ' + requesterTag,
   '• Payment link: ' + (link || '⚠️ retrieve from Airwallex dashboard'),
-  '• Client email: ' + emailLine,
+  '',
+  requesterTag + ' please download the invoice from the link above and email it to the client' + (colC ? ' (' + colC + ')' : '') + ' with:',
+  '  - The payment link',
+  '  - The downloaded invoice file as an attachment',
+  '  CC: john@kravemedia.co, noa@kravemedia.co',
 ];
 
 return [{ json: {
@@ -348,105 +308,17 @@ const workflow = {
       },
     },
 
-    // ── Step 7: Email — lookup requester, generate body, send ───────────────
+    // ── Step 6: Tag requester in origin thread ─────────────────────────────
     {
-      id: 'n16', name: 'Has Client Email?',
-      type: 'n8n-nodes-base.if', typeVersion: 2.2,
+      id: 'n16', name: 'Build Strategist Message',
+      type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [3360, 300],
-      parameters: {
-        conditions: {
-          options: { caseSensitive: false, typeValidation: 'loose' },
-          conditions: [{
-            id: 'has-email',
-            leftValue: "={{ ($('Extract Payment Link').item.json['Email Address'] || '').trim() }}",
-            rightValue: '',
-            operator: { type: 'string', operation: 'notEquals' },
-          }],
-          combinator: 'and',
-        },
-      },
-    },
-    {
-      id: 'n17', name: 'Lookup Requester Profile',
-      type: 'n8n-nodes-base.slack', typeVersion: 2.3,
-      position: [3580, 160],
-      continueOnFail: true,
-      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
-      parameters: {
-        resource: 'user', operation: 'get',
-        userId: "={{ ($('Extract Payment Link').item.json['Requested By'] || '').trim() }}",
-        options: {},
-      },
-    },
-    {
-      id: 'n18', name: 'Build Email Prompt',
-      type: 'n8n-nodes-base.code', typeVersion: 2,
-      position: [3800, 160],
-      parameters: { mode: 'runOnceForEachItem', jsCode: BUILD_EMAIL_PROMPT_CODE },
-    },
-    {
-      id: 'n19', name: 'Generate Email Body',
-      type: '@n8n/n8n-nodes-langchain.openAi', typeVersion: 1.8,
-      position: [4020, 160],
-      continueOnFail: true,
-      credentials: { openAiApi: { id: OPENAI_CRED_ID, name: 'OpenAI account' } },
-      parameters: {
-        resource: 'text', operation: 'message',
-        modelId: { __rl: true, value: 'gpt-4o', mode: 'id' },
-        messages: {
-          values: [{
-            role: 'user',
-            content: '={{ $json.email_prompt }}',
-          }],
-        },
-        options: { temperature: 0.4 },
-      },
-    },
-    {
-      id: 'n20', name: 'Send Client Email',
-      type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
-      position: [4240, 160],
-      continueOnFail: true,
-      credentials: { gmailOAuth2: { id: GMAIL_JOHN_CRED_ID, name: 'Gmail account (john)' } },
-      parameters: {
-        resource: 'message', operation: 'send',
-        toList: "={{ [$('Extract Payment Link').item.json['Email Address']] }}",
-        ccList: "={{ ['noa@kravemedia.co', ($('Lookup Requester Profile').item.json.profile?.email || '')].filter(Boolean) }}",
-        subject: "={{ 'Invoice ' + $('Extract Payment Link').item.json['Invoice #'] + ' - ' + $('Extract Payment Link').item.json['Client Name'] + ' - ' + $('Extract Payment Link').item.json['Amount'] + ' ' + $('Extract Payment Link').item.json['Currency'] }}",
-        message: "={{ $('Generate Email Body').item.json.message?.content || $('Generate Email Body').item.json.text || '' }}",
-        options: {},
-      },
-    },
-    {
-      id: 'n21', name: 'Mark Email Sent',
-      type: 'n8n-nodes-base.code', typeVersion: 2,
-      position: [4460, 160],
-      parameters: {
-        mode: 'runOnceForEachItem',
-        jsCode: `return [{ json: { ...$('Extract Payment Link').item.json, email_status: 'sent' } }];`,
-      },
-    },
-    {
-      id: 'n22', name: 'Mark Email Skipped',
-      type: 'n8n-nodes-base.code', typeVersion: 2,
-      position: [3580, 440],
-      parameters: {
-        mode: 'runOnceForEachItem',
-        jsCode: `return [{ json: { ...$('Extract Payment Link').item.json, email_status: 'no_email' } }];`,
-      },
-    },
-
-    // ── Step 6: Notify strategist in #payments-invoices-updates ────────────
-    {
-      id: 'n23', name: 'Build Strategist Message',
-      type: 'n8n-nodes-base.code', typeVersion: 2,
-      position: [4700, 300],
       parameters: { mode: 'runOnceForEachItem', jsCode: BUILD_STRATEGIST_MESSAGE_CODE },
     },
     {
-      id: 'n24', name: 'Notify Strategist',
+      id: 'n17', name: 'Notify Strategist',
       type: 'n8n-nodes-base.slack', typeVersion: 2.3,
-      position: [4920, 300],
+      position: [3580, 300],
       continueOnFail: true,
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
@@ -476,17 +348,7 @@ const workflow = {
     'Extract Payment Link':     { main: [[{ node: 'Update Tracker', type: 'main', index: 0 }]] },
     'Update Tracker':           { main: [[{ node: 'Build John Thread Reply', type: 'main', index: 0 }]] },
     'Build John Thread Reply':  { main: [[{ node: 'Reply in John Thread', type: 'main', index: 0 }]] },
-    'Reply in John Thread':     { main: [[{ node: 'Has Client Email?', type: 'main', index: 0 }]] },
-    'Has Client Email?': { main: [
-      [{ node: 'Lookup Requester Profile', type: 'main', index: 0 }],  // true — has email
-      [{ node: 'Mark Email Skipped', type: 'main', index: 0 }],        // false — no email
-    ]},
-    'Lookup Requester Profile': { main: [[{ node: 'Build Email Prompt', type: 'main', index: 0 }]] },
-    'Build Email Prompt':       { main: [[{ node: 'Generate Email Body', type: 'main', index: 0 }]] },
-    'Generate Email Body':      { main: [[{ node: 'Send Client Email', type: 'main', index: 0 }]] },
-    'Send Client Email':        { main: [[{ node: 'Mark Email Sent', type: 'main', index: 0 }]] },
-    'Mark Email Sent':          { main: [[{ node: 'Build Strategist Message', type: 'main', index: 0 }]] },
-    'Mark Email Skipped':       { main: [[{ node: 'Build Strategist Message', type: 'main', index: 0 }]] },
+    'Reply in John Thread':     { main: [[{ node: 'Build Strategist Message', type: 'main', index: 0 }]] },
     'Build Strategist Message': { main: [[{ node: 'Notify Strategist', type: 'main', index: 0 }]] },
   },
 };
