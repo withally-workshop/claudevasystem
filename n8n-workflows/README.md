@@ -19,7 +19,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 
 ## Payment Detection
 
-Scans `noa@kravemedia.co` for Airwallex deposit emails every hour, matches them to open invoices, updates the Client Invoice Tracker, and posts confirmations to `#payments-invoices-updates`. Silent when no new deposits found.
+Runs two parallel detection paths every hour: (1) scans `noa@kravemedia.co` for Airwallex deposit emails, and (2) polls the Airwallex invoice API directly for SWIFT/bank-transfer payments. Handles both full and partial payments — partial payments set status to `Partial Payment` and update Col Q (Amount Paid) without marking Airwallex paid; subsequent payments accumulate until the full amount is reached. Posts confirmations to `#payments-invoices-updates`.
 
 **Workflow ID:** `WqIvJqpKaLXPDfe3`
 

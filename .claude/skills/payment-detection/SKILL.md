@@ -27,15 +27,16 @@ Scan noa@kravemedia.co for Airwallex deposit notification emails **received sinc
 | D | Project Description | |
 | E | Invoice # | Primary match key |
 | F | Airwallex Invoice ID | |
-| G | Amount | |
+| G | Amount | Full invoice amount |
 | H | Currency | |
 | I | Due Date | |
 | J | Status | Read/write |
 | K | Requested By | |
 | L | Reminders Sent | |
-| M | Payment Confirmed Date | Write date when payment confirmed |
+| M | Payment Confirmed Date | Write date when first/last payment confirmed |
 | N | Status (display) | Formula-driven — **do NOT write to this column** |
 | O | Notes | Read-only — contains "Osome" if invoice was created in Osome (no Airwallex record) |
+| Q | Amount Paid | Cumulative amount paid to date — written by payment detection, read by reminder cron |
 
 ---
 
@@ -92,13 +93,34 @@ For each deposit email, attempt to match using this priority order:
 - Amount match, multiple invoices at same amount → Flag — post to Slack for manual confirmation
 - No match at all → Flag — post to Slack for manual review
 
-### Step 4 — Update Client Invoice Tracker
-For each confirmed match, update the row using `sheets_update_row`:
+### Step 4 — Determine Full vs Partial Payment
+After matching, compare the received amount to the invoice amount:
+
+```
+existingAmountPaid = Col Q (Amount Paid) — 0 if empty
+newAmountPaid = existingAmountPaid + received amount
+remaining = Col G (Amount) - newAmountPaid
+isPartial = remaining > $1.00
+```
+
+**Partial payment (isPartial = true):**
+- Update Col J → `Partial Payment`
+- Update Col M → today
+- Update Col Q → `newAmountPaid`
+- Do NOT call Airwallex `mark_paid`
+- Post Slack partial alert (see Step 6)
+
+**Full payment (isPartial = false):**
+- Proceed to Step 5 (tracker update + Airwallex)
+
+### Step 5 — Update Client Invoice Tracker (full payment)
+For each confirmed full payment, update the row:
 
 | Column | Update |
 |--------|--------|
 | J — Status | `Payment Complete` |
 | M — Payment Confirmed Date | Today (YYYY-MM-DD) |
+| Q — Amount Paid | Full invoice amount |
 
 **Range format note:** Use bare ranges like `J8` or `J8:M8`, not `Sheet1!J8` or `Invoices!J8`. The MCP server resolves to the correct tab automatically.
 
@@ -113,9 +135,19 @@ First check Col O (Notes) of the matched tracker row:
      - Call `airwallex_mark_paid` with the Airwallex Invoice ID (Col F)
      - If `airwallex_mark_paid` fails → post to #payments-invoices-updates: `⚠️ Airwallex invoice [Invoice #] needs manual status update → mark as paid`
 
-### Step 6 — Post Payment Confirmation to Slack
-For each matched payment, post to #payments-invoices-updates (C09HN2EBPR7):
+### Step 6 — Post Slack Alert
 
+**Partial payment:**
+```
+🔄 *Partial Payment Received — [Client Name]*
+• Invoice: [Invoice #]
+• Received: [amount] [currency]
+• Total paid: [newAmountPaid] / [invoiceAmount] [currency]
+• Remaining: [remainingAmount] [currency]
+• Tracker: Updated to Partial Payment
+```
+
+**Full payment:**
 ```
 ✅ *Payment Received — [Client Name]*
 • Invoice: [Invoice #]
@@ -126,7 +158,7 @@ For each matched payment, post to #payments-invoices-updates (C09HN2EBPR7):
 [If Airwallex needs manual update]: ⚠️ Mark as paid in Airwallex → Invoices
 ```
 
-This gives Amanda and the team full visibility without going through Noa.
+Both post to #payments-invoices-updates (C09HN2EBPR7) — gives Amanda and the team full visibility without going through Noa.
 
 ### Step 7 — Output Run Summary
 After processing all emails, output a summary:
@@ -155,3 +187,6 @@ If `mcp__gmail-noa__gmail_search_messages` returns an auth error:
 - **Time-windowed scanning (n8n):** the automated workflow uses `$getWorkflowStaticData('global').lastRunTs` to track the last run Unix timestamp, so each hourly run only searches emails that arrived in the new window. No external setup required.
 - **Manual skill runs:** use `newer_than:1d` — safe for occasional manual use.
 - **No duplicate Slack noise:** matched invoices are deduped by filtering out `Payment Complete` rows. Time-windowed queries prevent the same unmatched deposit from being re-alerted across runs.
+- **Partial payments:** detected by comparing received amount to Col G (Amount) after accounting for any existing Col Q (Amount Paid). Sets status to `Partial Payment` — does NOT call Airwallex `mark_paid` until full payment is received.
+- **Airwallex API poll (n8n only):** second detection path for SWIFT/bank-transfer payments that don't generate an Airwallex email. Polls `GET /api/v1/invoices/{id}` for each open Airwallex invoice. `paid_amount` field name is unconfirmed — verify on first run with a live partial invoice.
+- **Second payment handling:** when a subsequent payment arrives, the workflow adds it to Col Q (cumulative) and checks remaining. If remaining ≤ $1, status becomes `Payment Complete` and Airwallex is marked paid.

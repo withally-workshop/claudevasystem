@@ -61,6 +61,14 @@ for (const row of rows) {
   const requestedBy  = (j['Requested By']  || '').toString().trim();
   const remindersLog = (j['Reminders Sent']|| '').toString().trim();
 
+  const isPartialPayment = status === 'Partial Payment';
+  const amountPaidRaw    = isPartialPayment ? parseFloat((j['Amount Paid'] || '0').toString().replace(/,/g,'')) : 0;
+  const invoiceAmountRaw = parseFloat((amount || '0').replace(/,/g,''));
+  const remainingStr     = isPartialPayment ? Math.max(0, invoiceAmountRaw - amountPaidRaw).toFixed(2) : amount;
+  const partialContext   = isPartialPayment
+    ? '\\n\\nNote: We have received your partial payment of ' + amountPaidRaw.toFixed(2) + ' ' + currency + '. The remaining balance of ' + remainingStr + ' ' + currency + ' is outstanding.'
+    : '';
+
   let reminderType = null;
   if      (daysDiff === 7)                   reminderType = '7d';
   else if (daysDiff === 5)                   reminderType = '5d';
@@ -101,19 +109,29 @@ for (const row of rows) {
   const sig = '\\n\\nBest regards,\\nJohn\\nKrave Media';
   if (['7d','5d','3d','1d'].includes(reminderType)) {
     subject = 'Payment Reminder — ' + invoiceNum + ' — ' + clientName;
-    body    = 'Hi ' + clientName + ',\\n\\nJust a reminder that invoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ' is due on ' + dueDateStr + '.\\n\\nPlease arrange payment at your earliest convenience.' + sig;
+    body    = isPartialPayment
+      ? 'Hi ' + clientName + ',\\n\\nA reminder that invoice ' + invoiceNum + ' has an outstanding balance of ' + remainingStr + ' ' + currency + ' due on ' + dueDateStr + '.' + partialContext + '\\n\\nPlease arrange the remaining payment at your earliest convenience.' + sig
+      : 'Hi ' + clientName + ',\\n\\nJust a reminder that invoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ' is due on ' + dueDateStr + '.\\n\\nPlease arrange payment at your earliest convenience.' + sig;
   } else if (reminderType === 'due-today') {
     subject = 'Invoice Due Today — ' + invoiceNum + ' — ' + clientName;
-    body    = 'Hi ' + clientName + ',\\n\\nInvoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ' is due today.\\n\\nPlease arrange payment today to avoid a late fee being applied.' + sig;
+    body    = isPartialPayment
+      ? 'Hi ' + clientName + ',\\n\\nInvoice ' + invoiceNum + ' has an outstanding balance of ' + remainingStr + ' ' + currency + ' due today.' + partialContext + '\\n\\nPlease arrange the remaining payment today to avoid a late fee being applied.' + sig
+      : 'Hi ' + clientName + ',\\n\\nInvoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ' is due today.\\n\\nPlease arrange payment today to avoid a late fee being applied.' + sig;
   } else if (reminderType === 'overdue') {
     subject = 'Overdue Invoice — ' + invoiceNum + ' — ' + clientName;
-    body    = 'Hi ' + clientName + ',\\n\\nInvoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ' was due on ' + dueDateStr + ' and remains unpaid.\\n\\nPlease arrange payment immediately. A USD $200 late fee will be applied after 7 days overdue per our payment terms.' + sig;
+    body    = isPartialPayment
+      ? 'Hi ' + clientName + ',\\n\\nInvoice ' + invoiceNum + ' has an outstanding balance of ' + remainingStr + ' ' + currency + ' due on ' + dueDateStr + ' and remains unpaid.' + partialContext + '\\n\\nPlease arrange the remaining payment immediately. A USD $200 late fee will be applied after 7 days overdue per our payment terms.' + sig
+      : 'Hi ' + clientName + ',\\n\\nInvoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ' was due on ' + dueDateStr + ' and remains unpaid.\\n\\nPlease arrange payment immediately. A USD $200 late fee will be applied after 7 days overdue per our payment terms.' + sig;
   } else if (reminderType === 'late-fee' || reminderType === 'late-fee-followup') {
     subject = 'Late Fee Applied — ' + invoiceNum + ' — ' + clientName;
-    body    = 'Hi ' + clientName + ',\\n\\nAs payment for invoice ' + invoiceNum + ' has not been received, a late fee of USD $200 has been applied per our payment terms.\\n\\nUpdated invoice total: ' + amount + ' ' + currency + ' + USD $200.\\n\\nPlease arrange payment at your earliest convenience to avoid additional fees.' + sig;
+    body    = isPartialPayment
+      ? 'Hi ' + clientName + ',\\n\\nAs the remaining balance of invoice ' + invoiceNum + ' (' + remainingStr + ' ' + currency + ') has not been received, a late fee of USD $200 has been applied per our payment terms.' + partialContext + '\\n\\nUpdated outstanding total: ' + remainingStr + ' ' + currency + ' + USD $200.\\n\\nPlease arrange payment at your earliest convenience to avoid additional fees.' + sig
+      : 'Hi ' + clientName + ',\\n\\nAs payment for invoice ' + invoiceNum + ' has not been received, a late fee of USD $200 has been applied per our payment terms.\\n\\nUpdated invoice total: ' + amount + ' ' + currency + ' + USD $200.\\n\\nPlease arrange payment at your earliest convenience to avoid additional fees.' + sig;
   } else if (reminderType === 'collections') {
     subject = 'Final Notice — ' + invoiceNum + ' — ' + clientName;
-    body    = 'Hi ' + clientName + ',\\n\\nInvoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ' has been outstanding for more than 60 days. This matter has been escalated for collections.\\n\\nPlease arrange immediate payment to avoid further action.' + sig;
+    body    = isPartialPayment
+      ? 'Hi ' + clientName + ',\\n\\nInvoice ' + invoiceNum + ' has an outstanding balance of ' + remainingStr + ' ' + currency + ' that has been outstanding for more than 60 days.' + partialContext + '\\n\\nThis matter has been escalated for collections. Please arrange immediate payment to avoid further action.' + sig
+      : 'Hi ' + clientName + ',\\n\\nInvoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ' has been outstanding for more than 60 days. This matter has been escalated for collections.\\n\\nPlease arrange immediate payment to avoid further action.' + sig;
   }
 
   let newStatus = status;
@@ -134,9 +152,9 @@ for (const row of rows) {
     } else if (reminderType === 'collections') {
       slackMessage = '⛔ *Collections Flagged — ' + clientName + '*\\n• Invoice: ' + invoiceNum + '\\n• Amount: ' + amount + ' ' + currency + '\\n• Due: ' + dueDateStr + ' (' + daysOverdue + ' days overdue)\\n• ' + stratMention + ' ' + amandaMention + ' <@' + NOA_ID + '>';
     } else if (reminderType === 'late-fee' || reminderType === 'late-fee-followup') {
-      slackMessage = '⚠️ *Late Fee Needed — ' + clientName + '*\\n• Invoice: ' + invoiceNum + '\\n• Amount: ' + amount + ' ' + currency + '\\n• ' + daysOverdue + ' days overdue\\n• Add \\"Late Payment Fee — USD $200\\" line item in Airwallex → Invoices\\n• ' + stratMention + ' ' + amandaMention;
+      slackMessage = '⚠️ *Late Fee Needed — ' + clientName + '*\\n• Invoice: ' + invoiceNum + '\\n• Amount: ' + amount + ' ' + currency + (isPartialPayment ? '\\n• Partial paid: ' + amountPaidRaw.toFixed(2) + ' — Remaining: ' + remainingStr + ' ' + currency : '') + '\\n• ' + daysOverdue + ' days overdue\\n• Add \\"Late Payment Fee — USD $200\\" line item in Airwallex → Invoices\\n• ' + stratMention + ' ' + amandaMention;
     } else {
-      slackMessage = '🔔 *Overdue Invoice — ' + clientName + '*\\n• Invoice: ' + invoiceNum + '\\n• Amount: ' + amount + ' ' + currency + '\\n• Due: ' + dueDateStr + ' (' + daysOverdue + ' days overdue)\\n• ' + stratMention + ' ' + amandaMention;
+      slackMessage = '🔔 *Overdue Invoice — ' + clientName + '*\\n• Invoice: ' + invoiceNum + '\\n• Amount: ' + amount + ' ' + currency + (isPartialPayment ? '\\n• Partial paid: ' + amountPaidRaw.toFixed(2) + ' — Remaining: ' + remainingStr + ' ' + currency : '') + '\\n• Due: ' + dueDateStr + ' (' + daysOverdue + ' days overdue)\\n• ' + stratMention + ' ' + amandaMention;
     }
     if (unknownStrat) slackMessage += '\\n• ⚠️ Unknown strategist "' + requestedBy + '" on record — CC not sent';
   }

@@ -30,7 +30,7 @@ Daily automated run that:
 | D | Project Description | |
 | E | Invoice # | Primary match key |
 | F | Airwallex Invoice ID | Used for late fee customer lookup |
-| G | Amount | |
+| G | Amount | Full invoice amount |
 | H | Currency | |
 | I | Due Date | Used to calculate days_diff |
 | J | Status | Read/write |
@@ -38,6 +38,7 @@ Daily automated run that:
 | L | Reminders Sent | Append-only log e.g. `7d 2026-04-10 \| overdue 2026-04-15` |
 | M | Payment Confirmed Date | Write date when payment confirmed |
 | N | Status (display) | Formula-driven — **do NOT write to this column** |
+| Q | Amount Paid | Cumulative amount paid — read to compute remaining balance for `Partial Payment` rows |
 
 ## Strategist Lookup
 | Name | Email | Slack ID |
@@ -67,6 +68,12 @@ Pull all rows from Client Invoice Tracker (Sheet ID above, tab: `Invoices`, rang
 - Is `Payment Complete`
 - Is `Collections`
 - Starts with `Draft` (covers `Draft — Pending John Review` and `Draft - Pending John Review`)
+
+**Process but adjust for `Partial Payment` rows:**
+- Do NOT skip — a remaining balance is still owed
+- Read Col Q (Amount Paid) to compute remaining: `remaining = Col G - Col Q`
+- Use `remaining` in the email body instead of the full amount
+- Append a partial payment note to every email body
 
 For remaining rows, calculate: `days_diff = due_date (Col I) - today`
 
