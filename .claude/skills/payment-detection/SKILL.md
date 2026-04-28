@@ -35,6 +35,7 @@ Scan noa@kravemedia.co for Airwallex deposit notification emails **received sinc
 | L | Reminders Sent | |
 | M | Payment Confirmed Date | Write date when payment confirmed |
 | N | Status (display) | Formula-driven — **do NOT write to this column** |
+| O | Notes | Read-only — contains "Osome" if invoice was created in Osome (no Airwallex record) |
 
 ---
 
@@ -103,13 +104,14 @@ For each confirmed match, update the row using `sheets_update_row`:
 
 **Do NOT write to Column N** — it is formula-driven.
 
-### Step 5 — Update Airwallex
-For each matched invoice:
-1. Use `airwallex_get_invoice` to retrieve current status
-2. If status is not already `PAID`:
-   - Call `airwallex_mark_paid` with the Airwallex Invoice ID (Col F)
-   - If `airwallex_mark_paid` succeeds → no Slack flag needed
-   - If `airwallex_mark_paid` fails → post to #payments-invoices-updates: `⚠️ Airwallex invoice [Invoice #] needs manual status update → mark as paid`
+### Step 5 — Update Airwallex (Airwallex invoices only)
+First check Col O (Notes) of the matched tracker row:
+- If Notes contains "osome" (case-insensitive) → **skip this step entirely**. Osome has no API and the invoice does not exist in Airwallex.
+- Otherwise:
+  1. Use `airwallex_get_invoice` to retrieve current status
+  2. If status is not already `PAID`:
+     - Call `airwallex_mark_paid` with the Airwallex Invoice ID (Col F)
+     - If `airwallex_mark_paid` fails → post to #payments-invoices-updates: `⚠️ Airwallex invoice [Invoice #] needs manual status update → mark as paid`
 
 ### Step 6 — Post Payment Confirmation to Slack
 For each matched payment, post to #payments-invoices-updates (C09HN2EBPR7):

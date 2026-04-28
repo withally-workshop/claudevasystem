@@ -83,11 +83,13 @@ for (const email of emails) {
     else if (hits.length > 1) confidence = 'ambiguous';
   }
   if (match) {
+    const notes = (match.json['Notes'] || '').toString().toLowerCase();
+    const isOsome = notes.includes('osome');
     results.push({
       clientName: match.json['Client Name'] || '',
       invoiceNumber: match.json['Invoice #'] || '',
       airwallexInvoiceId: match.json['Airwallex Invoice ID'] || '',
-      amount: email.amount, currency: email.currency, paymentDate: today });
+      amount: email.amount, currency: email.currency, paymentDate: today, isOsome });
   }
 }
 return results.map(r => ({ json: r }));
@@ -161,9 +163,24 @@ const workflow = {
       parameters: { mode: 'runOnceForAllItems', jsCode: MATCH_CODE }
     },
     {
+      // Route on whether the invoice was created in Osome (no Airwallex record to update).
+      // isOsome is set in MATCH_CODE by checking Col O (Notes) for the word "osome".
+      id: 'n14', name: 'Is Osome?',
+      type: 'n8n-nodes-base.if', typeVersion: 2.1,
+      position: [1560, 300],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+          conditions: [{ id: 'c1', leftValue: '={{ $json.isOsome }}', rightValue: true, operator: { type: 'boolean', operation: 'equals' } }],
+          combinator: 'and'
+        },
+        options: {}
+      }
+    },
+    {
       id: 'n7', name: 'Airwallex Auth',
       type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-      position: [1780, 160],
+      position: [1780, 100],
       continueOnFail: true,
       parameters: {
         method: 'POST',
@@ -179,7 +196,7 @@ const workflow = {
     {
       id: 'n8', name: 'Airwallex Mark Paid',
       type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-      position: [2000, 160],
+      position: [2000, 100],
       continueOnFail: true,
       parameters: {
         method: 'POST', url: AW_MARK_PAID_URL,
@@ -195,7 +212,7 @@ const workflow = {
     {
       id: 'n9', name: 'Update Invoice Status',
       type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5,
-      position: [2220, 160],
+      position: [2220, 100],
       credentials: { googleSheetsOAuth2Api: { id: '83MQOm78gYDvziTO', name: 'Google Sheets account' } },
       parameters: {
         resource: 'sheet', operation: 'appendOrUpdate',
@@ -217,7 +234,43 @@ const workflow = {
     {
       id: 'n10', name: 'Slack Payment Confirmed',
       type: 'n8n-nodes-base.slack', typeVersion: 2.2,
-      position: [2440, 160],
+      position: [2440, 100],
+      credentials: { slackApi: { id: 'Bn2U6Cwe1wdiCXzD', name: 'Krave Slack Bot' } },
+      parameters: {
+        resource: 'message', operation: 'post',
+        select: 'channel',
+        channelId: { __rl: true, value: 'C09HN2EBPR7', mode: 'id' },
+        text: SLACK_CONFIRMED_TEXT,
+        otherOptions: {}
+      }
+    },
+    {
+      // Osome path: tracker update only — no Airwallex call since Osome has no API.
+      id: 'n15', name: 'Update Osome Invoice Status',
+      type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5,
+      position: [1780, 500],
+      credentials: { googleSheetsOAuth2Api: { id: '83MQOm78gYDvziTO', name: 'Google Sheets account' } },
+      parameters: {
+        resource: 'sheet', operation: 'appendOrUpdate',
+        documentId: { __rl: true, value: '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50', mode: 'id' },
+        sheetName: { __rl: true, value: 'Invoices', mode: 'name' },
+        columns: {
+          mappingMode: 'defineBelow',
+          value: {
+            'Invoice #': "={{ $('Match Deposits To Invoices').item.json.invoiceNumber }}",
+            'Status': 'Payment Complete',
+            'Payment Confirmed Date': "={{ $('Match Deposits To Invoices').item.json.paymentDate }}"
+          },
+          matchingColumns: ['Invoice #'],
+          schema: []
+        },
+        options: {}
+      }
+    },
+    {
+      id: 'n16', name: 'Slack Osome Payment Confirmed',
+      type: 'n8n-nodes-base.slack', typeVersion: 2.2,
+      position: [2000, 500],
       credentials: { slackApi: { id: 'Bn2U6Cwe1wdiCXzD', name: 'Krave Slack Bot' } },
       parameters: {
         resource: 'message', operation: 'post',
@@ -235,10 +288,15 @@ const workflow = {
     'Search Airwallex Emails': { main: [[{ node: 'Parse All Emails', type: 'main', index: 0 }]] },
     'Parse All Emails': { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
     'Get Invoice Tracker': { main: [[{ node: 'Match Deposits To Invoices', type: 'main', index: 0 }]] },
-    'Match Deposits To Invoices': { main: [[{ node: 'Airwallex Auth', type: 'main', index: 0 }]] },
+    'Match Deposits To Invoices': { main: [[{ node: 'Is Osome?', type: 'main', index: 0 }]] },
+    'Is Osome?': { main: [
+      [{ node: 'Update Osome Invoice Status', type: 'main', index: 0 }],  // true — Osome: skip Airwallex
+      [{ node: 'Airwallex Auth', type: 'main', index: 0 }]                // false — Airwallex invoice
+    ]},
     'Airwallex Auth': { main: [[{ node: 'Airwallex Mark Paid', type: 'main', index: 0 }]] },
     'Airwallex Mark Paid': { main: [[{ node: 'Update Invoice Status', type: 'main', index: 0 }]] },
-    'Update Invoice Status': { main: [[{ node: 'Slack Payment Confirmed', type: 'main', index: 0 }]] }
+    'Update Invoice Status': { main: [[{ node: 'Slack Payment Confirmed', type: 'main', index: 0 }]] },
+    'Update Osome Invoice Status': { main: [[{ node: 'Slack Osome Payment Confirmed', type: 'main', index: 0 }]] }
   }
 };
 
