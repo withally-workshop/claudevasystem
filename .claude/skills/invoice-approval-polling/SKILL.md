@@ -22,18 +22,20 @@
 | G | Amount |
 | H | Currency |
 | I | Due Date |
-| J | Status |
-| K | Requested By |
+| J | Status (notes) — write here; Col N is formula, never touch |
+| K | Requested By (Slack user_id, e.g. U0AM5EGRVTP) |
 | L | Reminders Sent |
 | M | Payment Confirmed Date |
-| N | Status (display) — never write |
+| N | Status (display formula) — never write |
+| O | Notes |
+| P | Origin Thread TS |
 
 ---
 
 ## Execution Steps
 
 ### Step 1 — Pull Pending Drafts from Tracker
-Use `sheets_get_rows` on the Client Invoice Tracker (range `A:N`).
+Use `sheets_get_rows` on the Client Invoice Tracker (range `A:P`).
 Filter for rows where Col J = `Draft - Pending John Review`.
 
 If no pending drafts → skip all remaining steps. Nothing to process.
@@ -90,41 +92,63 @@ Strategist notified in #payments-invoices-updates.
 If no payment link retrieved: omit the link line, add `⚠️ Payment link unavailable — retrieve from Airwallex dashboard.`
 
 ### Step 6 — Notify Strategist in #payments-invoices-updates
-Post to C09HN2EBPR7:
+Post to C09HN2EBPR7 as a **reply to the origin thread** (use Col P — Origin Thread TS as `thread_ts`).
+
+If Col P is blank, post as a new message (no thread).
 
 ```
 ✅ *Invoice sent — [Client Name]*
 • Invoice #: [Invoice #]
 • Amount: [Amount] [Currency]
 • Due: [Due Date]
-• Requested by: [Strategist from Col K]
+• Requested by: [if Col K starts with "U" → <@[Col K]>, else display as plain text]
 • Payment link: [digital_invoice_link]
+• Client email: [see rules below]
 ```
 
-If possible, reply in the **original strategist request thread** rather than a new message. Use the Slack message timestamp stored at draft creation if available (not currently stored — post as new message for now).
+**Client email line rules:**
+- Email sent successfully → `Sent to [Col C]`
+- Col C blank → `No email on file — please share the payment link with the client directly`
+- Email failed → `Email to [Col C] failed — please share the payment link with the client directly`
 
 ### Step 7 — Email Client (if email on file)
 Check Col C (Email Address) of the tracker row.
 
-**If Col C is blank:** skip email silently — no flag needed.
+**If Col C is blank:** skip email silently. The Step 6 strategist message already instructs them to share the link.
 
 **If Col C has an email address:**
-Use `mcp__gmail-john__gmail_create_draft` then send, or use available send tool:
+
+First, look up the requester's email via `slack_get_user_profile` on the Slack user_id in Col K.
+
+Use `mcp__gmail-john__gmail_send` (or create draft then send):
 
 ```
 From: john@kravemedia.co
 To: [Col C — client email]
-Subject: Invoice [Invoice #] — [Client Name] — [Amount] [Currency]
+Cc: noa@kravemedia.co, [requester email from Col K Slack profile]
+Subject: Invoice [Invoice #] - [Client Name] - [Amount] [Currency]
+```
 
+**Email body — generate dynamically** using client name, project description (Col D), amount, currency, due date, invoice #, and payment link. Tone: professional, warm, concise — Krave Media creative agency voice. No generic filler.
+
+Content must cover:
+- Invoice is ready for the project (Col D)
+- Invoice # and amount
+- Due date
+- Payment link — tell client they can view, download, and pay from this link
+- Close: `Best regards, / John / Krave Media`
+
+**Reference structure (not a rigid template):**
+```
 Hi [Client Name],
 
-Please find your invoice for [Project Description] attached below.
+Your invoice for [Project Description] is ready.
 
-Amount: [Amount] [Currency]
-Due Date: [Due Date]
 Invoice #: [Invoice #]
+Amount: [Amount] [Currency]
+Due: [Due Date]
 
-You can view and pay your invoice here:
+View, download, and pay your invoice here:
 [digital_invoice_link]
 
 Best regards,
@@ -132,7 +156,11 @@ John
 Krave Media
 ```
 
-If email send fails → flag in John's channel: `⚠️ Email to [client email] failed for [Invoice #] — send manually.`
+**On email failure:**
+- Flag in John's channel: `⚠️ Email to [client email] failed for [Invoice #] — send manually`
+- Update the Step 6 strategist message to include: `⚠️ Email failed — please share the payment link with the client directly`
+
+**n8n note:** When porting to n8n, add an OpenAI AI Agent node (GPT-4o) before the Gmail node to generate the email body using the guidelines above as the system prompt.
 
 ### Step 8 — Run Summary
 After processing all pending drafts, output:

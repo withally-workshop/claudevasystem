@@ -2,6 +2,7 @@ const https = require('https');
 
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = process.env.N8N_API_KEY;
+const WORKFLOW_ID = 't7MMhlUo5H4HQmgL';
 const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
 const PAYMENTS_UPDATES_CHANNEL = 'C09HN2EBPR7';
 const INTAKE_WEBHOOK_URL = 'https://noatakhel.app.n8n.cloud/webhook/krave-invoice-request-intake';
@@ -501,6 +502,19 @@ const workflow = {
       },
     },
     {
+      id: 'n11',
+      name: 'Inject Thread TS',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1840, 520],
+      parameters: {
+        mode: 'runOnceForEachItem',
+        jsCode: `const channelTs = $json.ts || '';
+const submission = $('Normalize Modal Submission').item.json;
+return { json: { ...submission, origin_thread_ts: channelTs } };`,
+      },
+    },
+    {
       id: 'n9',
       name: 'Acknowledge Modal Submission',
       type: 'n8n-nodes-base.respondToWebhook',
@@ -570,10 +584,15 @@ const workflow = {
     },
     'Normalize Modal Submission': {
       main: [[
-        { node: 'Send To Invoice Intake', type: 'main', index: 0 },
         { node: 'Post Channel Receipt', type: 'main', index: 0 },
-        { node: 'Acknowledge Modal Submission', type: 'main', index: 0 }
+        { node: 'Acknowledge Modal Submission', type: 'main', index: 0 },
       ]],
+    },
+    'Post Channel Receipt': {
+      main: [[{ node: 'Inject Thread TS', type: 'main', index: 0 }]],
+    },
+    'Inject Thread TS': {
+      main: [[{ node: 'Send To Invoice Intake', type: 'main', index: 0 }]],
     },
     'Open Invoice Modal': {
       main: [[{ node: 'Acknowledge Slash Command', type: 'main', index: 0 }]],
@@ -609,17 +628,7 @@ function n8nRequest(method, path, body) {
 }
 
 async function deploy() {
-  const list = await n8nRequest('GET', `/api/v1/workflows?name=${encodeURIComponent(workflow.name)}&limit=250`);
-  const existing = (list.data || []).find((w) => w.name === workflow.name && w.active !== null);
-  let result;
-  if (existing) {
-    result = await n8nRequest('PUT', `/api/v1/workflows/${existing.id}`, workflow);
-    if (!result.id) {
-      result = await n8nRequest('POST', '/api/v1/workflows', workflow);
-    }
-  } else {
-    result = await n8nRequest('POST', '/api/v1/workflows', workflow);
-  }
+  const result = await n8nRequest('PUT', `/api/v1/workflows/${WORKFLOW_ID}`, workflow);
   if (!result.id) {
     console.log('ERROR:', JSON.stringify(result, null, 2).substring(0, 2000));
     return;

@@ -16,7 +16,7 @@ const SUCCESS_TRACKER_COLUMNS = {
   'Client Name': '={{ $json.client_name }}',
   'Email Address': '={{ $json.client_email || "" }}',
   'Project Description':
-    '={{ (($json.memo || "Structured Slack modal intake") + " | Billing Address: " + ($json.billing_address || "none provided") + " | Invoice Date: " + ($json.invoice_date || "needs review") + " | Payout: " + ($json.payout_raw || "7 day payout") + " | Due Date: " + ($json.due_date || "needs review") + " | Structured Slack modal").slice(0, 500) }}',
+    '={{ ($json.line_items || []).map(i => i.description).filter(Boolean).join(" | ").slice(0, 500) }}',
   'Invoice #': '={{ $json.airwallex_invoice_number || $json.airwallex_invoice_id || $json.request_id }}',
   'Airwallex Customer ID': '={{ $json.airwallex_customer_id }}',
   'Airwallex Invoice ID': '={{ $json.airwallex_invoice_id }}',
@@ -24,7 +24,8 @@ const SUCCESS_TRACKER_COLUMNS = {
   Currency: '={{ $json.currency }}',
   'Due Date': '={{ $json.due_date }}',
   Status: DRAFT_REVIEW_STATUS,
-  'Requested By': '={{ $json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id }}',
+  'Requested By': '={{ $json.submitted_by_slack_user_id }}',
+  'Origin Thread TS': '={{ $json.origin_thread_ts || "" }}',
 };
 const REQUESTER_SUCCESS_TEXT =
   "={{ 'Invoice request received. Airwallex draft invoice was created for ' + $('Mark Draft Success').item.json.client_name + ' (' + $('Mark Draft Success').item.json.currency + ' ' + $('Mark Draft Success').item.json.subtotal + '). Invoice Date: ' + $('Mark Draft Success').item.json.invoice_date + '. Payout: ' + ($('Mark Draft Success').item.json.payout_raw || '7 day payout') + '. Due Date: ' + $('Mark Draft Success').item.json.due_date + '. Request ID: ' + $('Mark Draft Success').item.json.request_id }}";
@@ -33,7 +34,7 @@ const FALLBACK_TRACKER_COLUMNS = {
   'Client Name': '={{ $json.client_name }}',
   'Email Address': '={{ $json.client_email || "" }}',
   'Project Description':
-    '={{ (($json.memo || "Structured Slack modal intake") + " | Billing Address: " + ($json.billing_address || "none provided") + " | Invoice Date: " + ($json.invoice_date || "needs review") + " | Payout: " + ($json.payout_raw || "7 day payout") + " | Due Date: " + ($json.due_date || "needs review") + " | Structured Slack modal | " + ($json.failure_stage || "intake") + ": " + ($json.failure_reason || "manual Airwallex creation required")).slice(0, 500) }}',
+    '={{ ($json.line_items || []).map(i => i.description).filter(Boolean).join(" | ").slice(0, 500) }}',
   'Invoice #': '={{ $json.request_id }}',
   'Airwallex Customer ID': '={{ $json.airwallex_customer_id || "" }}',
   'Airwallex Invoice ID': '={{ $json.airwallex_invoice_id || "" }}',
@@ -41,17 +42,17 @@ const FALLBACK_TRACKER_COLUMNS = {
   Currency: '={{ $json.currency }}',
   'Due Date': '={{ $json.due_date }}',
   Status: FALLBACK_STATUS,
-  'Requested By': '={{ $json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id }}',
+  'Requested By': '={{ $json.submitted_by_slack_user_id }}',
+  'Origin Thread TS': '={{ $json.origin_thread_ts || "" }}',
 };
 const ORIGIN_CHANNEL_SUCCESS_TEXT =
-  "={{ '✅ Invoice draft created for *' + $('Mark Draft Success').item.json.client_name + '*\\n• Amount: ' + $('Mark Draft Success').item.json.currency + ' ' + $('Mark Draft Success').item.json.subtotal + '\\n• Invoice #: ' + ($('Mark Draft Success').item.json.airwallex_invoice_number || $('Mark Draft Success').item.json.airwallex_invoice_id) + '\\n• Due: ' + $('Mark Draft Success').item.json.due_date + '\\n• Status: Draft — pending John review in Airwallex' }}";
+  "={{ '✅ Invoice draft created for *' + $('Mark Draft Success').item.json.client_name + '*\\n• Amount: ' + $('Mark Draft Success').item.json.currency + ' ' + $('Mark Draft Success').item.json.subtotal + '\\n• Invoice #: ' + ($('Mark Draft Success').item.json.airwallex_invoice_number || $('Mark Draft Success').item.json.airwallex_invoice_id) + '\\n• Due: ' + $('Mark Draft Success').item.json.due_date + '\\n• Status: Draft - pending John review in Airwallex\\n• Requested by: <@' + $('Mark Draft Success').item.json.submitted_by_slack_user_id + '>' }}";
 
 const REQUESTER_FALLBACK_TEXT =
   "={{ 'Invoice request received for ' + $json.client_name + '. Manual Airwallex creation required. Invoice Date: ' + ($json.invoice_date || 'needs review') + '. Payout: ' + ($json.payout_raw || '7 day payout') + '. Due Date: ' + ($json.due_date || 'needs review') + '. Request ID: ' + $json.request_id }}";
 const LINE_ITEMS_PAYLOAD_LABEL = 'Line Items Payload';
 const JOHN_DM_TEXT =
   "={{ 'Invoice intake fallback\\nRequest ID: ' + $json.request_id + '\\nClient: ' + $json.client_name + '\\nRequester: ' + ($json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id) + '\\nInvoice Date: ' + ($json.invoice_date || 'needs review') + '\\nPayout: ' + ($json.payout_raw || '7 day payout') + '\\nDue Date: ' + ($json.due_date || 'needs review') + '\\nSubtotal: ' + $json.currency + ' ' + $json.subtotal + '\\nFailure stage: ' + $json.failure_stage + '\\nFailure reason: ' + $json.failure_reason + '\\n' + '" + LINE_ITEMS_PAYLOAD_LABEL + ": ' + JSON.stringify($json.line_items) }}";
-const LINKED_PAYMENT_ACCOUNT_ID = '098284a3-e595-4c5c-a0bf-dabd4c8b97ec';
 const AIRWALLEX_CLIENT_ID = process.env.AIRWALLEX_CLIENT_ID;
 const AIRWALLEX_API_KEY = process.env.AIRWALLEX_API_KEY;
 const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
@@ -185,6 +186,7 @@ const baseRequest = {
   request_id: requestId,
   submitted_at: new Date().toISOString(),
   origin_channel_id: payload.origin_channel_id || '',
+  origin_thread_ts: payload.origin_thread_ts || '',
   submitted_by_slack_user_id: payload.submitted_by_slack_user_id || '',
   submitted_by_slack_user_name: payload.submitted_by_slack_user_name || '',
   client_name_or_company_name: resolvedClientName,
@@ -236,7 +238,7 @@ return [{
 
 const PREPARE_PRODUCT_REQUEST_CODE = `
 const customerId = $json.airwallex_customer_id || '';
-const ctx = $('Merge Auth Token').item.json;
+const ctx = $('Merge Auth Token').first().json;
 const lineItems = Array.isArray(ctx.line_items) ? ctx.line_items : [];
 
 return lineItems.map((item, index) => ({
@@ -247,7 +249,7 @@ return lineItems.map((item, index) => ({
     line_item: item,
     product_payload: {
       active: true,
-      name: (ctx.client_name || 'Client') + ' — ' + (item.description || ('Item ' + (index + 1))),
+      name: item.description || ('Item ' + (index + 1)),
       description: item.description || 'Invoice line item',
       request_id: (ctx.request_id || '') + '_prod_' + index,
     }
@@ -324,9 +326,9 @@ return {
       billing_customer_id: customerId,
       currency: ctx.currency,
       collection_method: 'CHARGE_ON_CHECKOUT',
-      linked_payment_account_id: '098284a3-e595-4c5c-a0bf-dabd4c8b97ec',
+      linked_payment_account_id: 'acct_dcI6a3RSMbeCKZy9X-v7Mg',
       days_until_due: ctx.days_until_due,
-      memo: (ctx.memo || '') + ' | Invoice Date: ' + ctx.invoice_date + ' | Payout: ' + (ctx.payout_raw || '7 day payout') + ' | Due Date: ' + ctx.due_date,
+      memo: ctx.memo || '',
       request_id: ctx.request_id,
     }
   }
@@ -697,22 +699,6 @@ const workflow = {
       },
     },
     {
-      id: 'n14',
-      name: 'Requester Success Confirmation',
-      type: 'n8n-nodes-base.slack',
-      typeVersion: 2.3,
-      position: [2900, 220],
-      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
-      parameters: {
-        resource: 'message',
-        operation: 'post',
-        select: 'channel',
-        channelId: { __rl: true, value: '={{ $json.submitted_by_slack_user_id || "" }}', mode: 'id' },
-        text: REQUESTER_SUCCESS_TEXT,
-        otherOptions: {},
-      },
-    },
-    {
       id: 'n15',
       name: 'DM John Failure Alert',
       type: 'n8n-nodes-base.slack',
@@ -735,7 +721,7 @@ const workflow = {
       typeVersion: 2,
       position: [1470, 260],
       parameters: {
-        mode: 'runOnceForEachItem',
+        mode: 'runOnceForAllItems',
         jsCode: PREPARE_PRODUCT_REQUEST_CODE,
       },
     },
@@ -1044,7 +1030,9 @@ const workflow = {
         select: 'channel',
         channelId: { __rl: true, value: '={{ $("Mark Draft Success").item.json.origin_channel_id || $("Mark Draft Success").item.json.submitted_by_slack_user_id }}', mode: 'id' },
         text: ORIGIN_CHANNEL_SUCCESS_TEXT,
-        otherOptions: {},
+        otherOptions: {
+          thread_ts: '={{ $("Mark Draft Success").item.json.origin_thread_ts || "" }}',
+        },
       },
     },
     {
@@ -1135,10 +1123,9 @@ const workflow = {
       { node: 'DM John Failure Alert', type: 'main', index: 0 },
     ]]},
     'Write Tracker Success': { main: [[
-      { node: 'Requester Success Confirmation', type: 'main', index: 0 },
+      { node: 'Post Origin Channel Success', type: 'main', index: 0 },
       { node: 'Notify John for Approval', type: 'main', index: 0 },
     ]] },
-    'Requester Success Confirmation': { main: [[{ node: 'Post Origin Channel Success', type: 'main', index: 0 }]] },
   },
 };
 
