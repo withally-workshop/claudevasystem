@@ -158,7 +158,7 @@ Note: `linked_payment_account_id` is omitted — the API auto-assigns the accoun
 | G | Total amount (sum of quantity × unit_price across all line items) |
 | H | currency |
 | I | due_date |
-| J | `Draft — Pending John Review` |
+| J | `Draft - Pending John Review` |
 | K | requester username |
 | L | (blank) |
 | M | (blank) |
@@ -201,6 +201,11 @@ Extract from the parent notification message:
 - `requester` — from "Requested by:" line
 - `client_name`, `currency`, `due_date` — from respective lines
 - `approval_reply_ts` — timestamp of John's "approve" reply
+
+**Before proceeding**, cross-check the tracker to guard against double-processing:
+`mcp__google-sheets__sheets_find_row(spreadsheet_id: 1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50, sheet_name: Invoices, column: F, value: invoice_id)`
+- If the row's Status (Col J) is already `Invoice Sent`, `Payment Complete`, or `Collections` → skip this approval entirely. The n8n workflow already processed it.
+- Only proceed if Status is `Draft - Pending John Review`.
 
 ### Step 2 — React to approval reply
 

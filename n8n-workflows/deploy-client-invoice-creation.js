@@ -37,7 +37,14 @@ const base = { invoiceId, invoiceNum, clientName, clientEmail, amount, currency,
 if (!match) {
   return [{ json: { ...base, notFound: true } }];
 }
-return [{ json: { ...base, notFound: false, notification_ts: match.ts } }];
+// Extract receipt_ts from the 🔗 thread URL encoded in the notification text
+const urlMatch = (match.text || '').match(/\/p(\d{13,})/);
+let receipt_ts = null;
+if (urlMatch) {
+  const digits = urlMatch[1];
+  receipt_ts = digits.slice(0, -6) + '.' + digits.slice(-6);
+}
+return [{ json: { ...base, notFound: false, notification_ts: match.ts, receipt_ts } }];
 `.trim();
 
 // ─── Code node: find an unprocessed "approve" reply ──────────────────────────
@@ -208,9 +215,28 @@ const workflow = {
       }
     },
     {
-      id: 'n11', name: 'Airwallex Auth',
+      // React immediately to claim the approval — prevents double-processing if
+      // the tracker update later fails, since FIND_APPROVE_REPLY_CODE skips ✅ replies.
+      id: 'n22', name: 'React Approved',
       type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
       position: [2250, 200],
+      continueOnFail: true,
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'slackApi',
+        method: 'POST',
+        url: 'https://slack.com/api/reactions.add',
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: `={{ { channel: '${JOHN_CHANNEL}', timestamp: $json.approval_reply_ts, name: 'white_check_mark' } }}`,
+        options: {}
+      }
+    },
+    {
+      id: 'n11', name: 'Airwallex Auth',
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+      position: [2500, 200],
       continueOnFail: true,
       parameters: {
         method: 'POST',
@@ -228,7 +254,7 @@ const workflow = {
     {
       id: 'n12', name: 'Auth OK?',
       type: 'n8n-nodes-base.if', typeVersion: 2.1,
-      position: [2500, 200],
+      position: [2750, 200],
       parameters: {
         conditions: {
           options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
@@ -241,7 +267,7 @@ const workflow = {
     {
       id: 'n13', name: 'Finalize Invoice',
       type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-      position: [2750, 100],
+      position: [3000, 100],
       continueOnFail: true,
       parameters: {
         method: 'POST',
@@ -260,9 +286,37 @@ const workflow = {
       }
     },
     {
+      id: 'n23', name: 'Finalize OK?',
+      type: 'n8n-nodes-base.if', typeVersion: 2.1,
+      position: [3250, 100],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+          conditions: [{ id: 'c1', leftValue: '={{ $json.error ? true : false }}', rightValue: false, operator: { type: 'boolean', operation: 'equals' } }],
+          combinator: 'and'
+        },
+        options: {}
+      }
+    },
+    {
+      id: 'n24', name: 'Alert Finalize Failed',
+      type: 'n8n-nodes-base.slack', typeVersion: 2.2,
+      position: [3250, 350],
+      continueOnFail: true,
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        resource: 'message',
+        operation: 'post',
+        select: 'channel',
+        channelId: { __rl: true, value: JOHN_CHANNEL, mode: 'id' },
+        text: "={{ '⚠️ Invoice finalization failed for ' + $('Find Approve Reply').item.json.clientName + ' (' + $('Find Approve Reply').item.json.invoiceId + ').\\nError: ' + ($json.error ? ($json.error.message || JSON.stringify($json.error)) : 'Unknown') + '\\nPlease finalize manually in Airwallex dashboard.' }}",
+        otherOptions: {}
+      }
+    },
+    {
       id: 'n14', name: 'Get Invoice',
       type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-      position: [3000, 100],
+      position: [3500, 100],
       continueOnFail: true,
       parameters: {
         method: 'GET',
@@ -280,13 +334,13 @@ const workflow = {
     {
       id: 'n15', name: 'Extract Payment Link',
       type: 'n8n-nodes-base.code', typeVersion: 2,
-      position: [3250, 100],
+      position: [3750, 100],
       parameters: { jsCode: EXTRACT_PAYMENT_LINK_CODE, mode: 'runOnceForEachItem' }
     },
     {
       id: 'n16', name: 'Update Tracker',
       type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5,
-      position: [3500, 100],
+      position: [4000, 100],
       credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
       parameters: {
         resource: 'sheet',
@@ -308,7 +362,7 @@ const workflow = {
     {
       id: 'n17', name: 'Reply in John Thread',
       type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-      position: [3750, 100],
+      position: [4250, 100],
       continueOnFail: true,
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
@@ -323,24 +377,28 @@ const workflow = {
       }
     },
     {
+      // Posts in the original receipt thread so the strategist sees the update in context.
+      // Falls back to top-level post if receipt_ts is unavailable.
       id: 'n18', name: 'Notify Strategist',
-      type: 'n8n-nodes-base.slack', typeVersion: 2.2,
-      position: [4000, 100],
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+      position: [4500, 100],
       continueOnFail: true,
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
-        resource: 'message',
-        operation: 'post',
-        select: 'channel',
-        channelId: { __rl: true, value: PAYMENTS_CHANNEL, mode: 'id' },
-        text: `={{ '✅ *Invoice sent — ' + $json.clientName + '*\\n• Invoice #: ' + $json.invoiceNum + '\\n• Amount: ' + $json.amount + ' ' + $json.currency + '\\n• Due: ' + $json.dueDate + '\\n• Requested by: ' + $json.requestedBy + ($json.link_found ? '\\n• Payment link: ' + $json.payment_link : '') }}`,
-        otherOptions: {}
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'slackApi',
+        method: 'POST',
+        url: 'https://slack.com/api/chat.postMessage',
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: `={{ { channel: '${PAYMENTS_CHANNEL}', thread_ts: $json.receipt_ts || undefined, text: '✅ *Invoice sent — ' + $json.clientName + '*\\n• Invoice #: ' + $json.invoiceNum + '\\n• Amount: ' + $json.amount + ' ' + $json.currency + '\\n• Due: ' + $json.dueDate + '\\n• Requested by: ' + $json.requestedBy + ($json.link_found ? '\\n• Payment link: ' + $json.payment_link : '') } }}`,
+        options: {}
       }
     },
     {
       id: 'n19', name: 'Has Client Email?',
       type: 'n8n-nodes-base.if', typeVersion: 2.1,
-      position: [4250, 100],
+      position: [4750, 100],
       parameters: {
         conditions: {
           options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
@@ -353,7 +411,7 @@ const workflow = {
     {
       id: 'n20', name: 'Email Client',
       type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
-      position: [4500, 0],
+      position: [5000, 0],
       continueOnFail: true,
       credentials: { gmailOAuth2: { id: GMAIL_JOHN_CRED, name: 'Gmail account' } },
       parameters: {
@@ -369,7 +427,7 @@ const workflow = {
     {
       id: 'n21', name: 'Alert Auth Failed',
       type: 'n8n-nodes-base.slack', typeVersion: 2.2,
-      position: [2750, 350],
+      position: [3000, 350],
       continueOnFail: true,
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
@@ -400,15 +458,20 @@ const workflow = {
     'Get Thread Replies':      { main: [[{ node: 'Find Approve Reply', type: 'main', index: 0 }]] },
     'Find Approve Reply':      { main: [[{ node: 'Approve Reply Found?', type: 'main', index: 0 }]] },
     'Approve Reply Found?':    { main: [
-      [{ node: 'Airwallex Auth', type: 'main', index: 0 }],
+      [{ node: 'React Approved', type: 'main', index: 0 }],
       // false → no approve yet, skip
     ]},
+    'React Approved':          { main: [[{ node: 'Airwallex Auth', type: 'main', index: 0 }]] },
     'Airwallex Auth':          { main: [[{ node: 'Auth OK?', type: 'main', index: 0 }]] },
     'Auth OK?':                { main: [
       [{ node: 'Finalize Invoice', type: 'main', index: 0 }],
       [{ node: 'Alert Auth Failed', type: 'main', index: 0 }],
     ]},
-    'Finalize Invoice':        { main: [[{ node: 'Get Invoice', type: 'main', index: 0 }]] },
+    'Finalize Invoice':        { main: [[{ node: 'Finalize OK?', type: 'main', index: 0 }]] },
+    'Finalize OK?':            { main: [
+      [{ node: 'Get Invoice', type: 'main', index: 0 }],
+      [{ node: 'Alert Finalize Failed', type: 'main', index: 0 }],
+    ]},
     'Get Invoice':             { main: [[{ node: 'Extract Payment Link', type: 'main', index: 0 }]] },
     'Extract Payment Link':    { main: [[{ node: 'Update Tracker', type: 'main', index: 0 }]] },
     'Update Tracker':          { main: [[{ node: 'Reply in John Thread', type: 'main', index: 0 }]] },
