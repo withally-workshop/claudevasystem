@@ -84,11 +84,13 @@ for (const email of emails) {
   }
   if (match) {
     const notes = (match.json['Notes'] || '').toString().toLowerCase();
-    const isOsome = notes.includes('osome');
+    const airwallexId = (match.json['Airwallex Invoice ID'] || '').toString().trim();
+    // Skip Airwallex if invoice is Osome-created OR has no Airwallex Invoice ID recorded
+    const isOsome = notes.includes('osome') || !airwallexId;
     results.push({
       clientName: match.json['Client Name'] || '',
       invoiceNumber: match.json['Invoice #'] || '',
-      airwallexInvoiceId: match.json['Airwallex Invoice ID'] || '',
+      airwallexInvoiceId: airwallexId,
       amount: email.amount, currency: email.currency, paymentDate: today, isOsome });
   }
 }
