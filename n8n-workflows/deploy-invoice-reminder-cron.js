@@ -141,17 +141,31 @@ for (const row of rows) {
     if (unknownStrat) slackMessage += '\\n• ⚠️ Unknown strategist "' + requestedBy + '" on record — CC not sent';
   }
 
+  const isOverdue = ['overdue','late-fee','late-fee-followup','collections'].includes(reminderType);
+  const gmailQuery = '"' + invoiceNum + '"';
   actions.push({
     skipEmail: !clientEmail,
     clientEmail, ccEmails, invoiceNum, clientName,
     amount, currency, dueDateStr, daysDiff, reminderType,
     subject, body, newStatus, newReminders,
     needsSlack: needsSlack || !clientEmail,
-    slackMessage
+    slackMessage, isOverdue, gmailQuery
   });
 }
 
 return actions.map(a => ({ json: a }));
+`.trim();
+
+// Merges invoice item (always present) with optional Gmail search result (0 or 1 items).
+// Determines whether an existing email thread was found for this invoice.
+const RESOLVE_THREAD_CODE = `
+const allItems = $input.all();
+const invoiceItem = allItems.find(i => i.json.invoiceNum);
+const gmailItem = allItems.find(i => i.json.id && i.json.threadId);
+const base = invoiceItem ? invoiceItem.json : {};
+const threadFound = !!(gmailItem && gmailItem.json.id);
+const replyMessageId = threadFound ? gmailItem.json.id : null;
+return [{ json: { ...base, threadFound, replyMessageId } }];
 `.trim();
 
 const workflow = {
@@ -208,9 +222,109 @@ const workflow = {
       }
     },
     {
+      // Pre-due (7d/5d/3d/1d/due-today) → send new email directly.
+      // Overdue/late-fee/collections → search john@ for existing thread first.
+      id: 'n11', name: 'Is Overdue Type?',
+      type: 'n8n-nodes-base.if', typeVersion: 2.1,
+      position: [1120, 220],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+          conditions: [{
+            id: 'c1',
+            leftValue: '={{ $json.isOverdue }}',
+            rightValue: true,
+            operator: { type: 'boolean', operation: 'equals' }
+          }],
+          combinator: 'and'
+        },
+        options: {}
+      }
+    },
+    {
       id: 'n6', name: 'Send Reminder Email',
       type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
-      position: [1120, 220],
+      position: [1340, 60],
+      continueOnFail: true,
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
+      parameters: {
+        resource: 'message',
+        operation: 'send',
+        sendTo: '={{ $json.clientEmail }}',
+        subject: '={{ $json.subject }}',
+        emailType: 'text',
+        message: '={{ $json.body }}',
+        options: { ccList: '={{ $json.ccEmails }}' }
+      }
+    },
+    {
+      // Search john@kravemedia.co for an existing thread mentioning the invoice number.
+      // Strategists often email clients and CC john — if found, reply to keep context.
+      id: 'n12', name: 'Search Gmail Thread',
+      type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
+      position: [1340, 360],
+      continueOnFail: true,
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
+      parameters: {
+        resource: 'message',
+        operation: 'getAll',
+        returnAll: false,
+        limit: 1,
+        filters: { q: '={{ $json.gmailQuery }}' },
+        options: { format: 'minimal' }
+      }
+    },
+    {
+      // Append mode: collects items from both inputs (invoice data + Gmail result).
+      // Outputs even when Gmail returns 0 results — invoice item always present.
+      id: 'n13', name: 'Merge Overdue Data',
+      type: 'n8n-nodes-base.merge', typeVersion: 2,
+      position: [1560, 300],
+      parameters: { mode: 'append' }
+    },
+    {
+      id: 'n14', name: 'Resolve Thread Result',
+      type: 'n8n-nodes-base.code', typeVersion: 2,
+      position: [1780, 300],
+      parameters: { mode: 'runOnceForAllItems', jsCode: RESOLVE_THREAD_CODE }
+    },
+    {
+      id: 'n15', name: 'Thread Found?',
+      type: 'n8n-nodes-base.if', typeVersion: 2.1,
+      position: [2000, 300],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+          conditions: [{
+            id: 'c1',
+            leftValue: '={{ $json.threadFound }}',
+            rightValue: true,
+            operator: { type: 'boolean', operation: 'equals' }
+          }],
+          combinator: 'and'
+        },
+        options: {}
+      }
+    },
+    {
+      id: 'n16', name: 'Reply to Thread',
+      type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
+      position: [2220, 180],
+      continueOnFail: true,
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
+      parameters: {
+        resource: 'message',
+        operation: 'reply',
+        messageId: '={{ $json.replyMessageId }}',
+        emailType: 'text',
+        message: '={{ $json.body }}',
+        options: {}
+      }
+    },
+    {
+      id: 'n17', name: 'Send New Overdue Email',
+      type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
+      position: [2220, 420],
       continueOnFail: true,
       credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
@@ -226,7 +340,7 @@ const workflow = {
     {
       id: 'n7', name: 'Update Tracker Row',
       type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5,
-      position: [1340, 220],
+      position: [2440, 300],
       credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
       parameters: {
         resource: 'sheet', operation: 'appendOrUpdate',
@@ -235,9 +349,9 @@ const workflow = {
         columns: {
           mappingMode: 'defineBelow',
           value: {
-            'Invoice #':      "={{ $('Process Invoices').item.json.invoiceNum }}",
-            'Status':         "={{ $('Process Invoices').item.json.newStatus }}",
-            'Reminders Sent': "={{ $('Process Invoices').item.json.newReminders }}"
+            'Invoice #':      "={{ $json.invoiceNum || $('Process Invoices').item.json.invoiceNum }}",
+            'Status':         "={{ $json.newStatus || $('Process Invoices').item.json.newStatus }}",
+            'Reminders Sent': "={{ $json.newReminders || $('Process Invoices').item.json.newReminders }}"
           },
           matchingColumns: ['Invoice #'],
           schema: []
@@ -248,13 +362,13 @@ const workflow = {
     {
       id: 'n8', name: 'Needs Slack Alert?',
       type: 'n8n-nodes-base.if', typeVersion: 2.1,
-      position: [1560, 220],
+      position: [2660, 300],
       parameters: {
         conditions: {
           options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
           conditions: [{
             id: 'c1',
-            leftValue: "={{ $('Process Invoices').item.json.needsSlack }}",
+            leftValue: "={{ $json.needsSlack ?? $('Process Invoices').item.json.needsSlack }}",
             rightValue: true,
             operator: { type: 'boolean', operation: 'equals' }
           }],
@@ -266,20 +380,20 @@ const workflow = {
     {
       id: 'n9', name: 'Slack Overdue Alert',
       type: 'n8n-nodes-base.slack', typeVersion: 2.2,
-      position: [1780, 140],
+      position: [2880, 180],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
         resource: 'message', operation: 'post',
         select: 'channel',
         channelId: { __rl: true, value: SLACK_CHANNEL, mode: 'id' },
-        text: "={{ $('Process Invoices').item.json.slackMessage }}",
+        text: "={{ $json.slackMessage || $('Process Invoices').item.json.slackMessage }}",
         otherOptions: {}
       }
     },
     {
       id: 'n10', name: 'Slack Missing Email Warning',
       type: 'n8n-nodes-base.slack', typeVersion: 2.2,
-      position: [1120, 500],
+      position: [1120, 520],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
         resource: 'message', operation: 'post',
@@ -296,10 +410,28 @@ const workflow = {
     'Get Invoice Tracker': { main: [[{ node: 'Process Invoices',    type: 'main', index: 0 }]] },
     'Process Invoices':    { main: [[{ node: 'Has Client Email?',   type: 'main', index: 0 }]] },
     'Has Client Email?': { main: [
-      [{ node: 'Send Reminder Email',         type: 'main', index: 0 }],  // TRUE
-      [{ node: 'Slack Missing Email Warning',  type: 'main', index: 0 }]  // FALSE
+      [{ node: 'Is Overdue Type?',            type: 'main', index: 0 }],  // TRUE — has email
+      [{ node: 'Slack Missing Email Warning', type: 'main', index: 0 }]   // FALSE — no email
     ]},
-    'Send Reminder Email': { main: [[{ node: 'Update Tracker Row',  type: 'main', index: 0 }]] },
+    'Is Overdue Type?': { main: [
+      // TRUE — overdue/late-fee/collections: fan out to both Merge (invoice data) and Gmail search
+      [
+        { node: 'Merge Overdue Data',  type: 'main', index: 0 },
+        { node: 'Search Gmail Thread', type: 'main', index: 0 }
+      ],
+      // FALSE — pre-due (7d/5d/3d/1d/due-today): send new email directly
+      [{ node: 'Send Reminder Email', type: 'main', index: 0 }]
+    ]},
+    'Search Gmail Thread': { main: [[{ node: 'Merge Overdue Data', type: 'main', index: 1 }]] },
+    'Merge Overdue Data':  { main: [[{ node: 'Resolve Thread Result', type: 'main', index: 0 }]] },
+    'Resolve Thread Result': { main: [[{ node: 'Thread Found?', type: 'main', index: 0 }]] },
+    'Thread Found?': { main: [
+      [{ node: 'Reply to Thread',        type: 'main', index: 0 }],  // TRUE — thread exists
+      [{ node: 'Send New Overdue Email', type: 'main', index: 0 }]   // FALSE — compose new
+    ]},
+    'Reply to Thread':        { main: [[{ node: 'Update Tracker Row', type: 'main', index: 0 }]] },
+    'Send New Overdue Email': { main: [[{ node: 'Update Tracker Row', type: 'main', index: 0 }]] },
+    'Send Reminder Email':    { main: [[{ node: 'Update Tracker Row', type: 'main', index: 0 }]] },
     'Update Tracker Row':  { main: [[{ node: 'Needs Slack Alert?',  type: 'main', index: 0 }]] },
     'Needs Slack Alert?': { main: [
       [{ node: 'Slack Overdue Alert', type: 'main', index: 0 }],  // TRUE

@@ -91,11 +91,16 @@ For remaining rows, calculate: `days_diff = due_date (Col I) - today`
 
 ### Phase 4 — Send Reminder Emails
 
-Use `mcp__gmail-john__gmail_send` to send each email directly (no draft step).
+Use `mcp__gmail-john__gmail_send` (or `gmail_reply` for thread replies) from john@kravemedia.co.
 
-**From:** john@kravemedia.co
-**To:** client email from Column C
-**CC:** strategist email (from Strategist Lookup table using Column K) + noa@kravemedia.co
+**Pre-due reminders (7d / 5d / 3d / 1d / due-today):** Always compose a new email.
+- **To:** client email from Column C
+- **CC:** strategist email (from Strategist Lookup table using Column K) + noa@kravemedia.co
+
+**Overdue reminders (overdue / late-fee / late-fee-followup / collections):** Search john@kravemedia.co first.
+1. Search for any email thread containing the invoice number (e.g. `"INV-1001"`).
+2. If a thread is found → **reply to that thread** using `mcp__gmail-john__gmail_reply`. This preserves context and the original CC recipients (strategist + noa are already on the thread).
+3. If no thread found → compose a new email with CC: strategist + noa@kravemedia.co, same as pre-due format.
 
 If Column C is empty → skip email, flag in Slack: `⚠️ No email on file for [Client] — reminder not sent. Add email to Column C in tracker.`
 If Column K strategist not in lookup table → still send email but skip that CC, flag in Slack: `⚠️ Unknown strategist "[name]" on [Invoice #] — CC not sent`

@@ -34,7 +34,7 @@
 
 ### Step 1 — Pull Pending Drafts from Tracker
 Use `sheets_get_rows` on the Client Invoice Tracker (range `A:N`).
-Filter for rows where Col J = `Draft — Pending John Review`.
+Filter for rows where Col J = `Draft - Pending John Review`.
 
 If no pending drafts → skip all remaining steps. Nothing to process.
 

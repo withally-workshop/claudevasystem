@@ -59,6 +59,10 @@ const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
 const SHEET_ID = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50';
 const REQUESTER_SLACK_FALLBACK_CHANNEL = '={{ $json.submitted_by_slack_user_id || "" }}';
 const JOHN_DM_CHANNEL = 'U0AM5EGRVTP';
+const JOHN_APPROVAL_CHANNEL = 'C0AQZGJDR38';
+
+const JOHN_APPROVAL_TEXT =
+  "={{ '📋 *New Invoice Draft — ' + $('Mark Draft Success').item.json.client_name + '*\\n• Amount: ' + $('Mark Draft Success').item.json.currency + ' ' + $('Mark Draft Success').item.json.subtotal + '\\n• Client email: ' + $('Mark Draft Success').item.json.client_email + '\\n• Due: ' + $('Mark Draft Success').item.json.due_date + '\\n• Invoice ID: ' + $('Mark Draft Success').item.json.airwallex_invoice_id + '\\n• Airwallex Invoice #: ' + ($('Mark Draft Success').item.json.airwallex_invoice_number || $('Mark Draft Success').item.json.airwallex_invoice_id) + '\\n• Requested by: <@' + $('Mark Draft Success').item.json.submitted_by_slack_user_id + '>\\n\\nReply *approve* in this thread to finalize and send payment link to client.' }}";
 
 const NORMALIZE_CODE = `
 const payload = $json.body || $json;
@@ -1044,6 +1048,22 @@ const workflow = {
       },
     },
     {
+      id: 'n30',
+      name: 'Notify John for Approval',
+      type: 'n8n-nodes-base.slack',
+      typeVersion: 2.3,
+      position: [2900, 420],
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        resource: 'message',
+        operation: 'post',
+        select: 'channel',
+        channelId: { __rl: true, value: JOHN_APPROVAL_CHANNEL, mode: 'id' },
+        text: JOHN_APPROVAL_TEXT,
+        otherOptions: {},
+      },
+    },
+    {
       id: 'n28',
       name: 'Hydrate Fallback Context',
       type: 'n8n-nodes-base.code',
@@ -1114,7 +1134,10 @@ const workflow = {
       { node: 'Write Tracker Fallback', type: 'main', index: 0 },
       { node: 'DM John Failure Alert', type: 'main', index: 0 },
     ]]},
-    'Write Tracker Success': { main: [[{ node: 'Requester Success Confirmation', type: 'main', index: 0 }]] },
+    'Write Tracker Success': { main: [[
+      { node: 'Requester Success Confirmation', type: 'main', index: 0 },
+      { node: 'Notify John for Approval', type: 'main', index: 0 },
+    ]] },
     'Requester Success Confirmation': { main: [[{ node: 'Post Origin Channel Success', type: 'main', index: 0 }]] },
   },
 };
