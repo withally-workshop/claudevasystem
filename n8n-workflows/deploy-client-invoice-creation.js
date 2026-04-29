@@ -350,8 +350,9 @@ const workflow = {
         columns: {
           mappingMode: 'defineBelow',
           value: {
-            'Invoice #': "={{ $json.invoiceNum }}",
-            Status: SENT_STATUS,
+            'Invoice #':      "={{ $json.invoiceNum }}",
+            'Payment Status': SENT_STATUS,
+            'Invoice URL':    "={{ $json.payment_link || '' }}",
           },
           matchingColumns: ['Invoice #'],
           schema: []

@@ -10,7 +10,7 @@
 - **URL:** `https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder`
 - **Method:** POST
 - **Auth:** none (URL is the secret)
-- **Workflow:** Krave — Invoice Reminder Cron (ID: `QvHzslWExLjrH0mo`)
+- **Workflow:** Krave — Invoice Reminder Cron (ID: `Q3IqqLvmX9H49NdE`)
 - **n8n instance:** `https://noatakhel.app.n8n.cloud`
 
 ---
@@ -40,5 +40,5 @@ Any overdue alerts will appear in #payments-invoices-updates within ~30 seconds.
 ## Notes
 - The workflow must be **active** in n8n for the production webhook URL to work
 - If inactive, use the test URL: `https://noatakhel.app.n8n.cloud/webhook-test/krave-invoice-reminder`
-- Runs automatically twice daily: 10:00 AM + 5:00 PM ICT (03:00 + 10:00 UTC)
+- Runs automatically once daily: 10:00 AM ICT (03:00 UTC)
 - Emails currently send from noa@kravemedia.co — add john@ Gmail OAuth2 to n8n to switch sender

@@ -1,5 +1,5 @@
 # Skill: Invoice Reminder Cron
-**Trigger:** Scheduled daily at 9:00 AM ICT — also invocable manually: "run invoice reminders", "/invoice-reminder-cron"
+**Trigger:** Scheduled daily at 10:00 AM ICT — also invocable manually: "run invoice reminders", "/invoice-reminder-cron"
 **Fully automated — no human input required at any step.**
 
 ---
@@ -26,19 +26,20 @@ Daily automated run that:
 |-----|-------|-------|
 | A | Date Created | |
 | B | Client Name | |
-| C | Email Address | Client email — use this directly, no Airwallex lookup needed |
+| C | Email Address | Client email(s) — comma, semicolon, or space-separated; all addresses receive the email |
 | D | Project Description | |
 | E | Invoice # | Primary match key |
 | F | Airwallex Invoice ID | Used for late fee customer lookup |
 | G | Amount | Full invoice amount |
 | H | Currency | |
 | I | Due Date | Used to calculate days_diff |
-| J | Status | Read/write |
-| K | Requested By | Strategist assigned — use for CC on all emails |
+| J | Payment Status | Read/write — operational status; write `Late Fee Applied — date`, `Collections` here |
+| K | Requested By | Strategist assigned — CC on all emails |
 | L | Reminders Sent | Append-only log e.g. `7d 2026-04-10 \| overdue 2026-04-15` |
 | M | Payment Confirmed Date | Write date when payment confirmed |
-| N | Status (display) | Formula-driven — **do NOT write to this column** |
+| N | Status | Read-only — formula-driven display; do NOT write to this column |
 | Q | Amount Paid | Cumulative amount paid — read to compute remaining balance for `Partial Payment` rows |
+| R | Invoice URL | Airwallex hosted payment link — included in all reminder emails when present |
 
 ## Strategist Lookup
 | Name | Email | Slack ID |
@@ -64,8 +65,9 @@ Ensures any payments received overnight are marked before reminder logic runs �
 ### Phase 2 — Reminder Scan
 Pull all rows from Client Invoice Tracker (Sheet ID above, tab: `Invoices`, range `A:N`).
 
-**Skip rows where Column J (Status):**
+**Skip rows where Column N (Status):**
 - Is `Payment Complete`
+- Is `Paid`
 - Is `Collections`
 - Starts with `Draft` (covers `Draft — Pending John Review` and `Draft - Pending John Review`)
 
@@ -98,97 +100,113 @@ For remaining rows, calculate: `days_diff = due_date (Col I) - today`
 
 ### Phase 4 — Send Reminder Emails
 
-Use `mcp__gmail-john__gmail_send` (or `gmail_reply` for thread replies) from john@kravemedia.co.
+Always compose a **new email** for every reminder type. No thread replies.
 
-**Pre-due reminders (7d / 5d / 3d / 1d / due-today):** Always compose a new email.
-- **To:** client email from Column C
-- **CC:** strategist email (from Strategist Lookup table using Column K) + noa@kravemedia.co
+- **To:** all addresses from Column C (comma/semicolon/space-separated)
+- **CC:** strategist (Column K lookup) + noa@kravemedia.co
+- **Payment link:** include Col R (Invoice URL) when present — omit the line if empty
+- **Tone:** friendly, warm, no specific penalty amounts mentioned
+- **Signature:** `Warm regards, John, Krave Media`
 
-**Overdue reminders (overdue / late-fee / late-fee-followup / collections):** Search john@kravemedia.co first.
-1. Search for any email thread containing the invoice number (e.g. `"INV-1001"`).
-2. If a thread is found → **reply to that thread** using `mcp__gmail-john__gmail_reply`. This preserves context and the original CC recipients (strategist + noa are already on the thread).
-3. If no thread found → compose a new email with CC: strategist + noa@kravemedia.co, same as pre-due format.
-
-If Column C is empty → skip email, flag in Slack: `⚠️ No email on file for [Client] — reminder not sent. Add email to Column C in tracker.`
-If Column K strategist not in lookup table → still send email but skip that CC, flag in Slack: `⚠️ Unknown strategist "[name]" on [Invoice #] — CC not sent`
+If Column C is empty → skip email, flag in Slack.
+If Column K strategist not in lookup → still send, skip CC, flag in Slack.
 
 **Email templates:**
 
 Pre-Due (7d / 5d / 3d / 1d):
 ```
-Subject: Payment Reminder — [Invoice #] — [Client Name]
+Subject: Friendly Reminder — Invoice [Invoice #] Due [Due Date]
 
 Hi [Client Name],
 
-Just a reminder that invoice [Invoice #] for [Amount] [Currency] is due on [Due Date].
+Just a quick heads-up that invoice [Invoice #] for [Amount] [Currency] is due on [Due Date].
 
-Please arrange payment at your earliest convenience.
+[If Invoice URL present: You can view and pay your invoice here: [Invoice URL]]
 
-Best regards,
+Thank you so much for your continued partnership — we really appreciate it!
+
+Warm regards,
 John
 Krave Media
 ```
 
 Due Today:
 ```
-Subject: Invoice Due Today — [Invoice #] — [Client Name]
+Subject: Invoice [Invoice #] Due Today — [Client Name]
 
 Hi [Client Name],
 
-Invoice [Invoice #] for [Amount] [Currency] is due today.
+A friendly reminder that invoice [Invoice #] for [Amount] [Currency] is due today.
 
-Please arrange payment today to avoid a late fee being applied.
+[If Invoice URL present: You can view and pay your invoice here: [Invoice URL]]
 
-Best regards,
+Thank you so much for your prompt attention — we truly appreciate it!
+
+Warm regards,
 John
 Krave Media
 ```
 
 Overdue (1–6 days):
 ```
-Subject: Overdue Invoice — [Invoice #] — [Client Name]
+Subject: Following Up — Invoice [Invoice #] — [Client Name]
 
 Hi [Client Name],
 
-Invoice [Invoice #] for [Amount] [Currency] was due on [Due Date] and remains unpaid.
+I'm following up on invoice [Invoice #] for [Amount] [Currency], which was due on [Due Date] and hasn't come through yet.
 
-Please arrange payment immediately. A USD $200 late fee will be applied after 7 days overdue per our payment terms.
+[If Invoice URL present: You can view and pay your invoice here: [Invoice URL]]
 
-Best regards,
+Please don't hesitate to reach out if you have any questions or if there's anything we can help with on our end. As a reminder, our payment terms are outlined in our agreement.
+
+Thank you for your attention to this — we appreciate it!
+
+Warm regards,
 John
 Krave Media
 ```
 
-Late Fee Notice (exactly -7 days and -8 to -59 followups):
+Late-Fee / Late-Fee-Followup (-7 to -59 days):
 ```
-Subject: Late Fee Applied — [Invoice #] — [Client Name]
+Subject: Following Up — Invoice [Invoice #] — [Client Name]
 
 Hi [Client Name],
 
-As payment for invoice [Invoice #] has not been received, a late fee of USD $200 has been applied per our payment terms.
+I wanted to follow up again on invoice [Invoice #] for [Amount] [Currency], which has been outstanding since [Due Date].
 
-Updated invoice total: [Original Amount + $200] [Currency].
+[If Invoice URL present: You can view and pay your invoice here: [Invoice URL]]
 
-Please arrange payment at your earliest convenience to avoid additional fees.
+We'd love to resolve this as soon as possible. As a reminder, our agreement includes provisions for overdue accounts, and we appreciate your understanding as we work through this together.
 
-Best regards,
+Thank you for your attention to this!
+
+Warm regards,
 John
 Krave Media
 ```
 
 Collections (60+ days):
 ```
-Subject: Final Notice — [Invoice #] — [Client Name]
+Subject: Urgent Follow-Up — Invoice [Invoice #] — [Client Name]
 
 Hi [Client Name],
 
-Invoice [Invoice #] for [Amount] [Currency] has been outstanding for more than 60 days. This matter has been escalated for collections.
+I'm reaching out regarding invoice [Invoice #] for [Amount] [Currency], which has now been outstanding for more than 60 days.
 
-Please arrange immediate payment to avoid further action.
+[If Invoice URL present: You can view and pay your invoice here: [Invoice URL]]
 
-Best regards,
+We truly value our relationship with you and would appreciate your prompt attention to settling this balance in accordance with our payment terms.
+
+Thank you for your immediate attention to this matter.
+
+Warm regards,
 John
 Krave Media
+```
+
+**Partial payment note** (appended to all templates when status = `Partial Payment`):
+```
+Note: We've received your partial payment of [Amount Paid] [Currency]. The remaining balance of [Remaining] [Currency] is outstanding.
 ```
 
 ### Phase 5 — Late Fee Flag (days_diff == -7 only)
@@ -252,8 +270,8 @@ If nothing to report: post `✅ Invoice check complete — no outstanding items.
 ---
 
 ## Scheduling This Cron
-ICT is UTC+7, so 9:00 AM ICT = **2:00 AM UTC**.
-Cron expression: `0 2 * * *`
+ICT is UTC+7, so 10:00 AM ICT = **3:00 AM UTC**.
+Cron expression: `0 3 * * *`
 
 To set up: run `/schedule` and configure with prompt: `Run /invoice-reminder-cron`
 

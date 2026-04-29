@@ -7,7 +7,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Workflow | Status | Schedule | File |
 |----------|--------|----------|------|
 | Payment Detection | Active | Every hour | [deploy-payment-detection.js](deploy-payment-detection.js) |
-| Invoice Reminder Cron | Active | 9am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
+| Invoice Reminder Cron | Active | 10am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
 | EOD Triage Summary | Active | 6pm ICT weekdays | [deploy-eod-triage-summary.js](deploy-eod-triage-summary.js) |
 | Start Of Day Report | Active | Manual trigger + production webhook | `deploy-sod-report.js` |
 | Inbox Triage Daily | Active | 9am ICT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
@@ -42,7 +42,7 @@ node n8n-workflows/deploy-payment-detection.js
 
 ## Invoice Reminder Cron
 
-Scans the Client Invoice Tracker daily at 9am ICT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker.
+Scans the Client Invoice Tracker daily at 10am ICT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker.
 
 **Silent when nothing to do.** Slack alerts only fire for `due-today`, `overdue`, `late-fee`, `collections`, or missing client email.
 

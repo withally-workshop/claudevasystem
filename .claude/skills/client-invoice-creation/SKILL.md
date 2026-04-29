@@ -34,11 +34,12 @@
 | G | Amount | Total of all line items |
 | H | Currency | |
 | I | Due Date | From form receipt |
-| J | Status | State machine — read/write |
+| J | Payment Status | State machine — read/write; operational status |
 | K | Requested By | Strategist Slack username from receipt |
 | L | Reminders Sent | Append-only log |
 | M | Payment Confirmed Date | Written by payment-detection skill |
-| N | Status (display) | Formula-driven — **NEVER write to this column** |
+| N | Status | Formula-driven display — **NEVER write to this column** |
+| R | Invoice URL | Airwallex hosted payment link — written on approval |
 
 ---
 
@@ -158,7 +159,7 @@ Note: `linked_payment_account_id` is omitted — the API auto-assigns the accoun
 | G | Total amount (sum of quantity × unit_price across all line items) |
 | H | currency |
 | I | due_date |
-| J | `Draft - Pending John Review` |
+| J | `Draft - Pending John Review` (Payment Status) |
 | K | requester username |
 | L | (blank) |
 | M | (blank) |
@@ -204,8 +205,8 @@ Extract from the parent notification message:
 
 **Before proceeding**, cross-check the tracker to guard against double-processing:
 `mcp__google-sheets__sheets_find_row(spreadsheet_id: 1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50, sheet_name: Invoices, column: F, value: invoice_id)`
-- If the row's Status (Col J) is already `Invoice Sent`, `Payment Complete`, or `Collections` → skip this approval entirely. The n8n workflow already processed it.
-- Only proceed if Status is `Draft - Pending John Review`.
+- If the row's Payment Status (Col J) is already `Invoice Sent`, `Payment Complete`, or `Collections` → skip this approval entirely. The n8n workflow already processed it.
+- Only proceed if Payment Status is `Draft - Pending John Review`.
 
 ### Step 2 — React to approval reply
 
@@ -241,7 +242,8 @@ Please download the file and send to the client along with the digital invoice l
 
 `mcp__google-sheets__sheets_find_row(spreadsheet_id: 1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50, sheet_name: Invoices, column: F, value: invoice_id)`
 → `mcp__google-sheets__sheets_update_row(...)`:
-- Col J → `Sent — Awaiting Payment`
+- Col J (Payment Status) → `Sent — Awaiting Payment`
+- Col R (Invoice URL) → `hosted_invoice_url`
 
 ---
 
