@@ -28,7 +28,7 @@
 | # | Name | ID | Status | Schedule | Purpose |
 |---|------|----|--------|----------|---------|
 | 1 | Krave - Payment Detection | `grsXd1VCVIL2F8Cv` | Active | 10am + 5pm ICT | Detect Airwallex deposits, match invoices, update tracker |
-| 2 | Krave - Invoice Reminder Cron | `QvHzslWExLjrH0mo` | Active | 10am ICT daily | Send invoice reminders, alert overdue, update tracker |
+| 2 | Krave - Invoice Reminder Cron | `Q3IqqLvmX9H49NdE` | Active | 10am ICT daily | Send invoice reminders, alert overdue, update tracker |
 | 3 | Krave - EOD Triage Summary | `9hZcOcAqQdM7o1yZ` | Active | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
 | 4 | Krave - Start Of Day Report | `vUunl0NuBA6t4Gw4` | Active | Manual trigger + `POST /webhook/krave-sod-report` | Build the SOD report from validated Slack inputs and deliver to `#airwallexdrafts` plus Noa DM |
 | 5 | Krave - Inbox Triage Daily | `3YyEjk1e6oZV786T` | Active | 9am ICT weekdays + manual webhook | Read inbox email, create Gmail drafts, apply labels, keep `EA/Unsure` in inbox, and post summary to `#airwallexdrafts` plus Noa |
@@ -196,7 +196,7 @@ Second payments on the same invoice: Col Q carries over, so the second run's `ne
 
 ## Workflow 2 - Invoice Reminder Cron
 
-**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/QvHzslWExLjrH0mo`  
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE`  
 **Deploy script:** `n8n-workflows/deploy-invoice-reminder-cron.js`
 
 ### Purpose
@@ -322,7 +322,6 @@ Replaces the scheduled Claude-based EOD summary. Every weekday at 6:00 PM ICT, t
 | Channel | ID | Used For |
 |---------|----|----------|
 | `#airwallexdrafts` | `C0AQZGJDR38` | John's task dump, invoice drafts, inbox triage |
-| `#ad-production-internal` | `C0AGEM919QV` | IM8 production updates, blockers, Frame.io status |
 | `#payments-invoices-updates` | `C09HN2EBPR7` | Invoice requests, payment confirmations |
 
 ### AI Output Rules
@@ -438,7 +437,7 @@ Reads inbox email from the last 24 hours in `noa@kravemedia.co`, classifies each
 
 ### Starter Context Labels
 
-`Krave`, `IM8`, `Halo-Home`, `Skyvane`, `Invoices`, `Contracts`, `Receipts`, `Suppliers`
+`Krave`, `Halo-Home`, `Skyvane`, `Invoices`, `Contracts`, `Receipts`, `Suppliers`
 
 ### Search Scope
 

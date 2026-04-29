@@ -65,9 +65,7 @@ Current skills on disk:
 
 - `client-invoice-creation`
 - `creator-invoice-processing`
-- `creative-velocity-report`
 - `eod-triage-summary`
-- `im8-brief-extraction`
 - `inbox-triage`
 - `invoice-approval-polling`
 - `invoice-reminder-cron`
