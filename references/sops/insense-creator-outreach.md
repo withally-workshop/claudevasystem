@@ -1,124 +1,139 @@
-# SOP: Insense Creator Outreach — Database Invite
+# SOP: Insense Creator Outreach - Database Invite
 
 **Owner:** John (operator)
-**Executor:** Automated (Playwright via Claude Code)
-**Trigger:** Manual — run per campaign when applications are ready to review
+**Executor:** Local standalone Playwright runner
+**Trigger:** Manual, per campaign
 **Skill:** `.claude/skills/insense-creator-outreach/SKILL.md`
-**Objective:** Onboard high-quality creators to the internal Krave Creator Database by sending personalised database invites to strong applicants who aren't the right fit for a specific Insense campaign brief.
+**Objective:** Invite strong but non-selected Insense applicants into the Krave Creator Database without duplicate outreach.
 
 ---
 
 ## Purpose
 
-When creators apply to Krave's Insense campaigns, many will be high quality but not the exact fit for that brief. Rather than losing them, this workflow sends a personalised invite to join Krave's owned creator database — removing the 10% Insense platform markup and building a direct long-term relationship.
+When creators apply to an Insense campaign, many are strong enough to keep in the network even if they are not the right fit for that specific brief. This flow captures those creators into Krave's own creator pipeline by sending a direct database invite through Insense chat.
 
 ---
 
 ## Quality Screening Criteria
 
-A creator **passes** if they meet all three:
+A creator passes only if all three are true:
 
 | Signal | Threshold | Where visible |
 |--------|-----------|---------------|
-| Has portfolio content | ≥ 1 upload | Profile panel → Portfolio tab |
-| Has completed Insense deals | ≥ 1 finished deal | Profile panel → "X finished deals" |
-| Engagement rate | ≥ 1% | Profile panel → Engagement rate stat |
+| Portfolio uploads | >= 1 upload | Profile drawer -> `X uploads in Y different categories` |
+| Finished deals | >= 1 | Profile drawer -> `X finished deals` |
+| Engagement rate | >= 1% | Profile drawer -> `X.XX% Engagement rate` |
 
-A creator **fails** (skip, no message) if:
-- Zero portfolio uploads — no sample work to evaluate
-- Zero finished deals — unproven on platform
-- Engagement rate < 1% — audience is not engaged
+Fail any one:
 
----
-
-## Database Invite Message Template
-
-```
-Hey {Creator Name},
-
-Thanks for applying to our project on Insense. We loved your work and wanted to reach out personally. You weren't quite the right fit for that specific brief, but we absolutely want to keep working with you!
-
-We're Krave Media and we work with some of the fastest-growing DTC brands in the US.
-We'd love for you to join our own creator network so our strategists can match you directly to briefs. If you join, you get:
-
-• First look at paid briefs matched to your niche
-• Set your own UGC rates — keep 100% of what you earn
-• Work directly with the brand team
-• Early access to our private creator Discord (launching soon) — jobs board, work-sharing, and direct line to our brand partners
-• Long-term relationships — most of our creators work 6+ campaigns a year with us
-
-It just takes 5 min to fill out:
-https://form.typeform.com/to/lAPIxgqv
-
-Once you're in, our strategist team will reach out directly with briefs that match you!
-Excited to have you on the team! :)
-
-Cheers,
-Krave Media Creator Team
-```
+- no invite
+- record the skip reason
 
 ---
 
-## Step-by-Step (Automated)
+## Automatic Invite Policy
 
-### Step 1 — Log in to Insense
-- Navigate to `https://app.insense.pro/signin`
-- Credentials: `noa@kravemedia.co` / retrieve password from secure store
-- Dismiss any cookie or guide tooltips on load
+The runner now auto-populates invite decisions for quality-passing creators.
 
-### Step 2 — Select the target campaign
-- Navigate to the Campaigns section via the sidebar
-- Select the specific campaign with pending applications
-- Open the **Applications** tab within that campaign
+Current blocklist:
 
-### Step 3 — Process each application
-For each application in the list:
+- `Previous Collaborator`
 
-1. Open the creator's profile panel (click "View profile" or the application row)
-2. Read quality signals: portfolio upload count, finished deals count, engagement rate
-3. **If fails quality criteria** → skip. Do not message. Log as "Skipped — below threshold"
-4. **If passes quality criteria:**
-   - Click **"Go to chat"** to open the direct message thread
-   - Send the database invite message with `{Creator Name}` replaced by their actual first name (or username if first name unavailable)
-   - Log as "Messaged — [username]"
-5. Close the profile panel and move to the next application
+Policy behavior:
 
-### Step 4 — Deduplication
-- Before sending any message, check if a previous message in the chat thread already contains `form.typeform.com/to/lAPIxgqv`
-- If the link is already present in the thread → skip. Log as "Already messaged"
+- quality fail -> skipped from outreach
+- quality pass and not blocklisted -> `invite: true`
+- quality pass and blocklisted -> `invite: false` with a `blockReason`
 
-### Step 5 — Report
-After processing all applications, output a summary in the current conversation and post to `#airwallexdrafts` (channel ID: `C0AQZGJDR38`) for EOD/SOD reporting pick-up:
-
-```
-*Insense Outreach — [Campaign Name] — [DATE]*
-
-✅ *Messaged:* [N] creators
-[username], [username], ...
-
-⏭ *Skipped (below threshold):* [N] creators
-[username] — [reason]
-
-↩ *Already messaged (dedup):* [N] creators
-[username], [username], ...
-
-*Total applications reviewed:* [N]
-```
+This keeps the flow automatic while enforcing an explicit exclusion rule in code.
 
 ---
 
-## Credentials
+## Operating Model
 
-| Field | Value |
-|-------|-------|
-| Login | noa@kravemedia.co |
-| Password | NoaNed393! |
-| Database invite link | https://form.typeform.com/to/lAPIxgqv |
+### Step 1: Review
+
+Run:
+
+```powershell
+$env:INSENSE_PASSWORD='...'
+node projects/insense-creator-database/run-insense-outreach.mjs --mode review --campaign "<Campaign Name>" --limit 10
+```
+
+This writes:
+
+- `projects/insense-creator-database/data/runs/<campaign-slug>-review.json`
+- `projects/insense-creator-database/data/decisions/<campaign-slug>.json`
+
+The decision file contains only quality-passing creators and already includes the current invite decision.
+When configured with a Slack bot token, the runner also posts a review summary to `#airwallexdrafts`.
+
+### Step 2: Send
+
+Run:
+
+```powershell
+$env:INSENSE_PASSWORD='...'
+node projects/insense-creator-database/run-insense-outreach.mjs --mode send --campaign "<Campaign Name>"
+```
+
+The runner:
+
+- skips records with `invite: false`
+- only messages creators with `invite: true`
+- writes a send artifact JSON locally
+- posts a send summary to `#airwallexdrafts` when configured
 
 ---
 
-## Notes
+## Deduplication
 
-- Only message creators you are **not** accepting for the specific campaign. Do not send the database invite to creators you are approving — it creates confusion.
-- If a creator has no first name visible, use their Insense username as the greeting name.
-- This workflow runs per campaign. Run it each time a campaign's review period closes.
+Before sending, the runner opens the creator chat thread and checks for:
+
+`https://form.typeform.com/to/lAPIxgqv`
+
+If that link is already in the thread:
+
+- treat the creator as already messaged
+- skip sending
+
+The local cache in `projects/insense-creator-database/data/creator-cache.json` is helpful, but the thread check is the source-of-truth dedup rule.
+The cache remains the durable local record even when Slack reporting is enabled.
+
+---
+
+## Invite Message
+
+The runner uses the built-in message template in:
+
+- `projects/insense-creator-database/lib/messaging.mjs`
+
+Greeting rule:
+
+- use first name when available
+- otherwise use username
+
+---
+
+## Expected Outputs
+
+Review run:
+
+- review artifact JSON
+- decision file JSON
+- terminal summary
+
+Send run:
+
+- send summary in terminal
+- updated local cache
+- sent / skipped / already-messaged statuses in the result artifact
+
+---
+
+## Important Notes
+
+- The current blocklist rule is `Previous Collaborator`.
+- Expand the blocklist in code when campaign-specific exclusions become clear.
+- Use bounded review runs first when validating a new campaign.
+- The live runner has already been verified on real review extraction and live sends.
