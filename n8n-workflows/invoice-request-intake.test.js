@@ -124,7 +124,12 @@ assert.match(deploySource, /Resolve Customer/, 'Expected customer resolution nod
 assert.match(deploySource, /Route Customer Exists/, 'Expected customer existence decision node');
 assert.match(deploySource, /Create Billing Customer/, 'Expected customer create node');
 assert.match(deploySource, /Route Customer Create Outcome/, 'Expected customer create outcome route');
-assert.match(deploySource, /company name|client name/i, 'Expected customer naming comments or code');
+assert.match(deploySource, /client_email/, 'Expected customer lookup to use submitted client email');
+assert.match(deploySource, /email-first/i, 'Expected customer resolution to document email-first matching');
+assert.match(deploySource, /encodeURIComponent\(ctx\.client_email/i, 'Expected Airwallex customer lookup to query by email first');
+assert.match(deploySource, /encodeURIComponent\(ctx\.client_name/i, 'Expected Airwallex customer lookup to fall back to client name');
+assert.match(deploySource, /resolveByEmail/i, 'Expected customer resolution code to prefer email matches');
+assert.match(deploySource, /resolveByName/i, 'Expected customer resolution code to fall back to name matches');
 assert.match(deploySource, /Create Products/, 'Expected product creation node');
 assert.match(deploySource, /Route Product Create Outcome/, 'Expected product create outcome route');
 assert.match(deploySource, /Create Prices/, 'Expected price creation node');
@@ -137,13 +142,48 @@ assert.match(deploySource, /line_item_index/, 'Expected dynamic per-line-item ha
 assert.doesNotMatch(deploySource, /finalize the invoice/i, 'Should not auto-finalize in v1');
 assert.match(deploySource, /Airwallex Customer ID/, 'Expected Airwallex customer ID mapping');
 assert.match(deploySource, /Airwallex Invoice ID/, 'Expected Airwallex invoice ID mapping');
+assert.match(
+  deploySource,
+  /airwallex_invoice_number:\s*invoiceNumber/,
+  'Expected Airwallex invoice number to be stored from the Airwallex invoice response'
+);
+assert.match(
+  deploySource,
+  /\$json\.number\s*\|\|\s*\$json\.invoice_number/,
+  'Expected intake to prefer Airwallex response number before invoice_number'
+);
 assert.match(deploySource, /Client Name/, 'Expected Client Name tracker mapping');
 assert.match(deploySource, /Project Description/, 'Expected Project Description tracker mapping');
 assert.match(deploySource, /Amount/, 'Expected Amount tracker mapping');
 assert.match(deploySource, /Currency/, 'Expected Currency tracker mapping');
 assert.match(deploySource, /Due Date/, 'Expected Due Date tracker mapping');
-assert.match(deploySource, /Status/, 'Expected Status tracker mapping');
+assert.match(deploySource, /Payment Status/, 'Expected Payment Status tracker mapping');
 assert.match(deploySource, /Requested By/, 'Expected Requested By tracker mapping');
+assert.match(deploySource, /Origin Thread TS/, 'Expected Origin Thread TS tracker mapping');
+assert.match(
+  deploySource,
+  /origin_thread_ts:\s*payload\.origin_thread_ts\s*\|\|\s*''/,
+  'Expected intake to preserve origin_thread_ts passed from Slack handler'
+);
+assert.ok(
+  deploySource.includes(`'Origin Thread TS': "={{ $json.origin_thread_ts ? \\"'\\" + $json.origin_thread_ts : \\"\\" }}"`),
+  'Expected Origin Thread TS tracker mapping to force text so Google Sheets keeps the Slack decimal timestamp'
+);
+assert.match(
+  deploySource,
+  /name:\s+'Requester Success Confirmation'[\s\S]*https:\/\/slack\.com\/api\/chat\.postMessage[\s\S]*thread_ts:\s*\$\('Mark Draft Success'\)\.item\.json\.origin_thread_ts/,
+  'Expected draft confirmation to use Slack Web API with explicit origin thread_ts'
+);
+assert.match(
+  deploySource,
+  /name:\s+'Requester Success Confirmation'[\s\S]*credentials:\s*\{ slackApi:\s*\{ id: SLACK_CRED_ID, name: 'Krave Slack Bot' \} \}/,
+  'Expected draft confirmation to post via Krave Slack Bot'
+);
+assert.match(
+  deploySource,
+  /name:\s+'Notify John for Approval'[\s\S]*credentials:\s*\{ slackApi:\s*\{ id: SLACK_CRED_ID, name: 'Krave Slack Bot' \} \}/,
+  'Expected John approval notification to post via Krave Slack Bot'
+);
 assert.match(
   deploySource,
   /'Requested By':\s*'=\{\{\s*\$json\.submitted_by_slack_user_name\s*\|\|\s*\$json\.submitted_by_slack_user_id\s*\}\}'/,
@@ -187,6 +227,7 @@ assert.match(
 assert.match(readmeDoc, /Invoice Request Intake/, 'Expected workflow listed in README');
 assert.match(readmeDoc, /Structured Slack modal/, 'Expected Slack modal intake documented in README');
 assert.match(readmeDoc, /draft invoice created/i, 'Expected draft-only behavior documented in README');
+assert.match(readmeDoc, /email-first/i, 'Expected README to document email-first Airwallex customer reuse');
 assert.match(
   readmeDoc,
   /existing Invoices sheet structure/i,
@@ -205,6 +246,7 @@ assert.doesNotMatch(
 assert.match(workflowsDoc, /Invoice Request Intake/, 'Expected Invoice Request Intake in WORKFLOWS.md');
 assert.match(workflowsDoc, /krave-invoice-request-intake/, 'Expected manual webhook documented');
 assert.match(workflowsDoc, /fallback_manual_required/, 'Expected fallback status documented in WORKFLOWS.md');
+assert.match(workflowsDoc, /email-first/i, 'Expected WORKFLOWS.md to document email-first Airwallex customer reuse');
 assert.match(workflowsDoc, /John DM/i, 'Expected John DM testing alert documented in WORKFLOWS.md');
 assert.match(
   workflowsDoc,
@@ -218,7 +260,7 @@ assert.match(workflowsDoc, /Invoice Date/i, 'Expected WORKFLOWS.md to document i
 assert.match(workflowsDoc, /7 day payout/i, 'Expected WORKFLOWS.md to document payout default');
 assert.match(
   workflowsDoc,
-  /Client Name[\s\S]*Email Address[\s\S]*Project Description[\s\S]*Airwallex Invoice ID[\s\S]*Amount[\s\S]*Currency[\s\S]*Due Date[\s\S]*Status[\s\S]*Requested By/,
+  /Client Name[\s\S]*Email Address[\s\S]*Project Description[\s\S]*Airwallex Invoice ID[\s\S]*Amount[\s\S]*Currency[\s\S]*Due Date[\s\S]*Payment Status[\s\S]*Requested By/,
   'Expected WORKFLOWS.md to describe the documented Invoices sheet columns used by intake'
 );
 assert.match(

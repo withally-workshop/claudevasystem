@@ -9,6 +9,7 @@
 - **Client Invoice Tracker Sheet ID:** `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`
 - **Client Invoice Tracker Tab:** `Invoices`
 - **Payments channel:** #payments-invoices-updates (C09HN2EBPR7)
+- **Slack posting identity:** use the `Krave Slack Bot` n8n credential for approval replies and strategist notifications; do not use a user-profile Slack connector for invoice audit-trail corrections.
 
 ## Column Map
 | Col | Field |
@@ -17,25 +18,27 @@
 | B | Client Name |
 | C | Email Address |
 | D | Project Description |
-| E | Invoice # |
-| F | Airwallex Invoice ID |
+| E | Invoice # — Airwallex invoice `number` (`INV-...`) |
+| F | Airwallex Invoice ID — Airwallex invoice `id` (`inv_...`) |
 | G | Amount |
 | H | Currency |
 | I | Due Date |
-| J | Status (notes) — write here; Col N is formula, never touch |
-| K | Requested By (Slack user_id, e.g. U0AM5EGRVTP) |
+| J | Payment Status — write here; operational lifecycle state |
+| K | Requested By — strategist/requester name; map to Slack ID before tagging |
 | L | Reminders Sent |
 | M | Payment Confirmed Date |
 | N | Status (display formula) — never write |
 | O | Notes |
-| P | Origin Thread TS |
+| P | Origin Thread TS — original #payments-invoices-updates receipt thread; preserve full decimal timestamp |
+| Q | Amount Paid |
+| R | Invoice URL |
 
 ---
 
 ## Execution Steps
 
 ### Step 1 — Pull Pending Drafts from Tracker
-Use `sheets_get_rows` on the Client Invoice Tracker (range `A:P`).
+Use `sheets_get_rows` on the Client Invoice Tracker (range `A:R`).
 Filter for rows where Col J = `Draft - Pending John Review`.
 
 If no pending drafts → skip all remaining steps. Nothing to process.
@@ -59,6 +62,7 @@ For each draft with an "approve" reply:
 1. Call `airwallex_finalize_invoice` with the invoice ID (Col F)
 2. Inspect the **finalize response** — look for the digital payment link in these fields (in order):
    - `hosted_invoice_url`
+   - `hosted_url`
    - `digital_invoice_link`
    - `payment_link`
    - `checkout_url`
@@ -67,11 +71,13 @@ For each draft with an "approve" reply:
    - Continue processing the rest regardless
 
 ### Step 4 — Update Tracker
-Use `sheets_find_row` to locate the row by Invoice # (Col E), then `sheets_update_row`:
+Use the stable Airwallex Invoice ID (Col F) to locate/update the tracker row. Do not match by Invoice # because Airwallex can change the draft number from `...-DRAFT` to the finalized `...-0001` value.
 
 | Col | Update |
 |-----|--------|
-| J — Status | `Invoice Sent` |
+| E — Invoice # | Finalized Airwallex invoice `number` |
+| J — Payment Status | `Invoice Sent` |
+| R — Invoice URL | Airwallex hosted payment link, if available |
 
 **Range format:** bare ranges only (e.g. `J5`), not `Invoices!J5`.
 **Do NOT write to Col N.**
@@ -96,6 +102,8 @@ Reply to C09HN2EBPR7 using Col P (Origin Thread TS) as `thread_ts`.
 
 If Col P is blank, post as a new message.
 
+Use Slack Web API `chat.postMessage` with explicit `thread_ts` for threaded audit-trail replies. Do not rely on Slack node `otherOptions.thread_ts`.
+
 ```
 ✅ *Invoice approved and ready to send — [Client Name]*
 • Invoice #: [Invoice #]
@@ -109,7 +117,7 @@ If Col P is blank, post as a new message.
   CC: john@kravemedia.co, noa@kravemedia.co
 ```
 
-- Col K tag: if starts with `U` → `<@Col K>`, else plain text
+- Col K tag: if starts with `U` → `<@Col K>`; otherwise map known names like Amanda, Jeneena, Sybil, Noa, and John to Slack IDs before posting. If a name is unknown, use the plain name and include a warning.
 - If Col C has an email, include it in the instruction so the requester knows where to send it
 - If no payment link retrieved: replace link line with `⚠️ Payment link unavailable — retrieve from Airwallex dashboard`
 

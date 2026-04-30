@@ -393,4 +393,8 @@ async function deploy() {
   console.log('POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder');
 }
 
-deploy().catch((e) => console.error('Deploy failed:', e.message));
+if (require.main === module) {
+  deploy().catch((e) => console.error('Deploy failed:', e.message));
+}
+
+module.exports = { workflow };

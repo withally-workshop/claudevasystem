@@ -1,0 +1,14 @@
+{
+  "name": "insense-creator-database",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.spec.mjs",
+    "review": "node run-insense-outreach.mjs --mode review",
+    "send": "node run-insense-outreach.mjs --mode send",
+    "daily-summary": "node run-insense-outreach.mjs --mode daily-summary"
+  },
+  "dependencies": {
+    "playwright": "^1.54.0"
+  }
+}

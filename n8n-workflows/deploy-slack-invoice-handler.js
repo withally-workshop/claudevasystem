@@ -472,7 +472,8 @@ const workflow = {
       parameters: {
         resource: 'message',
         operation: 'post',
-        channel: PAYMENTS_UPDATES_CHANNEL,
+        select: 'channel',
+        channelId: { __rl: true, value: PAYMENTS_UPDATES_CHANNEL, mode: 'id' },
         text: `={{
           ':white_check_mark: Invoice request received' +
           '\\n- Requester: ' + ($json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id) +
@@ -509,7 +510,7 @@ const workflow = {
       position: [1840, 520],
       parameters: {
         mode: 'runOnceForEachItem',
-        jsCode: `const channelTs = $json.ts || '';
+        jsCode: `const channelTs = $json.ts || $json.message_timestamp || ($json.message && $json.message.ts) || '';
 const submission = $('Normalize Modal Submission').item.json;
 return { json: { ...submission, origin_thread_ts: channelTs } };`,
       },

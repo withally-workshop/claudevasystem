@@ -69,13 +69,18 @@ const POLL_AW_CODE = `
 const trackerRows = $input.all();
 const today = new Date().toISOString().split('T')[0];
 
-// Only poll non-Osome, non-complete rows that have an Airwallex Invoice ID
+// Only poll non-Osome, payment-eligible rows that have an Airwallex Invoice ID.
+// Column N Status is formula/display-only: read for eligibility, never write.
 const openRows = trackerRows.filter(r => {
-  const s = (r.json['Status'] || '').toString().trim();
+  const displayStatus = (r.json['Status'] || '').toString().trim();
+  const paymentStatus = (r.json['Payment Status'] || '').toString().trim();
   const awId = (r.json['Airwallex Invoice ID'] || '').toString().trim();
   const notes = (r.json['Notes'] || '').toString().toLowerCase();
   const isOsome = notes.includes('osome') || !awId;
-  return !['Payment Complete', 'Collections'].includes(s) && !s.startsWith('Draft') && !isOsome;
+  return ['Unpaid', 'Overdue', ''].includes(displayStatus) &&
+    !['Payment Complete', 'Collections'].includes(paymentStatus) &&
+    !paymentStatus.startsWith('Draft') &&
+    !isOsome;
 });
 
 if (openRows.length === 0) return [{ json: { emails: [], count: 0, source: 'airwallex-api' } }];
@@ -145,14 +150,33 @@ return [{ json: { emails, count: emails.length } }];
 `.trim();
 
 const MATCH_CODE = `
-const parsedData = $('Combine Payment Signals').first().json;
-const emails = parsedData.emails || [];
+const signalItems = $('Combine Payment Signals').all();
+const rawEmails = signalItems.flatMap(item => item.json.emails || []);
+const seenEvents = new Set();
+const emails = [];
+for (const email of rawEmails) {
+  const invoiceKey = (email.invoiceNumber || '').toString().trim().toUpperCase();
+  const amountKey = email.amount === null || email.amount === undefined ? '' : Number(email.amount).toFixed(2);
+  const currencyKey = (email.currency || '').toString().trim().toUpperCase();
+  const dateKey = email.date || '';
+  const fallbackKey = email.emailId || email.subject || '';
+  const eventKey = invoiceKey
+    ? invoiceKey + '|' + amountKey + '|' + currencyKey + '|' + dateKey
+    : fallbackKey + '|' + amountKey + '|' + currencyKey + '|' + dateKey;
+  if (seenEvents.has(eventKey)) continue;
+  seenEvents.add(eventKey);
+  emails.push(email);
+}
 const today = new Date().toISOString().split('T')[0];
 if (emails.length === 0) return [];
 const allRows = $('Get Invoice Tracker').all();
 const openRows = allRows.filter(r => {
-  const s = (r.json['Status'] || '').toString().trim();
-  return !['Payment Complete', 'Collections'].includes(s) && !s.startsWith('Draft') && r.json['Invoice #'];
+  const displayStatus = (r.json['Status'] || '').toString().trim();
+  const paymentStatus = (r.json['Payment Status'] || '').toString().trim();
+  return ['Unpaid', 'Overdue', ''].includes(displayStatus) &&
+    !['Payment Complete', 'Collections'].includes(paymentStatus) &&
+    !paymentStatus.startsWith('Draft') &&
+    r.json['Invoice #'];
 });
 const results = [];
 for (const email of emails) {
@@ -226,8 +250,8 @@ const workflow = {
       parameters: { mode: 'runOnceForAllItems', jsCode: CLAIM_WINDOW_CODE }
     },
     {
-      // Tracker is read before the fork so both detection paths can reference it.
-      // Gmail path uses $('Claim Window') for the query; API poll uses $input rows.
+      // Tracker rows feed matching and the Airwallex API poll only. They must not
+      // feed the Gmail node, or Gmail will run once per tracker row.
       id: 'n4', name: 'Get Invoice Tracker',
       type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5,
       position: [680, 300],
@@ -267,7 +291,8 @@ const workflow = {
       parameters: { mode: 'runOnceForAllItems', jsCode: POLL_AW_CODE }
     },
     {
-      // Waits for both paths; COMBINE_SIGNALS_CODE deduplicates by invoice number.
+      // Waits for both paths. Match Deposits To Invoices dedupes the merged signals
+      // before any tracker update or Slack notification can happen.
       id: 'n18', name: 'Combine Payment Signals',
       type: 'n8n-nodes-base.merge', typeVersion: 2,
       position: [1340, 300],
@@ -307,7 +332,7 @@ const workflow = {
           mappingMode: 'defineBelow',
           value: {
             'Invoice #': '={{ $json.invoiceNumber }}',
-            'Status': 'Partial Payment',
+            'Payment Status': 'Partial Payment',
             'Payment Confirmed Date': '={{ $json.paymentDate }}',
             'Amount Paid': '={{ $json.newAmountPaid }}'
           },
@@ -389,7 +414,7 @@ const workflow = {
           mappingMode: 'defineBelow',
           value: {
             'Invoice #': "={{ $('Match Deposits To Invoices').item.json.invoiceNumber }}",
-            'Status': 'Payment Complete',
+            'Payment Status': 'Payment Complete',
             'Payment Confirmed Date': "={{ $('Match Deposits To Invoices').item.json.paymentDate }}",
             'Amount Paid': "={{ $('Match Deposits To Invoices').item.json.invoiceAmount }}"
           },
@@ -426,7 +451,7 @@ const workflow = {
           mappingMode: 'defineBelow',
           value: {
             'Invoice #': "={{ $('Match Deposits To Invoices').item.json.invoiceNumber }}",
-            'Status': 'Payment Complete',
+            'Payment Status': 'Payment Complete',
             'Payment Confirmed Date': "={{ $('Match Deposits To Invoices').item.json.paymentDate }}",
             'Amount Paid': "={{ $('Match Deposits To Invoices').item.json.invoiceAmount }}"
           },
@@ -453,10 +478,12 @@ const workflow = {
   connections: {
     'Hourly':          { main: [[{ node: 'Claim Window', type: 'main', index: 0 }]] },
     'Webhook Trigger': { main: [[{ node: 'Claim Window', type: 'main', index: 0 }]] },
-    'Claim Window':    { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
-    // Tracker feeds both detection paths in parallel
+    'Claim Window': { main: [[
+      { node: 'Get Invoice Tracker', type: 'main', index: 0 },
+      { node: 'Search Airwallex Emails', type: 'main', index: 0 }
+    ]]},
+    // Tracker rows feed the Airwallex API poll and matching lookup, not Gmail.
     'Get Invoice Tracker': { main: [[
-      { node: 'Search Airwallex Emails', type: 'main', index: 0 },
       { node: 'Poll Airwallex Invoices', type: 'main', index: 0 }
     ]]},
     'Search Airwallex Emails': { main: [[{ node: 'Parse All Emails',         type: 'main', index: 0 }]] },
@@ -530,4 +557,8 @@ async function deploy() {
   console.log('NOTE: Verify Airwallex paid_amount field name on first run with a live partial invoice.');
 }
 
-deploy().catch((e) => console.error('Deploy failed:', e.message));
+if (require.main === module) {
+  deploy().catch((e) => console.error('Deploy failed:', e.message));
+}
+
+module.exports = { workflow };

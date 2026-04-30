@@ -25,14 +25,13 @@ This repo is a Claude Code executive-assistant workspace. Treat `.claude/skills/
 | `/inbox-triage`, "triage inbox", "morning triage", "inbox zero setup" | `.claude/skills/inbox-triage/SKILL.md` | Run inbox setup or daily triage for `noa@kravemedia.co`. |
 | `/payment-detection`, "check for payments", "scan for payments" | `.claude/skills/payment-detection/SKILL.md` | Scan Airwallex payment emails and update invoice tracker. |
 | `/payment-detection-trigger`, "run payment detection" | `.claude/skills/payment-detection-trigger/SKILL.md` | Fire the n8n payment detection webhook. |
+| `/n8n-trigger`, "trigger n8n", "run n8n workflow", "fire webhook", "run automation" | `.claude/skills/n8n-workflow-trigger/SKILL.md` | Manually trigger approved deployed n8n workflow webhooks. |
 | `/invoice-reminder-cron`, "run invoice reminders" | `.claude/skills/invoice-reminder-cron/SKILL.md` | Full daily reminder workflow, including payment detection first. |
 | `/invoice-reminder-trigger`, "trigger invoice reminder" | `.claude/skills/invoice-reminder-trigger/SKILL.md` | Fire the n8n invoice reminder webhook. |
 | `/invoice-approval-polling`, "check approvals" | `.claude/skills/invoice-approval-polling/SKILL.md` | Poll John's approval threads, finalize invoices, notify strategist/client. |
 | `/eod-triage-summary`, "EOD summary", "today's wrap-up" | `.claude/skills/eod-triage-summary/SKILL.md` | Generate and send Noa's end-of-day Slack summary. |
 | `/sod-report`, "start of day report", "SOD report" | `.claude/skills/sod-report/SKILL.md` | Generate the daily goals report from validated Slack inputs. |
 | `/weekly-review` | `.claude/skills/weekly-review/SKILL.md` | Synthesize weekly cross-business status and priorities. |
-| `/creative-velocity-report` | `.claude/skills/creative-velocity-report/SKILL.md` | Compile IM8 weekly creative velocity across internal and agency output. |
-| "IM8 brief extraction", "process IM8 brief" | `.claude/skills/im8-brief-extraction/SKILL.md` | Extract approved ad scripts into the IM8 Master Tracker. |
 | `/client-invoice-creation`, "client invoice creation", "process invoice requests" | `.claude/skills/client-invoice-creation/SKILL.md` | Process Slack invoice request receipts and approval replies. |
 | "Osome reconciliation" | `.claude/skills/osome-reconciliation/SKILL.md` | Triage Osome documents-needed transactions and locate PDFs. |
 
@@ -42,13 +41,15 @@ Use `n8n-workflows/WORKFLOWS.md` for current IDs, status, webhook paths, deploym
 
 | Automation | Related skill | Trigger pattern |
 |---|---|---|
-| Krave - Payment Detection | `payment-detection`, `payment-detection-trigger` | Scheduled 10 AM + 5 PM ICT, or manual webhook. |
-| Krave - Invoice Reminder Cron | `invoice-reminder-cron`, `invoice-reminder-trigger` | Scheduled 10 AM ICT daily, or manual webhook. |
-| Krave - EOD Triage Summary | `eod-triage-summary` | Scheduled 6 PM ICT weekdays, or manual webhook. |
-| Krave - Start Of Day Report | `sod-report` | Manual trigger or webhook after required Slack inputs exist. |
-| Krave - Inbox Triage Daily | `inbox-triage` | Scheduled 9 AM ICT weekdays, or manual webhook. |
-| Krave - Slack Invoice Handler | `client-invoice-creation` | Slack `/invoice-request` command and modal submissions. |
-| Krave - Invoice Request Intake | `client-invoice-creation` | Structured Slack modal payload or manual webhook. |
+| Krave - Payment Detection | `payment-detection`, `payment-detection-trigger`, `n8n-workflow-trigger` | Scheduled hourly, or manual webhook. |
+| Krave - Invoice Reminder Cron | `invoice-reminder-cron`, `invoice-reminder-trigger`, `n8n-workflow-trigger` | Scheduled 10 AM ICT daily, or manual webhook. |
+| Krave - EOD Triage Summary | `eod-triage-summary`, `n8n-workflow-trigger` | Scheduled 6 PM ICT weekdays, or manual webhook. |
+| Krave - Start Of Day Report | `sod-report`, `n8n-workflow-trigger` | Manual trigger or webhook after required Slack inputs exist. |
+| Krave - Inbox Triage Daily | `inbox-triage`, `n8n-workflow-trigger` | Scheduled 9 AM ICT weekdays, or manual webhook. |
+| Krave - Slack Invoice Handler | `client-invoice-creation`, `n8n-workflow-trigger` | Slack `/invoice-request` command and modal submissions. |
+| Krave - Invoice Request Intake | `client-invoice-creation`, `n8n-workflow-trigger` | Structured Slack modal payload or manual webhook. |
+| Krave - Invoice Approval Polling | `invoice-approval-polling`, `n8n-workflow-trigger` | Scheduled every 2 hrs on weekdays, or manual webhook. |
+| Krave - Client Invoice Creation | `client-invoice-creation` | Deprecated inactive legacy webhook from `deploy-client-invoice-creation.js`; use approval polling for finalization unless explicitly rolling back. |
 
 ## Operating Rules
 

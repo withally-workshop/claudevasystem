@@ -514,6 +514,13 @@ function n8nRequest(method, path, body) {
 }
 
 async function deploy() {
+  if (process.env.ALLOW_LEGACY_CLIENT_INVOICE_CREATION_DEPLOY !== 'true') {
+    console.log('SKIPPED: Krave — Client Invoice Creation is deprecated and inactive live.');
+    console.log('Use deploy-invoice-approval-polling.js for invoice approval finalization.');
+    console.log('Set ALLOW_LEGACY_CLIENT_INVOICE_CREATION_DEPLOY=true only for an intentional rollback.');
+    return;
+  }
+
   const list = await n8nRequest('GET', `/api/v1/workflows?name=${encodeURIComponent(workflow.name)}&limit=250`);
   const existing = (list.data || []).find((w) => w.name === workflow.name && w.active !== null);
 

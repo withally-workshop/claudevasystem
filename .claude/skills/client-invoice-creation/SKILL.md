@@ -2,6 +2,7 @@
 
 **Trigger:** Run this skill to process pending invoice requests and approvals.
 **Manual invoke:** `/client-invoice-creation`
+**Current automation boundary:** Invoice request intake creates Airwallex drafts; Invoice Approval Polling is the only active approval/finalization workflow. The old Client Invoice Creation n8n finalization workflow is deprecated/inactive and should only be used for rollback.
 **Channels monitored:**
 - C0AQZGJDR38 — John's private channel (approval replies)
 - C09HN2EBPR7 — #payments-invoices-updates (form submission receipts)
@@ -29,21 +30,25 @@
 | B | Client Name | |
 | C | Email Address | Client billing email |
 | D | Project Description | Line items summary or memo |
-| E | Invoice # | From Airwallex response |
-| F | Airwallex Invoice ID | From Airwallex response — used as lookup key |
+| E | Invoice # | Airwallex invoice `number` (`INV-...`) |
+| F | Airwallex Invoice ID | Airwallex invoice `id` (`inv_...`) - used as lookup key |
 | G | Amount | Total of all line items |
 | H | Currency | |
 | I | Due Date | From form receipt |
 | J | Payment Status | State machine — read/write; operational status |
-| K | Requested By | Strategist Slack username from receipt |
+| K | Requested By | Strategist/requester name from receipt; keep Slack ID separately for mentions |
 | L | Reminders Sent | Append-only log |
 | M | Payment Confirmed Date | Written by payment-detection skill |
 | N | Status | Formula-driven display — **NEVER write to this column** |
+| P | Origin Thread TS | Slack receipt thread; draft and final notifications reply here |
+| Q | Amount Paid | Cumulative paid amount |
 | R | Invoice URL | Airwallex hosted payment link — written on approval |
 
 ---
 
 ## Routing
+
+Slack invoice receipts, draft confirmations, John approval notifications, and approval-finalized notifications must be posted by the `Krave Slack Bot` n8n credential. Do not use a user-profile Slack connector for operational corrections that are part of the invoice audit trail; route them through the bot/n8n path.
 
 On every run, check channels in this order:
 

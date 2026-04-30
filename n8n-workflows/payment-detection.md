@@ -165,8 +165,8 @@ Column reference:
 ```
 A=Date Created, B=Client Name, C=Email, D=Project,
 E=Invoice#, F=AirwallexID, G=Amount, H=Currency,
-I=Due Date, J=Status, K=Requested By, L=Reminders,
-M=Payment Confirmed Date, N=Status Display (read-only)
+I=Due Date, J=Payment Status, K=Requested By, L=Reminders,
+M=Payment Confirmed Date, N=Status Display (read-only), Q=Amount Paid
 ```
 
 ---
@@ -176,10 +176,14 @@ M=Payment Confirmed Date, N=Status Display (read-only)
 const deposit = $('Node 6 - Parse Email').item.json;
 const rows = $('Node 8 - Get Open Invoices').all();
 
-// Filter: only open invoices (not already paid or in collections)
+// Filter: only payment-eligible invoices.
+// Column N Status is formula/display-only: read for eligibility, never write.
 const openInvoices = rows.filter(row => {
-  const status = (row.json['J'] || row.json['Status'] || '').toString().trim();
-  return !['Payment Complete', 'Collections'].includes(status);
+  const displayStatus = (row.json['Status'] || '').toString().trim();
+  const paymentStatus = (row.json['Payment Status'] || '').toString().trim();
+  return ['Unpaid', 'Overdue', ''].includes(displayStatus) &&
+    !['Payment Complete', 'Collections'].includes(paymentStatus) &&
+    !paymentStatus.startsWith('Draft');
 });
 
 let match = null;
@@ -254,8 +258,9 @@ if (match) {
 - **Sheet Name:** `Invoices`
 - **Row Number:** `{{ $json.rowIndex }}`
 - **Columns to update:**
-  - `J` (Status) → `Payment Complete`
+  - `J` (Payment Status) → `Payment Complete`
   - `M` (Payment Confirmed Date) → `{{ $json.today }}`
+  - `Q` (Amount Paid) → full invoice amount
 - **Do NOT write to column N** — formula-driven
 
 **Alternative if row update by index isn't available:** use `sheets_find_row` equivalent — filter by Invoice # in col E, then update that row.

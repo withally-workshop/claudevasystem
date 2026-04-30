@@ -27,14 +27,15 @@
 
 | # | Name | ID | Status | Schedule | Purpose |
 |---|------|----|--------|----------|---------|
-| 1 | Krave - Payment Detection | `grsXd1VCVIL2F8Cv` | Active | 10am + 5pm ICT | Detect Airwallex deposits, match invoices, update tracker |
+| 1 | Krave - Payment Detection | `NurOLZkg3J6rur5Q` | Active | Hourly | Detect Airwallex deposits, match invoices, update tracker |
 | 2 | Krave - Invoice Reminder Cron | `Q3IqqLvmX9H49NdE` | Active | 10am ICT daily | Send invoice reminders, alert overdue, update tracker |
 | 3 | Krave - EOD Triage Summary | `9hZcOcAqQdM7o1yZ` | Active | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
 | 4 | Krave - Start Of Day Report | `vUunl0NuBA6t4Gw4` | Active | Manual trigger + `POST /webhook/krave-sod-report` | Build the SOD report from validated Slack inputs and deliver to `#airwallexdrafts` plus Noa DM |
 | 5 | Krave - Inbox Triage Daily | `3YyEjk1e6oZV786T` | Active | 9am ICT weekdays + manual webhook | Read inbox email, create Gmail drafts, apply labels, keep `EA/Unsure` in inbox, and post summary to `#airwallexdrafts` plus Noa |
 | 6 | Krave - Slack Invoice Handler | `t7MMhlUo5H4HQmgL` | Active | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
 | 7 | Krave - Invoice Request Intake | `5XHxhQ7wB2rxE3qz` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
-| 8 | Krave — Invoice Approval Polling | `uCS9lzHtVKWlqYlk` | Active | Every 2 hrs Mon–Fri 9am–5pm PHT + `POST /webhook/krave-invoice-approval-polling` | Poll tracker for pending drafts, detect John's "approve" replies, finalize in Airwallex, send payment link to strategist, email client |
+| 8 | Krave - Invoice Approval Polling | `uCS9lzHtVKWlqYlk` | Active | Every 2 hrs Mon-Fri 9am-5pm PHT + `POST /webhook/krave-invoice-approval-polling` | Poll tracker for pending drafts, detect John's "approve" replies, finalize in Airwallex, write tracker link, and reply in the original strategist thread |
+| 9 | Krave - Client Invoice Creation | `9eqWz6oJI5dqBesa` | Inactive legacy | Do not trigger | Deprecated finalization path; approval polling is canonical |
 
 ---
 
@@ -61,18 +62,20 @@
 | B | Client Name | Payment Detection, Invoice Reminder Cron |
 | C | Email Address | Invoice Reminder Cron |
 | D | Project Description | - |
-| E | Invoice # | Payment Detection, Invoice Reminder Cron |
-| F | Airwallex Invoice ID | Payment Detection |
+| E | Invoice # | Airwallex invoice `number` (`INV-...`); Payment Detection, Invoice Reminder Cron, Invoice Approval Polling |
+| F | Airwallex Invoice ID | Airwallex invoice `id` (`inv_...`); Payment Detection, Invoice Approval Polling |
 | G | Amount | Payment Detection, Invoice Reminder Cron |
 | H | Currency | Payment Detection, Invoice Reminder Cron |
 | I | Due Date | Invoice Reminder Cron |
-| J | Status | Payment Detection, Invoice Reminder Cron |
+| J | Payment Status | Payment Detection, Invoice Reminder Cron, Invoice Approval Polling |
 | K | Requested By | Invoice Reminder Cron |
 | L | Reminders Sent | Invoice Reminder Cron |
 | M | Payment Confirmed Date | Payment Detection |
-| N | Status Display | Formula-driven, never write |
+| N | Status | Formula-driven display (`Paid`, `Overdue`, `Unpaid`); read-only, never write |
 | O | Notes | Payment Detection (Osome check) |
+| P | Origin Thread TS | Invoice Request Intake, Invoice Approval Polling; stored as text to preserve Slack decimal timestamps |
 | Q | Amount Paid | Payment Detection (write), Invoice Reminder Cron (read) — cumulative amount paid |
+| R | Invoice URL | Invoice Approval Polling, Invoice Reminder Cron |
 
 ### Status Value Reference
 
@@ -89,7 +92,7 @@
 
 ## Workflow 1 - Payment Detection
 
-**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/grsXd1VCVIL2F8Cv`  
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/NurOLZkg3J6rur5Q`
 **Deploy script:** `n8n-workflows/deploy-payment-detection.js`
 
 ### Purpose
@@ -100,7 +103,7 @@ Replaces the manual daily task of checking whether clients have paid. Runs two d
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 3,10 * * *` - 10:00 AM + 5:00 PM ICT |
+| Schedule | `0 * * * *` - hourly |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-payment-detection` |
 
 ### Node Flow
@@ -110,19 +113,17 @@ Replaces the manual daily task of checking whether clients have paid. Runs two d
         |
 [Claim Window]              ← reads/writes lastRunTs; builds after:{ts} Gmail query
         |
-[Get Invoice Tracker]       ← read before fork so both paths can reference it
-        |
    ┌────┴────────────────────────────┐
    │                                 │
-[Search Airwallex Emails]   [Poll Airwallex Invoices]  ← API poll: SWIFT/bank transfers
+[Search Airwallex Emails]   [Get Invoice Tracker]      ← tracker lookup; never feeds Gmail
    │                                 │
-[Parse All Emails]                   │
+[Parse All Emails]          [Poll Airwallex Invoices]  ← API poll: SWIFT/bank transfers
    │                                 │
    └────────────┬────────────────────┘
                 │
-   [Combine Payment Signals]         ← deduplicates by invoice number (Gmail wins)
+   [Combine Payment Signals]         ← waits for both paths
                 │
-   [Match Deposits To Invoices]      ← unmatched exits silently
+   [Match Deposits To Invoices]      ← dedupes signals; unmatched exits silently
                 │
            [Is Partial?]
             /         \
@@ -143,11 +144,13 @@ Replaces the manual daily task of checking whether clients have paid. Runs two d
 
 ### Matching Logic
 
-1. Invoice number match against Col E (high confidence).
-2. Exact amount + currency match against a single open invoice (medium confidence).
-3. Ambiguous matches are skipped silently.
-4. Unmatched deposits exit silently — no Slack alert.
-5. **Time-windowing:** Gmail query uses `after:{lastRunTs}` — only emails since last run. Stored in n8n static data. First run falls back to `newer_than:1d`.
+1. Candidate rows must have Column N `Status` of `Unpaid`, `Overdue`, or blank and Column J `Payment Status` must not be `Payment Complete`, `Collections`, or a draft state.
+2. Invoice number match against Col E (high confidence).
+3. Exact amount + currency match against a single eligible invoice (medium confidence).
+4. Ambiguous matches are skipped silently.
+5. Unmatched deposits exit silently — no Slack alert.
+6. **Time-windowing:** Gmail query uses `after:{lastRunTs}` — only emails since last run. Stored in n8n static data. First run falls back to `newer_than:1d`. Gmail search runs once per execution and must never be fed by tracker rows.
+7. **Deduplication:** signals are deduped before tracker writes or Slack posts, using invoice/amount/currency/date when invoice number is available.
 
 ### Partial Payment Detection
 
@@ -156,8 +159,8 @@ After a match, the workflow checks if the received amount covers the full invoic
 - `existingAmountPaid` = Col Q (Amount Paid) — 0 if empty
 - `newAmountPaid` = existingAmountPaid + received amount
 - `remaining` = Col G (Amount) − newAmountPaid
-- **Partial** if remaining > $1.00 → status `Partial Payment`, Col Q updated, Airwallex NOT marked paid
-- **Full** if remaining ≤ $1.00 → existing full-payment flow (mark paid, status `Payment Complete`)
+- **Partial** if remaining > $1.00 → Col J Payment Status `Partial Payment`, Col Q updated, Airwallex NOT marked paid
+- **Full** if remaining ≤ $1.00 → existing full-payment flow (mark paid, Col J Payment Status `Payment Complete`)
 
 Second payments on the same invoice: Col Q carries over, so the second run's `newAmountPaid` accumulates correctly and triggers full-payment flow when the total is reached.
 
@@ -168,15 +171,15 @@ Second payments on the same invoice: Col Q carries over, so the second run's `ne
 - For each open non-Osome tracker row with an Airwallex Invoice ID, calls `GET /api/v1/invoices/{id}`
 - Checks `paid_amount` / `amount_paid` / `total_paid` field (field name unconfirmed — verify on first run with a live partial invoice)
 - If API shows more paid than Col Q records, injects a payment signal for the difference
-- Gmail-detected payments take precedence for the same invoice number (deduplication in `Combine Payment Signals`)
+- Gmail and API signals are merged, then deduped before matching so one payment event can produce only one tracker update and one Slack post.
 
 ### Outputs
 
 | Outcome | Action |
 |---------|--------|
-| Full payment matched (Airwallex) | Sheets → Payment Complete, Col Q = full amount, Airwallex marked paid, Slack ✅ |
-| Full payment matched (Osome) | Sheets → Payment Complete, Col Q = full amount, Slack ✅ (no Airwallex call) |
-| Partial payment matched | Sheets → Partial Payment, Col Q = cumulative paid, Slack 🔄 |
+| Full payment matched (Airwallex) | Sheets Col J → Payment Complete, Col M date, Col Q = full amount, Airwallex marked paid, Slack ✅ |
+| Full payment matched (Osome) | Sheets Col J → Payment Complete, Col M date, Col Q = full amount, Slack ✅ (no Airwallex call) |
+| Partial payment matched | Sheets Col J → Partial Payment, Col M date, Col Q = cumulative paid, Slack 🔄 |
 | No emails / no API signals | Silent |
 | Unmatched deposit | Silent — no alert |
 | Shopify / payout noise | Skipped silently |
@@ -504,7 +507,13 @@ Handles the Slack-facing part of invoice intake. It accepts both the `/invoice-r
                      [Normalize Modal Submission]
                           |        |        |
                           v        v        v
-            [Send To Invoice Intake] [Post Channel Receipt] [Acknowledge Modal Submission]
+            [Post Channel Receipt] [Acknowledge Modal Submission]
+                      |
+                      v
+               [Inject Thread TS]
+                      |
+                      v
+             [Send To Invoice Intake]
 ```
 
 ### Modal Rules
@@ -524,7 +533,7 @@ Handles the Slack-facing part of invoice intake. It accepts both the `/invoice-r
 | Scenario | Action |
 |----------|--------|
 | Slash command received | Opens the invoice request modal in Slack |
-| Modal `view_submission` received | Normalizes fields, updates the modal with a confirmation view, posts a channel receipt, and POSTs to `krave-invoice-request-intake` |
+| Modal `view_submission` received | Normalizes fields, updates the modal with a confirmation view, posts a channel receipt via `Krave Slack Bot`, injects the receipt `ts`, and POSTs to `krave-invoice-request-intake` |
 | Unrelated Slack interaction | Ignored silently |
 
 ---
@@ -607,8 +616,8 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 - Captures `Payout` and `Invoice Date`, then computes the final `Due Date` inside intake.
 - Supports payout phrases `7 day payout`, `14 day payout`, `30 day payout`, `due now`, and `due on <date>`.
 - Supports multiple line items per request.
-- Looks up existing billing customers by client name and creates one only if no match is found.
-- Posts a success receipt back to the originating Slack channel when a draft is created.
+- Uses email-first Airwallex customer reuse: exact email match wins, name matching is only a fallback, and a new billing customer is created only if neither lookup resolves.
+- Posts a success receipt back to the originating Slack receipt thread via `Krave Slack Bot` when a draft is created.
 
 ### Outputs
 
@@ -632,7 +641,8 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 - V1 is draft-only and stops once the Airwallex draft invoice exists.
 - John DM is the temporary testing alert path while the workflow is being stabilized.
 - Intake writes into the existing Invoices sheet structure rather than adding new intake-only columns.
-- The intake workflow uses the documented columns `Client Name`, `Email Address`, `Project Description`, `Airwallex Invoice ID`, `Amount`, `Currency`, `Due Date`, `Status`, and `Requested By`.
+- The intake workflow uses the documented columns `Client Name`, `Email Address`, `Project Description`, `Invoice #`, `Airwallex Invoice ID`, `Amount`, `Currency`, `Due Date`, `Payment Status`, `Requested By`, and `Origin Thread TS`.
+- Column E `Invoice #` stores the Airwallex invoice `number` from the invoice create response. Column F stores the Airwallex invoice `id`. Column P `Origin Thread TS` stores the Slack receipt thread timestamp from the Slack Invoice Handler as text so the decimal portion is not lost.
 - Successful draft creation writes status `Draft - Pending John Review`.
 - Billing Address, Payout, Invoice Date, Due Date, and fallback context are condensed into the existing `Project Description` text so the tracker still fits the current A:N layout.
 
@@ -645,7 +655,7 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 | Gmail account | Gmail OAuth2 | `vxHex5lFrkakcsPi` | Payment Detection | `noa@kravemedia.co` |
 | Gmail account (john) | Gmail OAuth2 | `vsDW3WpKXqS9HUs3` | Invoice Reminder Cron | `john@kravemedia.co` |
 | Google Sheets account | Google Sheets OAuth2 | `83MQOm78gYDvziTO` | Payment Detection, Invoice Reminder Cron, Invoice Request Intake | `noa@kravemedia.co` |
-| Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | All six workflow scripts, including SOD local/manual runs | Krave Slack workspace |
+| Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | Slack-facing workflow posts, modal handling, and SOD local/manual runs | Krave Slack workspace |
 | OpenAI account | OpenAI API | `UIREXIYn59JOH1zU` | EOD Triage Summary, Inbox Triage Daily, Start Of Day Report | OpenAI API |
 
 ### Airwallex
@@ -667,26 +677,27 @@ Hardcoded in the Payment Detection HTTP Request nodes:
 
 **n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/uCS9lzHtVKWlqYlk`
 **Deploy script:** `n8n-workflows/deploy-invoice-approval-polling.js`
+**Current live state:** deployed and active as of 2026-04-30. Safe manual webhook test returned `Workflow was started` with no pending draft rows expected.
 
 ### Purpose
 
-Automates the approval and finalization leg of the invoice ops flow. Polls the tracker for drafts pending John's approval, scans his DM channel for "approve" replies, finalizes the Airwallex invoice, retrieves the payment link, replies to the strategist in #payments-invoices-updates, and emails the client. Replaces the manual `invoice-approval-polling` skill run.
+Automates the approval and finalization leg of the invoice ops flow. Polls the tracker for drafts pending John's approval, scans his private approval channel for "approve" replies, finalizes the Airwallex invoice, retrieves the payment link, writes the link to the tracker, and replies to the strategist in the original #payments-invoices-updates thread. Replaces the manual `invoice-approval-polling` skill run.
 
 ### Triggers
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 1,3,5,7,9 * * 1-5` — every 2 hrs, Mon–Fri, 9 AM–5 PM PHT |
-| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-client-invoice-creation` |
+| Schedule | `0 1,3,5,7,9 * * 1-5` - every 2 hrs, Mon-Fri, 9 AM-5 PM PHT |
+| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-approval-polling` |
 
 ### Node Flow
 
 ```
 [Schedule / Webhook Trigger]
   ↓
-[Read Invoice Tracker] — Google Sheets, all rows A:N
+[Read Invoice Tracker] - Google Sheets, all rows A:R
   ↓
-[Is Draft Pending?] — filter: Status = "Draft - Pending John Review"
+[Filter Pending Drafts] - filter: Payment Status = "Draft - Pending John Review"
   ↓ (true per row)
 [Get John Channel History] — conversations.history on C0AQZGJDR38
   ↓
@@ -708,23 +719,24 @@ Automates the approval and finalization leg of the invoice ops flow. Polls the t
   ↓
 [Get Invoice] — GET /api/v1/invoices/{id} for payment link
   ↓
-[Extract Payment Link] — code: hosted_invoice_url → digital_invoice_link → payment_link → checkout_url
+[Extract Payment Link] — code: hosted_invoice_url → hosted_url → digital_invoice_link → payment_link → checkout_url
   ↓
-[Update Tracker] — appendOrUpdate, match Invoice #, set Status = "Invoice Sent"
+[Update Tracker] - appendOrUpdate, match Airwallex Invoice ID, refresh Invoice #, set Payment Status = "Invoice Sent", set Invoice URL
   ↓
 [Reply in John Thread] — chat.postMessage to C0AQZGJDR38 thread
   ↓
-[Notify Strategist] — Slack post to C09HN2EBPR7
-  ↓
-[Has Client Email?] — check Col C
-  ↓ (true)
-[Email Client] — Gmail from john@kravemedia.co to Col C
+[Notify Strategist] - Slack bot post to C09HN2EBPR7, using Col P Origin Thread TS when present
 ```
 
 ### Approval Detection Logic
 
-- Source of truth for pending drafts: tracker Col J = `Draft - Pending John Review`
+- Source of truth for pending drafts: tracker Col J Payment Status = `Draft - Pending John Review`
 - For each pending draft, search C0AQZGJDR38 (John's DM with bot) for bot message containing the Airwallex Invoice ID (Col F, format `inv_xxx`)
+- After finalization, refresh Col E `Invoice #` from Airwallex `number` because a draft number can change from `...-DRAFT` to the finalized `...-0001` value.
+- Tracker updates match on stable Col F `Airwallex Invoice ID`, not Col E `Invoice #`.
+- Final notifications reply in the original #payments-invoices-updates receipt thread from Col P. If Col P is blank, Slack posts a new channel message as fallback.
+- Threaded Slack replies use Slack Web API `chat.postMessage` with explicit `thread_ts`; do not rely on Slack node `otherOptions.thread_ts` for audit-trail replies.
+- Approval polling Slack replies use the `Krave Slack Bot` n8n credential. Manual operational corrections should not be posted through a user-profile Slack connector when the message is part of the invoice audit trail.
 - Dedup: skip replies that already have a ✅ (`white_check_mark`) reaction
 - "approve" match is case-insensitive — "Approve", "APPROVE", "approved" all count
 - Processes all pending drafts in one execution (n8n fan-out per tracker row)
@@ -733,7 +745,7 @@ Automates the approval and finalization leg of the invoice ops flow. Polls the t
 
 | Scenario | Action |
 |----------|--------|
-| Pending draft found, approve reply present | Finalize in Airwallex, get link, update tracker to `Invoice Sent`, reply in John's thread, notify strategist, email client if email on file |
+| Pending draft found, approve reply present | Finalize in Airwallex, get link, update Col J to `Invoice Sent`, write Col R Invoice URL, reply in John's thread, notify strategist in original thread |
 | No pending drafts in tracker | Silent exit |
 | Pending draft found but no approve reply yet | Skip that draft, check next |
 | Notification message not found in C0AQZGJDR38 | Skip that draft |
@@ -745,7 +757,7 @@ Automates the approval and finalization leg of the invoice ops flow. Polls the t
 |---------|-----------|
 | Airwallex auth fails (no token) | `continueOnFail: true`; Auth OK? routes to Alert Auth Failed node; posts ⚠️ to C0AQZGJDR38 with invoice_id; manual finalization required |
 | Finalize returns error (already finalized, etc.) | `continueOnFail: true`; Get Invoice still runs; payment link retrieved from current invoice state |
-| `hosted_invoice_url` absent from all checked fields | `link_found: false`; thread reply and strategist post note ⚠️ to retrieve link from Airwallex dashboard |
+| Airwallex hosted link absent from all checked fields | `link_found: false`; thread reply and strategist post note ⚠️ to retrieve link from Airwallex dashboard |
 | Slack reply or notify fails | `continueOnFail: true`; tracker update already wrote `Invoice Sent`; no re-processing on next run |
 | Email Client fails | `continueOnFail: true`; logged in n8n execution history; tracker + Slack notifications already written |
 | Google Sheets read fails | `continueOnFail: true`; no items flow downstream; silent exit |

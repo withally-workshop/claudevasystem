@@ -30,7 +30,7 @@ Scan noa@kravemedia.co for Airwallex deposit notification emails **received sinc
 | G | Amount | Full invoice amount |
 | H | Currency | |
 | I | Due Date | |
-| J | Status | Read/write |
+| J | Payment Status | Read/write operational lifecycle state |
 | K | Requested By | |
 | L | Reminders Sent | |
 | M | Payment Confirmed Date | Write date when first/last payment confirmed |
@@ -45,7 +45,7 @@ Scan noa@kravemedia.co for Airwallex deposit notification emails **received sinc
 ### Step 0 — Determine Search Window
 For **manual skill runs**, use `newer_than:1d` as the search window — this is safe since manual runs are occasional and intentional.
 
-The n8n automated workflow uses `$getWorkflowStaticData('global').lastRunTs` for precise time-windowing between runs. That state is internal to n8n and not accessible here.
+The n8n automated workflow uses `$getWorkflowStaticData('global').lastRunTs` for precise time-windowing between runs. That state is internal to n8n and not accessible here. The Gmail search must run once per workflow execution from that last-scan timestamp; never feed tracker rows into the Gmail search node.
 
 ### Step 1 — Scan Noa's Gmail for Deposit Notifications
 Search noa@kravemedia.co for Airwallex payment confirmation emails:
@@ -74,17 +74,17 @@ For each result, call `gmail_get_message` (or `gmail_read_message`) to extract:
 Use `sheets_get_rows` on the Client Invoice Tracker:
 - **Sheet ID:** `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`
 - **Tab:** `Invoices`
-- **Range:** `A:N`
+- **Range:** `A:R`
 
-Filter for rows where Column J (Status) is NOT `Payment Complete` and NOT `Collections`.
+Filter for rows where Column N (Status) is `Unpaid`, `Overdue`, or blank, and Column J (Payment Status) is NOT `Payment Complete`, NOT `Collections`, and not a draft. Column N may be read for eligibility, but it must never be written.
 
 Build a lookup map: `{ invoice_number: row, amount: row, client_name: row }`
 
 ### Step 3 — Match Deposits to Invoices
 For each deposit email, attempt to match using this priority order:
 
-1. **Invoice number match** — extract invoice # from email body, find exact match in Column E
-2. **Amount match** — match deposit amount to Column G (amount), cross-check Column B (client name) if possible
+1. **Invoice number match** — extract invoice # from email body, find exact match in Column E among eligible rows only
+2. **Amount match** — match deposit amount to Column G (amount), cross-check Column B (client name) if possible, and proceed only when exactly one eligible row matches
 3. **No match** — flag as unmatched deposit, post to #payments-invoices-updates for manual review
 
 **Match confidence rules:**
@@ -118,7 +118,7 @@ For each confirmed full payment, update the row:
 
 | Column | Update |
 |--------|--------|
-| J — Status | `Payment Complete` |
+| J — Payment Status | `Payment Complete` |
 | M — Payment Confirmed Date | Today (YYYY-MM-DD) |
 | Q — Amount Paid | Full invoice amount |
 
@@ -184,9 +184,9 @@ If `mcp__gmail-noa__gmail_search_messages` returns an auth error:
 - Run daily at 9 AM ICT via cron (see: `.claude/skills/invoice-reminder-cron/SKILL.md`)
 - Can also be triggered manually: "check for payments" or "/payment-detection"
 - Shopify deposits are NOT client invoice payments — always skip for matching purposes
-- **Time-windowed scanning (n8n):** the automated workflow uses `$getWorkflowStaticData('global').lastRunTs` to track the last run Unix timestamp, so each hourly run only searches emails that arrived in the new window. No external setup required.
+- **Time-windowed scanning (n8n):** the automated workflow uses `$getWorkflowStaticData('global').lastRunTs` to track the last run Unix timestamp, so each hourly run only searches emails that arrived in the new window. The first run falls back to `newer_than:1d`. No external setup required.
 - **Manual skill runs:** use `newer_than:1d` — safe for occasional manual use.
-- **No duplicate Slack noise:** matched invoices are deduped by filtering out `Payment Complete` rows. Time-windowed queries prevent the same unmatched deposit from being re-alerted across runs.
+- **No duplicate Slack noise:** n8n dedupes payment signals before matching and only acts on rows where Column N is `Unpaid`, `Overdue`, or blank and Column J is not complete/collections/draft. Paid invoices must never create another Slack payment notification.
 - **Partial payments:** detected by comparing received amount to Col G (Amount) after accounting for any existing Col Q (Amount Paid). Sets status to `Partial Payment` — does NOT call Airwallex `mark_paid` until full payment is received.
 - **Airwallex API poll (n8n only):** second detection path for SWIFT/bank-transfer payments that don't generate an Airwallex email. Polls `GET /api/v1/invoices/{id}` for each open Airwallex invoice. `paid_amount` field name is unconfirmed — verify on first run with a live partial invoice.
 - **Second payment handling:** when a subsequent payment arrives, the workflow adds it to Col Q (cumulative) and checks remaining. If remaining ≤ $1, status becomes `Payment Complete` and Airwallex is marked paid.

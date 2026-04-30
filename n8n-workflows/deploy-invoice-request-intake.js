@@ -23,9 +23,9 @@ const SUCCESS_TRACKER_COLUMNS = {
   Amount: '={{ $json.subtotal }}',
   Currency: '={{ $json.currency }}',
   'Due Date': '={{ $json.due_date }}',
-  Status: DRAFT_REVIEW_STATUS,
-  'Requested By': '={{ $json.submitted_by_slack_user_id }}',
-  'Origin Thread TS': '={{ $json.origin_thread_ts || "" }}',
+  'Payment Status': DRAFT_REVIEW_STATUS,
+  'Requested By': '={{ $json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id }}',
+  'Origin Thread TS': "={{ $json.origin_thread_ts ? \"'\" + $json.origin_thread_ts : \"\" }}",
 };
 const REQUESTER_SUCCESS_TEXT =
   "={{ 'Invoice request received. Airwallex draft invoice was created for ' + $('Mark Draft Success').item.json.client_name + ' (' + $('Mark Draft Success').item.json.currency + ' ' + $('Mark Draft Success').item.json.subtotal + '). Invoice Date: ' + $('Mark Draft Success').item.json.invoice_date + '. Payout: ' + ($('Mark Draft Success').item.json.payout_raw || '7 day payout') + '. Due Date: ' + $('Mark Draft Success').item.json.due_date + '. Request ID: ' + $('Mark Draft Success').item.json.request_id }}";
@@ -41,9 +41,9 @@ const FALLBACK_TRACKER_COLUMNS = {
   Amount: '={{ $json.subtotal }}',
   Currency: '={{ $json.currency }}',
   'Due Date': '={{ $json.due_date }}',
-  Status: FALLBACK_STATUS,
-  'Requested By': '={{ $json.submitted_by_slack_user_id }}',
-  'Origin Thread TS': '={{ $json.origin_thread_ts || "" }}',
+  'Payment Status': FALLBACK_STATUS,
+  'Requested By': '={{ $json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id }}',
+  'Origin Thread TS': "={{ $json.origin_thread_ts ? \"'\" + $json.origin_thread_ts : \"\" }}",
 };
 const ORIGIN_CHANNEL_SUCCESS_TEXT =
   "={{ '✅ Invoice draft created for *' + $('Mark Draft Success').item.json.client_name + '*\\n• Amount: ' + $('Mark Draft Success').item.json.currency + ' ' + $('Mark Draft Success').item.json.subtotal + '\\n• Invoice #: ' + ($('Mark Draft Success').item.json.airwallex_invoice_number || $('Mark Draft Success').item.json.airwallex_invoice_id) + '\\n• Due: ' + $('Mark Draft Success').item.json.due_date + '\\n• Status: Draft - pending John review in Airwallex\\n• Requested by: <@' + $('Mark Draft Success').item.json.submitted_by_slack_user_id + '>' }}";
@@ -285,10 +285,76 @@ return {
 
 const RESOLVE_CUSTOMER_CODE = `
 const ctx = $('Merge Auth Token').item.json;
-const items = Array.isArray($json.items) ? $json.items : [];
+const items = Array.isArray($json.customer_lookup_items) ? $json.customer_lookup_items : [];
 const clientName = (ctx.client_name || '').toLowerCase().trim();
-const found = items.find(c => (c.name || '').toLowerCase().trim() === clientName);
+const clientEmail = (ctx.client_email || '').toLowerCase().trim();
+
+function emailsFor(customer) {
+  return [
+    customer.email,
+    customer.email_address,
+    customer.primary_email,
+    customer.contact && customer.contact.email,
+  ].filter(Boolean).map(e => String(e).toLowerCase().trim());
+}
+
+function resolveByEmail(customers) {
+  if (!clientEmail) return null;
+  return customers.find(customer => emailsFor(customer).includes(clientEmail)) || null;
+}
+
+function resolveByName(customers) {
+  return customers.find(c => (c.name || '').toLowerCase().trim() === clientName) || null;
+}
+
+const found = resolveByEmail(items) || resolveByName(items);
 return { json: { ...ctx, airwallex_customer_id: found ? found.id : '' } };
+`.trim();
+
+const LOOKUP_CUSTOMER_CODE = `
+const ctx = $json;
+const token = ctx.token || '';
+const clientEmail = (ctx.client_email || '').trim();
+const clientName = (ctx.client_name || '').trim();
+const headers = {
+  Authorization: 'Bearer ' + token,
+  'x-api-version': '2025-06-16',
+};
+
+async function listCustomers(query) {
+  const resp = await $helpers.httpRequest({
+    method: 'GET',
+    url: 'https://api.airwallex.com/api/v1/billing_customers' + query,
+    headers,
+  });
+  if (Array.isArray(resp.items)) return resp.items;
+  if (Array.isArray(resp.data)) return resp.data;
+  if (Array.isArray(resp)) return resp;
+  return [];
+}
+
+// email-first: reuse an existing billing customer by exact email before trying name.
+let customer_lookup_items = [];
+if (clientEmail) {
+  customer_lookup_items = await listCustomers('?email=' + encodeURIComponent(ctx.client_email));
+}
+
+const normalizedEmail = clientEmail.toLowerCase();
+const emailMatch = customer_lookup_items.find(customer => {
+  const emails = [
+    customer.email,
+    customer.email_address,
+    customer.primary_email,
+    customer.contact && customer.contact.email,
+  ].filter(Boolean).map(e => String(e).toLowerCase().trim());
+  return emails.includes(normalizedEmail);
+});
+
+if (!emailMatch && clientName) {
+  customer_lookup_items = await listCustomers('?name=' + encodeURIComponent(ctx.client_name));
+}
+
+return { json: { ...ctx, customer_lookup_items } };
 `.trim();
 
 const SET_CUSTOMER_ID_CODE = `
@@ -338,7 +404,7 @@ return {
 const PREPARE_LINE_ITEMS_CODE = `
 const ctx = $('Merge Auth Token').item.json;
 const invoiceId = $json.id || '';
-const invoiceNumber = $json.invoice_number || '';
+const invoiceNumber = $json.number || $json.invoice_number || '';
 const aggregated = $('Aggregate Price IDs').item.json;
 const collectedPrices = aggregated.collected_prices || [];
 
@@ -366,7 +432,7 @@ return {
   json: {
     ...ctx,
     airwallex_invoice_id: ctx.airwallex_invoice_id || $json.id || '',
-    airwallex_invoice_number: ctx.airwallex_invoice_number || $json.invoice_number || '',
+    airwallex_invoice_number: ctx.airwallex_invoice_number || $json.number || $json.invoice_number || '',
     status: 'airwallex_created',
     success_note: '${DRAFT_SUCCESS_NOTE}',
   }
@@ -475,25 +541,13 @@ const workflow = {
     {
       id: 'n_lookup_customer',
       name: 'Lookup Billing Customer',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
       position: [1150, 260],
       continueOnFail: true,
       parameters: {
-        method: 'GET',
-        url: 'https://api.airwallex.com/api/v1/billing_customers',
-        sendHeaders: true,
-        headerParameters: {
-          parameters: [
-            { name: 'Authorization', value: '={{ "Bearer " + $json.token }}' },
-            { name: 'x-api-version', value: '2025-06-16' },
-          ],
-        },
-        sendQuery: true,
-        queryParameters: {
-          parameters: [{ name: 'name', value: '={{ $json.client_name }}' }],
-        },
-        options: {},
+        mode: 'runOnceForEachItem',
+        jsCode: LOOKUP_CUSTOMER_CODE,
       },
     },
     {
@@ -1019,20 +1073,20 @@ const workflow = {
     },
     {
       id: 'n29',
-      name: 'Post Origin Channel Success',
-      type: 'n8n-nodes-base.slack',
-      typeVersion: 2.3,
+      name: 'Requester Success Confirmation',
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
       position: [3120, 220],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
-        resource: 'message',
-        operation: 'post',
-        select: 'channel',
-        channelId: { __rl: true, value: '={{ $("Mark Draft Success").item.json.origin_channel_id || $("Mark Draft Success").item.json.submitted_by_slack_user_id }}', mode: 'id' },
-        text: ORIGIN_CHANNEL_SUCCESS_TEXT,
-        otherOptions: {
-          thread_ts: '={{ $("Mark Draft Success").item.json.origin_thread_ts || "" }}',
-        },
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'slackApi',
+        method: 'POST',
+        url: 'https://slack.com/api/chat.postMessage',
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: `={{ { channel: $('Mark Draft Success').item.json.origin_channel_id || $('Mark Draft Success').item.json.submitted_by_slack_user_id, thread_ts: $('Mark Draft Success').item.json.origin_thread_ts || undefined, text: '✅ Invoice draft created for *' + $('Mark Draft Success').item.json.client_name + '*\\n• Amount: ' + $('Mark Draft Success').item.json.currency + ' ' + $('Mark Draft Success').item.json.subtotal + '\\n• Invoice #: ' + ($('Mark Draft Success').item.json.airwallex_invoice_number || $('Mark Draft Success').item.json.airwallex_invoice_id) + '\\n• Due: ' + $('Mark Draft Success').item.json.due_date + '\\n• Status: Draft - pending John review in Airwallex\\n• Requested by: <@' + $('Mark Draft Success').item.json.submitted_by_slack_user_id + '>' } }}`,
+        options: {},
       },
     },
     {
@@ -1123,7 +1177,7 @@ const workflow = {
       { node: 'DM John Failure Alert', type: 'main', index: 0 },
     ]]},
     'Write Tracker Success': { main: [[
-      { node: 'Post Origin Channel Success', type: 'main', index: 0 },
+      { node: 'Requester Success Confirmation', type: 'main', index: 0 },
       { node: 'Notify John for Approval', type: 'main', index: 0 },
     ]] },
   },

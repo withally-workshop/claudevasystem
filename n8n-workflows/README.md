@@ -12,16 +12,17 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Start Of Day Report | Active | Manual trigger + production webhook | `deploy-sod-report.js` |
 | Inbox Triage Daily | Active | 9am ICT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
 | Slack Invoice Handler | Active | Slack slash command + modal submit | [deploy-slack-invoice-handler.js](deploy-slack-invoice-handler.js) |
-| Invoice Request Intake | Paused (testing) | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
-| Client Invoice Creation | Active | Every 2 hrs Mon–Fri 9am–5pm PHT + manual webhook | [deploy-client-invoice-creation.js](deploy-client-invoice-creation.js) |
+| Invoice Request Intake | Active | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
+| Invoice Approval Polling | Active | Every 2 hrs Mon-Fri 9am-5pm PHT + manual webhook | [deploy-invoice-approval-polling.js](deploy-invoice-approval-polling.js) |
+| Client Invoice Creation | Inactive legacy | Do not use for approval finalization | [deploy-client-invoice-creation.js](deploy-client-invoice-creation.js) |
 
 ---
 
 ## Payment Detection
 
-Runs two parallel detection paths every hour: (1) scans `noa@kravemedia.co` for Airwallex deposit emails, and (2) polls the Airwallex invoice API directly for SWIFT/bank-transfer payments. Handles both full and partial payments — partial payments set status to `Partial Payment` and update Col Q (Amount Paid) without marking Airwallex paid; subsequent payments accumulate until the full amount is reached. Posts confirmations to `#payments-invoices-updates`.
+Runs two parallel detection paths every hour: (1) scans `noa@kravemedia.co` for Airwallex deposit emails from the last n8n scan only, and (2) polls the Airwallex invoice API directly for SWIFT/bank-transfer payments. The Gmail scan runs once per workflow execution and is never fed by tracker rows. Handles both full and partial payments. Partial payments set Col J Payment Status to `Partial Payment` and update Col Q (Amount Paid) without marking Airwallex paid; subsequent payments accumulate until the full amount is reached. Full payments set Col J Payment Status to `Payment Complete`. Column N `Status` is formula-only and is read only for eligibility: `Unpaid`, `Overdue`, or blank. Column N is never written. Posts one deduped confirmation to `#payments-invoices-updates` per payment event.
 
-**Workflow ID:** `WqIvJqpKaLXPDfe3`
+**Workflow ID:** `NurOLZkg3J6rur5Q`
 
 **Webhook (manual trigger):**
 ```text
@@ -165,7 +166,11 @@ Accepts invoice requests from a **Structured Slack modal**, normalizes the submi
 
 **Draft-only behavior:** v1 stops after the Airwallex `draft invoice created` state. It does not auto-finalize or auto-send.
 
-**Tracker write behavior:** intake reuses the existing Invoices sheet structure and documented Invoices tab columns such as `Client Name`, `Email Address`, `Project Description`, `Airwallex Invoice ID`, `Amount`, `Currency`, `Due Date`, `Status`, and `Requested By`. Successful drafts land with status `Draft - Pending John Review`.
+**Airwallex customer resolution:** intake uses email-first customer reuse. If `Email` is present, it looks up an existing Airwallex billing customer by exact email before considering the submitted company/client name. It only falls back to name matching when no email match is found, and only creates a new billing customer when neither lookup resolves.
+
+**Tracker write behavior:** intake reuses the existing Invoices sheet structure and documented Invoices tab columns such as `Client Name`, `Email Address`, `Invoice #`, `Airwallex Invoice ID`, `Amount`, `Currency`, `Due Date`, `Payment Status`, `Requested By`, and `Origin Thread TS`. Column E `Invoice #` stores the Airwallex invoice number from the `number` field, while Column F stores the Airwallex invoice ID from the `id` field. Column P `Origin Thread TS` is written as text so Slack timestamps keep their decimal portion. Successful drafts land with Payment Status `Draft - Pending John Review`, and the draft confirmation replies in the original receipt thread when `Origin Thread TS` is present.
+
+**Slack posting identity:** Slack invoice receipts, draft confirmations, John approval notifications, and approval-finalized notifications are sent by the `Krave Slack Bot` n8n credential. Do not use a user-profile Slack connector for operational corrections; route corrections through the bot/n8n path when a bot-authored audit trail is required.
 
 **Slack intake fields:** `Client Name or Company Name`, `Billing Address`, `Currency`, `Payout`, `Invoice Date`, `Memo / Project Description`, and freeform `Line Items`. Billing Address is captured as text and condensed into `Project Description` because the current tracker does not have a dedicated billing-address column.
 
@@ -185,6 +190,23 @@ node n8n-workflows/deploy-invoice-request-intake.js
 - `Krave Slack Bot` - modal intake, requester confirmations, and John DM testing alerts
 - `Google Sheets account` - access to Client Invoice Tracker
 - `Airwallex admin API access` - billing auth plus customer/product/price/invoice endpoints
+
+---
+
+## Invoice Approval Polling
+
+**Workflow ID:** `uCS9lzHtVKWlqYlk`
+
+**Current live state:** deployed and active as of 2026-04-30. This is the only active approval/finalization workflow.
+
+Polls the tracker for rows where Col J `Payment Status` is `Draft - Pending John Review`, scans John's approval channel for approve replies, finalizes the Airwallex draft, refreshes Col E `Invoice #` from the finalized Airwallex `number`, matches tracker updates by stable Col F `Airwallex Invoice ID`, writes Col J `Payment Status = Invoice Sent`, writes Col R `Invoice URL`, and replies in the original `#payments-invoices-updates` receipt thread from Col P `Origin Thread TS` when present. Threaded Slack replies use Slack Web API `chat.postMessage` with explicit `thread_ts`.
+
+**Manual trigger:**
+```text
+POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-approval-polling
+```
+
+**Legacy deprecation:** `Krave — Client Invoice Creation` (`9eqWz6oJI5dqBesa`) is inactive live. Do not use `krave-client-invoice-creation` for finalization unless intentionally rolling back.
 
 ---
 

@@ -42,6 +42,10 @@ assert.equal(mod.N8N_URL,          'https://noatakhel.app.n8n.cloud', 'N8N_URL m
 const wf = mod.workflow;
 assert.equal(wf.name, 'Krave — Client Invoice Creation', 'workflow name mismatch');
 assert.ok(src.includes('krave-client-invoice-creation'), 'webhook path must be krave-client-invoice-creation');
+assert.ok(
+  src.includes('ALLOW_LEGACY_CLIENT_INVOICE_CREATION_DEPLOY'),
+  'Legacy Client Invoice Creation deploy must require an explicit override'
+);
 
 // ─── Required nodes present ───────────────────────────────────────────────────
 const nodeNames = new Set(wf.nodes.map(n => n.name));
@@ -93,7 +97,7 @@ const updateNode = wf.nodes.find(n => n.name === 'Update Tracker');
 assert.ok(updateNode, 'Update Tracker node must exist');
 assert.equal(updateNode.parameters.operation, 'appendOrUpdate', 'Update Tracker must use appendOrUpdate');
 assert.deepEqual(updateNode.parameters.columns.matchingColumns, ['Invoice #'], 'Must match on Invoice #');
-assert.equal(updateNode.parameters.columns.value.Status, 'Invoice Sent', 'Status must be "Invoice Sent"');
+assert.equal(updateNode.parameters.columns.value['Payment Status'], 'Invoice Sent', 'Payment Status must be "Invoice Sent"');
 assert.ok(
   !JSON.stringify(updateNode.parameters).includes('row_number') &&
   !JSON.stringify(updateNode.parameters).includes('"N"'),

@@ -2,22 +2,22 @@ const https = require('https');
 
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = process.env.N8N_API_KEY;
-const WORKFLOW_ID = process.env.INVOICE_APPROVAL_POLLING_WORKFLOW_ID || null; // set after first deploy
+const WORKFLOW_ID = process.env.INVOICE_APPROVAL_POLLING_WORKFLOW_ID || 'uCS9lzHtVKWlqYlk';
 
 const SHEET_ID = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50';
 const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
 const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
 const JOHN_APPROVAL_CHANNEL = 'C0AQZGJDR38';
 const PAYMENTS_CHANNEL = 'C09HN2EBPR7';
-const AW_CLIENT_ID = process.env.AIRWALLEX_CLIENT_ID || 'JaQA4uJ1SDSBkTdFigT9sw';
-const AW_API_KEY = process.env.AIRWALLEX_API_KEY || '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af5c91666f50b10ee64fd87fa3db7435e8dc5c07721';
+const AW_CLIENT_ID = process.env.AIRWALLEX_CLIENT_ID;
+const AW_API_KEY = process.env.AIRWALLEX_API_KEY;
 
 // ── Code nodes ──────────────────────────────────────────────────────────────
 
 const FILTER_PENDING_CODE = `
 const rows = $input.all();
 const pending = rows.filter(r => {
-  const status = (r.json['Status'] || '').toString().trim();
+  const status = (r.json['Payment Status'] || '').toString().trim();
   return status === 'Draft - Pending John Review';
 });
 if (pending.length === 0) return [];
@@ -25,7 +25,24 @@ return pending.map(r => ({ json: r.json }));
 `.trim();
 
 const FIND_APPROVAL_MESSAGE_CODE = `
-const messages = $input.all().map(i => i.json);
+const response = ($input.all()[0] || {}).json || {};
+const messages = response.messages || [];
+const pending = $items('Filter Pending Drafts').map(item => item.json);
+return pending.map(row => {
+  const invoiceId = row['Airwallex Invoice ID'] || '';
+  if (!invoiceId) return null;
+  const found = messages.find(m => {
+    const text = (m.text || '').toLowerCase();
+    return text.includes(invoiceId.toLowerCase()) &&
+      (text.includes('new invoice draft') || text.includes('ðŸ“‹'));
+  });
+  if (!found) return null;
+  return { json: {
+    ...row,
+    approval_message_ts: found.ts,
+    approval_channel: found.channel || '${JOHN_APPROVAL_CHANNEL}',
+  }};
+}).filter(Boolean);
 const invoiceId = $('Filter Pending Drafts').item.json['Airwallex Invoice ID'] || '';
 const found = messages.find(m => {
   const text = (m.text || '').toLowerCase();
@@ -41,7 +58,19 @@ return [{ json: {
 `.trim();
 
 const FIND_APPROVE_REPLY_CODE = `
-const replies = $input.all().map(i => i.json);
+const contexts = $items('Find Draft Notification').map(item => item.json);
+return $input.all().map((item, index) => {
+  const replies = (item.json || {}).messages || [];
+  const ctx = contexts[index] || {};
+  const approveReply = replies.find(r => {
+    const text = (r.text || '').toLowerCase();
+    return text.includes('approve') && r.bot_id == null;
+  });
+  if (!approveReply) return null;
+  return { json: { ...ctx, approve_reply_ts: approveReply.ts } };
+}).filter(Boolean);
+const response = ($input.all()[0] || {}).json || {};
+const replies = response.messages || [];
 const ctx = $('Find Draft Notification').item.json;
 const approveReply = replies.find(r => {
   const text = (r.text || '').toLowerCase();
@@ -52,24 +81,80 @@ return [{ json: { ...ctx, approve_reply_ts: approveReply.ts } }];
 `.trim();
 
 const EXTRACT_PAYMENT_LINK_CODE = `
+const contexts = $items('Find Approve Reply').map(item => item.json);
+const finalizes = $items('Finalize Invoice').map(item => item.json);
+return $input.all().map((item, index) => {
+  const finalize = finalizes[index] || {};
+  const getInvoice = item.json || {};
+  const ctx = contexts[index] || {};
+  const link =
+    finalize.hosted_invoice_url ||
+    finalize.hosted_url ||
+    finalize.digital_invoice_link ||
+    finalize.payment_link ||
+    finalize.checkout_url ||
+    getInvoice.hosted_invoice_url ||
+    getInvoice.hosted_url ||
+    getInvoice.digital_invoice_link ||
+    getInvoice.payment_link ||
+    getInvoice.checkout_url ||
+    '';
+  const finalizedInvoiceNumber =
+    getInvoice.number ||
+    getInvoice.invoice_number ||
+    finalize.number ||
+    finalize.invoice_number ||
+    ctx['Invoice #'] ||
+    '';
+  return { json: { ...ctx, 'Invoice #': finalizedInvoiceNumber, payment_link: link, link_found: !!link } };
+});
 const finalize = $('Finalize Invoice').item.json;
-const getInvoice = $input.item.json;
+const getInvoice = (($input.all()[0] || {}).json) || {};
+const ctx = $('Find Approve Reply').item.json;
 const link =
   finalize.hosted_invoice_url ||
+  finalize.hosted_url ||
   finalize.digital_invoice_link ||
   finalize.payment_link ||
   finalize.checkout_url ||
   getInvoice.hosted_invoice_url ||
+  getInvoice.hosted_url ||
   getInvoice.digital_invoice_link ||
   getInvoice.payment_link ||
   getInvoice.checkout_url ||
   '';
-const ctx = $('Find Approve Reply').item.json;
-return [{ json: { ...ctx, payment_link: link, link_found: !!link } }];
+const finalizedInvoiceNumber =
+  getInvoice.number ||
+  getInvoice.invoice_number ||
+  finalize.number ||
+  finalize.invoice_number ||
+  ctx['Invoice #'] ||
+  '';
+return [{ json: { ...ctx, 'Invoice #': finalizedInvoiceNumber, payment_link: link, link_found: !!link } }];
 `.trim();
 
 
 const BUILD_JOHN_THREAD_REPLY_CODE = `
+return $items('Extract Payment Link').map(item => {
+const ctx = item.json;
+const clientName = ctx['Client Name'] || '';
+const invoiceNum = ctx['Invoice #'] || '';
+const amount = ctx['Amount'] || '';
+const currency = ctx['Currency'] || '';
+const dueDate = ctx['Due Date'] || '';
+const link = ctx.payment_link || '';
+const lines = [
+  'âœ… *Invoice finalized â€” ' + clientName + '*',
+  'â€¢ Invoice #: ' + invoiceNum,
+  'â€¢ Amount: ' + amount + ' ' + currency,
+  'â€¢ Due: ' + dueDate,
+];
+if (link) lines.push('â€¢ Payment link: ' + link);
+else lines.push('âš ï¸ Payment link unavailable â€” retrieve from Airwallex dashboard.');
+lines.push('');
+lines.push('Strategist notified in #payments-invoices-updates.');
+return { json: { ...ctx, john_reply_text: lines.join('\\n') } };
+});
 const ctx = $('Extract Payment Link').item.json;
 const clientName = ctx['Client Name'] || '';
 const invoiceNum = ctx['Invoice #'] || '';
@@ -91,6 +176,52 @@ return [{ json: { ...ctx, john_reply_text: lines.join('\\n') } }];
 `.trim();
 
 const BUILD_STRATEGIST_MESSAGE_CODE = `
+const STRAT_SLACK = {
+  amanda: 'U07J8SRCPGU',
+  jeneena: 'U07R7FU4WBV',
+  sybil: 'U0A2HLNV8NM',
+  noa: 'U06TBGX9L93',
+  john: 'U0AM5EGRVTP'
+};
+return $items('Build John Thread Reply').map(item => {
+const ctx = item.json;
+const clientName = ctx['Client Name'] || '';
+const invoiceNum = ctx['Invoice #'] || '';
+const amount = ctx['Amount'] || '';
+const currency = ctx['Currency'] || '';
+const dueDate = ctx['Due Date'] || '';
+const link = ctx.payment_link || '';
+const colK = (ctx['Requested By'] || '').trim();
+const mappedSlackId = STRAT_SLACK[colK.toLowerCase()] || '';
+const requesterTag = colK.match(/^U[A-Z0-9]{8,}$/)
+  ? '<@' + colK + '>'
+  : (mappedSlackId ? '<@' + mappedSlackId + '>' : (colK || 'unknown'));
+const requesterWarning = colK && !mappedSlackId && !colK.match(/^U[A-Z0-9]{8,}$/)
+  ? '\\nâ€¢ âš ï¸ Unknown requester "' + colK + '" on tracker - update strategist map if this should tag someone.'
+  : '';
+const colC = (ctx['Email Address'] || '').trim();
+const originThreadTs = (ctx['Origin Thread TS'] || '').trim();
+
+const lines = [
+  'âœ… *Invoice approved and ready to send â€” ' + clientName + '*',
+  'â€¢ Invoice #: ' + invoiceNum,
+  'â€¢ Amount: ' + amount + ' ' + currency,
+  'â€¢ Due: ' + dueDate,
+  'â€¢ Payment link: ' + (link || 'âš ï¸ retrieve from Airwallex dashboard'),
+  '',
+  requesterTag + ' please download the invoice from the link above and email it to the client' + (colC ? ' (' + colC + ')' : '') + ' with:',
+  '  - The payment link',
+  '  - The downloaded invoice file as an attachment',
+  '  CC: john@kravemedia.co, noa@kravemedia.co',
+];
+if (requesterWarning) lines.push(requesterWarning);
+
+return { json: {
+  ...ctx,
+  strategist_text: lines.join('\\n'),
+  origin_thread_ts: originThreadTs,
+}};
+});
 const ctx = $('Extract Payment Link').item.json;
 const clientName = ctx['Client Name'] || '';
 const invoiceNum = ctx['Invoice #'] || '';
@@ -99,7 +230,13 @@ const currency = ctx['Currency'] || '';
 const dueDate = ctx['Due Date'] || '';
 const link = ctx.payment_link || '';
 const colK = (ctx['Requested By'] || '').trim();
-const requesterTag = colK.match(/^U[A-Z0-9]{8,}$/) ? '<@' + colK + '>' : (colK || 'unknown');
+const mappedSlackId = STRAT_SLACK[colK.toLowerCase()] || '';
+const requesterTag = colK.match(/^U[A-Z0-9]{8,}$/)
+  ? '<@' + colK + '>'
+  : (mappedSlackId ? '<@' + mappedSlackId + '>' : (colK || 'unknown'));
+const requesterWarning = colK && !mappedSlackId && !colK.match(/^U[A-Z0-9]{8,}$/)
+  ? '\\n• ⚠️ Unknown requester "' + colK + '" on tracker - update strategist map if this should tag someone.'
+  : '';
 const colC = (ctx['Email Address'] || '').trim();
 const originThreadTs = (ctx['Origin Thread TS'] || '').trim();
 
@@ -115,6 +252,7 @@ const lines = [
   '  - The downloaded invoice file as an attachment',
   '  CC: john@kravemedia.co, noa@kravemedia.co',
 ];
+if (requesterWarning) lines.push(requesterWarning);
 
 return [{ json: {
   ...ctx,
@@ -168,13 +306,20 @@ const workflow = {
     // ── Step 2: Get channel history and find bot message ────────────────────
     {
       id: 'n5', name: 'Get John Channel History',
-      type: 'n8n-nodes-base.slack', typeVersion: 2.3,
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
       position: [940, 300],
+      continueOnFail: true,
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
-        resource: 'message', operation: 'getAll',
-        returnAll: false, limit: 200,
-        filters: { channelId: { __rl: true, value: JOHN_APPROVAL_CHANNEL, mode: 'id' } },
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'slackApi',
+        method: 'GET',
+        url: 'https://slack.com/api/conversations.history',
+        sendQuery: true,
+        queryParameters: { parameters: [
+          { name: 'channel', value: JOHN_APPROVAL_CHANNEL },
+          { name: 'limit', value: '200' },
+        ]},
         options: {},
       },
     },
@@ -182,20 +327,27 @@ const workflow = {
       id: 'n6', name: 'Find Draft Notification',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [1160, 300],
-      parameters: { mode: 'runOnceForEachItem', jsCode: FIND_APPROVAL_MESSAGE_CODE },
+      parameters: { mode: 'runOnceForAllItems', jsCode: FIND_APPROVAL_MESSAGE_CODE },
     },
 
     // ── Step 2b: Get thread replies ─────────────────────────────────────────
     {
       id: 'n7', name: 'Get Thread Replies',
-      type: 'n8n-nodes-base.slack', typeVersion: 2.3,
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
       position: [1380, 300],
+      continueOnFail: true,
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
-        resource: 'message', operation: 'getReplies',
-        channelId: { __rl: true, value: JOHN_APPROVAL_CHANNEL, mode: 'id' },
-        ts: '={{ $json.approval_message_ts }}',
-        returnAll: true,
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'slackApi',
+        method: 'GET',
+        url: 'https://slack.com/api/conversations.replies',
+        sendQuery: true,
+        queryParameters: { parameters: [
+          { name: 'channel', value: JOHN_APPROVAL_CHANNEL },
+          { name: 'ts', value: '={{ $json.approval_message_ts }}' },
+          { name: 'limit', value: '100' },
+        ]},
         options: {},
       },
     },
@@ -203,7 +355,7 @@ const workflow = {
       id: 'n8', name: 'Find Approve Reply',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [1600, 300],
-      parameters: { mode: 'runOnceForEachItem', jsCode: FIND_APPROVE_REPLY_CODE },
+      parameters: { mode: 'runOnceForAllItems', jsCode: FIND_APPROVE_REPLY_CODE },
     },
 
     // ── Step 3: Airwallex auth + finalize ───────────────────────────────────
@@ -260,7 +412,7 @@ const workflow = {
       id: 'n12', name: 'Extract Payment Link',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [2480, 300],
-      parameters: { mode: 'runOnceForEachItem', jsCode: EXTRACT_PAYMENT_LINK_CODE },
+      parameters: { mode: 'runOnceForAllItems', jsCode: EXTRACT_PAYMENT_LINK_CODE },
     },
 
     // ── Step 4: Update tracker ──────────────────────────────────────────────
@@ -277,9 +429,11 @@ const workflow = {
           mappingMode: 'defineBelow',
           value: {
             'Invoice #': "={{ $('Extract Payment Link').item.json['Invoice #'] }}",
-            'Status': 'Invoice Sent',
+            'Airwallex Invoice ID': "={{ $('Extract Payment Link').item.json['Airwallex Invoice ID'] }}",
+            'Payment Status': 'Invoice Sent',
+            'Invoice URL': "={{ $('Extract Payment Link').item.json.payment_link || '' }}",
           },
-          matchingColumns: ['Invoice #'],
+          matchingColumns: ['Airwallex Invoice ID'],
           schema: [],
         },
         options: {},
@@ -291,20 +445,23 @@ const workflow = {
       id: 'n14', name: 'Build John Thread Reply',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [2920, 300],
-      parameters: { mode: 'runOnceForEachItem', jsCode: BUILD_JOHN_THREAD_REPLY_CODE },
+      parameters: { mode: 'runOnceForAllItems', jsCode: BUILD_JOHN_THREAD_REPLY_CODE },
     },
     {
       id: 'n15', name: 'Reply in John Thread',
-      type: 'n8n-nodes-base.slack', typeVersion: 2.3,
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
       position: [3140, 300],
       continueOnFail: true,
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
-        resource: 'message', operation: 'post',
-        select: 'channel',
-        channelId: { __rl: true, value: JOHN_APPROVAL_CHANNEL, mode: 'id' },
-        text: '={{ $json.john_reply_text }}',
-        otherOptions: { thread_ts: '={{ $json.approval_message_ts }}' },
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'slackApi',
+        method: 'POST',
+        url: 'https://slack.com/api/chat.postMessage',
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: `={{ { channel: '${JOHN_APPROVAL_CHANNEL}', thread_ts: $json.approval_message_ts, text: $json.john_reply_text } }}`,
+        options: {},
       },
     },
 
@@ -313,22 +470,23 @@ const workflow = {
       id: 'n16', name: 'Build Strategist Message',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [3360, 300],
-      parameters: { mode: 'runOnceForEachItem', jsCode: BUILD_STRATEGIST_MESSAGE_CODE },
+      parameters: { mode: 'runOnceForAllItems', jsCode: BUILD_STRATEGIST_MESSAGE_CODE },
     },
     {
       id: 'n17', name: 'Notify Strategist',
-      type: 'n8n-nodes-base.slack', typeVersion: 2.3,
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
       position: [3580, 300],
       continueOnFail: true,
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
-        resource: 'message', operation: 'post',
-        select: 'channel',
-        channelId: { __rl: true, value: PAYMENTS_CHANNEL, mode: 'id' },
-        text: '={{ $json.strategist_text }}',
-        otherOptions: {
-          thread_ts: "={{ $json.origin_thread_ts || undefined }}",
-        },
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'slackApi',
+        method: 'POST',
+        url: 'https://slack.com/api/chat.postMessage',
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: `={{ { channel: '${PAYMENTS_CHANNEL}', thread_ts: $json.origin_thread_ts || undefined, text: $json.strategist_text } }}`,
+        options: {},
       },
     },
   ],

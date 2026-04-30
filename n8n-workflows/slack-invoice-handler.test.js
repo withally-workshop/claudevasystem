@@ -104,6 +104,16 @@ assert.match(deploySource, /'Route Interaction Type'/, 'Expected interaction-typ
 assert.match(deploySource, /'Normalize Modal Submission'/, 'Expected modal normalization node');
 assert.match(deploySource, /'Send To Invoice Intake'/, 'Expected handoff node to invoice intake workflow');
 assert.match(deploySource, /'Post Channel Receipt'/, 'Expected Slack channel receipt node');
+assert.match(
+  deploySource,
+  /name:\s+'Post Channel Receipt'[\s\S]*select:\s+'channel'[\s\S]*channelId:\s+\{ __rl: true, value: PAYMENTS_UPDATES_CHANNEL, mode: 'id' \}/,
+  'Expected Post Channel Receipt to use the current Slack node channel selection parameters'
+);
+assert.match(
+  deploySource,
+  /name:\s+'Post Channel Receipt'[\s\S]*credentials:\s*\{ slackApi:\s*\{ id: SLACK_CRED_ID, name: 'Krave Slack Bot' \} \}/,
+  'Expected channel receipt to post via Krave Slack Bot'
+);
 assert.match(deploySource, /'Acknowledge Slash Command'/, 'Expected explicit slash-command response node');
 assert.match(deploySource, /'Acknowledge Modal Submission'/, 'Expected explicit modal-submit response node');
 assert.match(
@@ -138,13 +148,33 @@ assert.match(
 );
 assert.match(
   deploySource,
-  /'Normalize Modal Submission':\s*{[\s\S]*node:\s+'Send To Invoice Intake'/,
-  'Expected normalized submission to forward to invoice intake'
+  /\$json\.message_timestamp/,
+  'Expected receipt ts injection to handle Slack node message_timestamp output'
+);
+assert.match(
+  deploySource,
+  /\$json\.message\s*&&\s*\$json\.message\.ts/,
+  'Expected receipt ts injection to handle nested Slack message ts output'
 );
 assert.match(
   deploySource,
   /'Normalize Modal Submission':\s*{[\s\S]*node:\s+'Post Channel Receipt'/,
   'Expected normalized submission to post a channel receipt'
+);
+assert.match(
+  deploySource,
+  /origin_thread_ts:\s*channelTs/,
+  'Expected Slack handler to pass the channel receipt ts as origin_thread_ts'
+);
+assert.match(
+  deploySource,
+  /'Post Channel Receipt':\s*{[\s\S]*node:\s+'Inject Thread TS'/,
+  'Expected channel receipt to feed the receipt ts injection step'
+);
+assert.match(
+  deploySource,
+  /'Inject Thread TS':\s*{[\s\S]*node:\s+'Send To Invoice Intake'/,
+  'Expected invoice intake handoff to wait for channel receipt ts injection'
 );
 assert.match(
   deploySource,
@@ -177,7 +207,7 @@ assert.match(readmeDoc, /freeform/i, 'Expected README to document freeform line 
 assert.match(workflowsDoc, /Slack Invoice Handler/, 'Expected handler workflow listed in WORKFLOWS.md');
 assert.match(
   workflowsDoc,
-  /\| 6 \| Krave - Slack Invoice Handler \| `OYblaLA5heZjC3Cs` \| Active \|/i,
+  /\| 6 \| Krave - Slack Invoice Handler \| `t7MMhlUo5H4HQmgL` \| Active \|/i,
   'Expected WORKFLOWS.md index row to reflect the active Slack invoice handler'
 );
 assert.match(workflowsDoc, /slack-invoice-handler/, 'Expected shared Slack handler webhook documented');

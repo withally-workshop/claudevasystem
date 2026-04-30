@@ -6,11 +6,7 @@ function extractQuotedValues(source, regex) {
   return [...source.matchAll(regex)].map((match) => match[1]);
 }
 
-function getNodeNames(source) {
-  return new Set(extractQuotedValues(source, /name:\s+'([^']+)'/g));
-}
-
-function getConnectionKeys(source) {
+function getConnectionKeysFromSource(source) {
   const sectionMatch = source.match(/connections:\s*\{([\s\S]*?)\n\s*\},?\n\};/);
   assert.ok(sectionMatch, 'Expected workflow connections block to exist');
 
@@ -25,12 +21,20 @@ const workflowFiles = [
   path.join(__dirname, 'deploy-slack-invoice-handler.js'),
   path.join(__dirname, 'deploy-inbox-triage-daily.js'),
   path.join(__dirname, 'deploy-client-invoice-creation.js'),
+  path.join(__dirname, 'deploy-payment-detection.js'),
 ];
 
 for (const filePath of workflowFiles) {
   const source = fs.readFileSync(filePath, 'utf8');
-  const nodeNames = getNodeNames(source);
-  const connectionKeys = getConnectionKeys(source);
+  const exported = require(filePath);
+  const workflow = exported.workflow;
+
+  const nodeNames = workflow
+    ? new Set(workflow.nodes.map((node) => node.name))
+    : new Set(extractQuotedValues(source, /name:\s+'([^']+)'/g));
+  const connectionKeys = workflow
+    ? new Set(Object.keys(workflow.connections || {}))
+    : getConnectionKeysFromSource(source);
 
   for (const connectionKey of connectionKeys) {
     assert.ok(

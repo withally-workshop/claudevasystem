@@ -45,3 +45,5 @@ Results will appear in #payments-invoices-updates within ~30 seconds.
   `https://noatakhel.app.n8n.cloud/webhook-test/krave-payment-detection`
 - This skill does not wait for the workflow to complete — it's fire-and-forget
 - To check results, use `mcp__slack__slack_get_channel_history` on C09HN2EBPR7 after ~30 seconds
+- The workflow scans Gmail from n8n `lastRunTs` only. It must not scan Noa's full inbox or run the Gmail search once per tracker row.
+- Payment Detection may read Column N `Status` for eligibility (`Unpaid`, `Overdue`, or blank), but it writes only Column J `Payment Status`, Column M, and Column Q.
