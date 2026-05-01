@@ -8,6 +8,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 |----------|--------|----------|------|
 | Payment Detection | Active | Every hour | [deploy-payment-detection.js](deploy-payment-detection.js) |
 | Invoice Reminder Cron | Active | 10am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
+| Invoice Reminder Reply Detection | Active | 10:30am ICT weekdays + manual webhook | [deploy-invoice-reminder-reply-detection.js](deploy-invoice-reminder-reply-detection.js) |
 | EOD Triage Summary | Active | 6pm ICT weekdays | [deploy-eod-triage-summary.js](deploy-eod-triage-summary.js) |
 | Start Of Day Report | Active | Manual trigger + production webhook | `deploy-sod-report.js` |
 | Inbox Triage Daily | Active | 9am ICT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
@@ -45,6 +46,8 @@ node n8n-workflows/deploy-payment-detection.js
 
 Scans the Client Invoice Tracker daily at 10am ICT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker.
 
+Also writes latest reminder attribution metadata to the tracker: `Last Follow-Up Sent`, `Last Follow-Up Type`, and `Last Follow-Up Thread ID`. Column L remains the historical reminder log.
+
 **Silent when nothing to do.** Slack alerts only fire for `due-today`, `overdue`, `late-fee`, `collections`, or missing client email.
 
 **Strategist tagging:** Reads Col K (`Requested By`) and maps it to the Slack user ID used in overdue alerts.
@@ -65,6 +68,34 @@ node n8n-workflows/deploy-invoice-reminder-cron.js
 - `Gmail account` - `john@kravemedia.co` OAuth2
 - `Google Sheets account` - access to Client Invoice Tracker
 - `Krave Slack Bot` - bot token for `#payments-invoices-updates`
+
+---
+
+## Invoice Reminder Reply Detection
+
+**Workflow ID:** `omNFmRcDeiByLOzS`
+
+Reads the Client Invoice Tracker attribution columns, scans only `john@kravemedia.co` Gmail for replies from client email addresses after the latest tracked follow-up, classifies replies conservatively, and writes reply attribution back to the tracker.
+
+**John-only scope:** this workflow does not monitor Noa or strategist inboxes and does not infer client replies from Slack.
+
+**No auto-response:** this workflow never sends emails, creates drafts, or posts Slack messages.
+
+**Reply statuses:** `No Reply`, `Replied`, `Promise to Pay`, `Question/Dispute`, and `Needs Human`.
+
+**Webhook (manual trigger):**
+```text
+POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder-reply-detection
+```
+
+**Deploy from scratch:**
+```bash
+node n8n-workflows/deploy-invoice-reminder-reply-detection.js
+```
+
+**Credentials required in n8n:**
+- `Gmail account` - `john@kravemedia.co` OAuth2
+- `Google Sheets account` - access to Client Invoice Tracker
 
 ---
 

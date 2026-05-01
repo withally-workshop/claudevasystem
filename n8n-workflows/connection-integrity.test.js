@@ -22,6 +22,7 @@ const workflowFiles = [
   path.join(__dirname, 'deploy-inbox-triage-daily.js'),
   path.join(__dirname, 'deploy-client-invoice-creation.js'),
   path.join(__dirname, 'deploy-payment-detection.js'),
+  path.join(__dirname, 'deploy-invoice-reminder-reply-detection.js'),
 ];
 
 for (const filePath of workflowFiles) {

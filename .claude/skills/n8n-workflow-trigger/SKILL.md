@@ -24,6 +24,7 @@
 |---|---|---:|---|---|
 | "run payment detection" | `payment-detection` | Yes | `krave-payment-detection` | Slack payment updates if anything changed |
 | "run invoice reminders" | `invoice-reminder` | Yes | `krave-invoice-reminder` | Reminder emails and overdue Slack alerts if needed |
+| "check reminder replies" / "run reply detection" | `invoice-reminder-reply-detection` | Yes | `krave-invoice-reminder-reply-detection` | Tracker reply attribution updates for John's Gmail reminder threads |
 | "run EOD" / "today's wrap-up" | `eod-triage-summary` | Yes | `krave-eod-triage-summary` | Noa DM plus `#airwallexdrafts` archive |
 | "run SOD" / "start of day report" | `sod-report` | Yes, after required inputs exist | `krave-sod-report` | `#airwallexdrafts` plus Noa DM, or hard-stop alert |
 | "run inbox triage" / "morning triage" | `inbox-triage-daily` | Yes | `krave-inbox-triage-daily` | Gmail drafts/labels plus Slack summary |
@@ -42,6 +43,7 @@ Every active workflow in `n8n-workflows/WORKFLOWS.md`, plus any deployed webhook
 |---|---|---|
 | Krave - Payment Detection | `.claude/skills/payment-detection-trigger/SKILL.md` or this skill with `payment-detection` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `payment-detection` |
 | Krave - Invoice Reminder Cron | `.claude/skills/invoice-reminder-trigger/SKILL.md` or this skill with `invoice-reminder` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `invoice-reminder` |
+| Krave - Invoice Reminder Reply Detection | this skill with `invoice-reminder-reply-detection` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `invoice-reminder-reply-detection` |
 | Krave - EOD Triage Summary | `.claude/skills/eod-triage-summary/SKILL.md` or this skill with `eod-triage-summary` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `eod-triage-summary` |
 | Krave - Start Of Day Report | `.claude/skills/sod-report/SKILL.md` or this skill with `sod-report` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `sod-report` |
 | Krave - Inbox Triage Daily | `.claude/skills/inbox-triage/SKILL.md` or this skill with `inbox-triage-daily` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `inbox-triage-daily` |

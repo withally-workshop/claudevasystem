@@ -32,6 +32,7 @@ This repo is a Claude Code executive-assistant workspace. Treat `.claude/skills/
 | `/eod-triage-summary`, "EOD summary", "today's wrap-up" | `.claude/skills/eod-triage-summary/SKILL.md` | Generate and send Noa's end-of-day Slack summary. |
 | `/sod-report`, "start of day report", "SOD report" | `.claude/skills/sod-report/SKILL.md` | Generate the daily goals report from validated Slack inputs. |
 | `/weekly-review` | `.claude/skills/weekly-review/SKILL.md` | Synthesize weekly cross-business status and priorities. |
+| `/ops-report`, "hey report", "ops report", "daily report", "weekly report", "dashboard report" | `.claude/skills/ops-report/SKILL.md` and `.agents/skills/ops-report/SKILL.md` | Generate a live-read operations briefing and dashboard from n8n executions, the invoice tracker, and Slack context. |
 | `/client-invoice-creation`, "client invoice creation", "process invoice requests" | `.claude/skills/client-invoice-creation/SKILL.md` | Process Slack invoice request receipts and approval replies. |
 | "Osome reconciliation" | `.claude/skills/osome-reconciliation/SKILL.md` | Triage Osome documents-needed transactions and locate PDFs. |
 
@@ -50,6 +51,7 @@ Use `n8n-workflows/WORKFLOWS.md` for current IDs, status, webhook paths, deploym
 | Krave - Invoice Request Intake | `client-invoice-creation`, `n8n-workflow-trigger` | Structured Slack modal payload or manual webhook. |
 | Krave - Invoice Approval Polling | `invoice-approval-polling`, `n8n-workflow-trigger` | Scheduled every 2 hrs on weekdays, or manual webhook. |
 | Krave - Client Invoice Creation | `client-invoice-creation` | Deprecated inactive legacy webhook from `deploy-client-invoice-creation.js`; use approval polling for finalization unless explicitly rolling back. |
+| Krave - Ops Report | `ops-report` | Live-read reporting skill only; reads n8n execution history, the Client Invoice Tracker, and Slack context without triggering workflows. |
 
 ## Operating Rules
 

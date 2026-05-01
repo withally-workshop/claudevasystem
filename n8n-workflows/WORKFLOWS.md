@@ -29,6 +29,7 @@
 |---|------|----|--------|----------|---------|
 | 1 | Krave - Payment Detection | `NurOLZkg3J6rur5Q` | Active | Hourly | Detect Airwallex deposits, match invoices, update tracker |
 | 2 | Krave - Invoice Reminder Cron | `Q3IqqLvmX9H49NdE` | Active | 10am ICT daily | Send invoice reminders, alert overdue, update tracker |
+| 2b | Krave - Invoice Reminder Reply Detection | `omNFmRcDeiByLOzS` | Active | 10:30am ICT weekdays + `POST /webhook/krave-invoice-reminder-reply-detection` | Scan only `john@kravemedia.co` reminder threads, classify client replies, update reminder attribution columns |
 | 3 | Krave - EOD Triage Summary | `9hZcOcAqQdM7o1yZ` | Active | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
 | 4 | Krave - Start Of Day Report | `vUunl0NuBA6t4Gw4` | Active | Manual trigger + `POST /webhook/krave-sod-report` | Build the SOD report from validated Slack inputs and deliver to `#airwallexdrafts` plus Noa DM |
 | 5 | Krave - Inbox Triage Daily | `3YyEjk1e6oZV786T` | Active | 9am ICT weekdays + manual webhook | Read inbox email, create Gmail drafts, apply labels, keep `EA/Unsure` in inbox, and post summary to `#airwallexdrafts` plus Noa |
@@ -76,6 +77,13 @@
 | P | Origin Thread TS | Invoice Request Intake, Invoice Approval Polling; stored as text to preserve Slack decimal timestamps |
 | Q | Amount Paid | Payment Detection (write), Invoice Reminder Cron (read) — cumulative amount paid |
 | R | Invoice URL | Invoice Approval Polling, Invoice Reminder Cron |
+| S | Last Follow-Up Sent | Invoice Reminder Cron; latest reminder date for attribution |
+| T | Last Follow-Up Type | Invoice Reminder Cron; latest reminder tier such as `7d`, `overdue`, or `late-fee-followup` |
+| U | Last Follow-Up Thread ID | Invoice Reminder Cron; reminder thread key, falling back to invoice number when Gmail thread id is unavailable |
+| V | Last Client Reply Date | Invoice Reminder Reply Detection; latest client reply date from John's Gmail only |
+| W | Client Reply Status | Invoice Reminder Reply Detection; `No Reply`, `Replied`, `Promise to Pay`, `Question/Dispute`, or `Needs Human` |
+| X | Client Reply Summary | Invoice Reminder Reply Detection; short summary/snippet of the latest detected client reply |
+| Y | Follow-Up Attribution | Invoice Reminder Reply Detection and Ops Report; attribution note for reply/payment reporting |
 
 ### Status Value Reference
 
@@ -206,6 +214,8 @@ Second payments on the same invoice: Col Q carries over, so the second run's `ne
 
 Replaces manual invoice follow-up. Once daily, it scans every open invoice in the tracker, calculates days until or since due date, sends tiered reminder emails from `john@kravemedia.co`, updates the tracker, and posts Slack alerts for overdue and escalated invoices.
 
+The workflow also writes latest follow-up metadata to Columns S-U: `Last Follow-Up Sent`, `Last Follow-Up Type`, and `Last Follow-Up Thread ID`. Column L remains the historical reminder log. Column N stays formula-only and must never be written.
+
 ### Triggers
 
 | Type | Details |
@@ -273,6 +283,65 @@ Replaces manual invoice follow-up. Once daily, it scans every open invoice in th
 | Gmail send error | `continueOnFail: true`, downstream Slack path can still run |
 | Missing client email | Warning posted, no send |
 | Bad due date / missing invoice key | Row skipped |
+
+---
+
+## Workflow 2b - Invoice Reminder Reply Detection
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/omNFmRcDeiByLOzS`  
+**Deploy script:** `n8n-workflows/deploy-invoice-reminder-reply-detection.js`
+
+### Purpose
+
+Adds reply attribution for the invoice reminder system. It reads the Client Invoice Tracker through Column Y, finds rows with latest follow-up metadata, scans only `john@kravemedia.co` Gmail for client replies after the latest follow-up, classifies the reply status conservatively, and writes reply attribution back to the tracker.
+
+This workflow does not monitor Noa or strategist inboxes, does not infer client replies from Slack, and does not send client responses.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Schedule | `30 3 * * 1-5` - 10:30 AM ICT/PHT weekdays |
+| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder-reply-detection` |
+
+### Node Flow
+
+```text
+[Schedule / Webhook]
+        |
+[Get Invoice Tracker]        reads Invoices!A:Y
+        |
+[Prepare Reply Queries]      builds John-only Gmail queries per invoice
+        |
+[Search John Gmail Replies]  scans replies from client emails to john@kravemedia.co
+        |
+[Classify Reply]             No Reply / Replied / Promise to Pay / Question/Dispute / Needs Human
+        |
+[Update Reply Attribution]   writes V:Y using Invoice # match
+```
+
+### Tracker Writes
+
+| Col | Field | Write rule |
+|-----|-------|------------|
+| E | Invoice # | match key only |
+| V | Last Client Reply Date | latest detected client reply date, blank when no reply |
+| W | Client Reply Status | one of the approved reply statuses |
+| X | Client Reply Summary | short snippet/summary of latest reply |
+| Y | Follow-Up Attribution | note explaining reply detection state |
+
+Column N remains formula-only and must never be written.
+
+### Reply Scope
+
+Only `john@kravemedia.co` Gmail is scanned. A client reply sent only to Noa, Amanda, or another strategist is not counted unless it is forwarded into John's reminder thread or manually recorded later.
+
+### Non-Goals
+
+- No auto-reply.
+- No Gmail drafts.
+- No Slack posts.
+- No monitoring outside John's mailbox.
 
 ---
 
@@ -777,6 +846,13 @@ curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-payment-detection
 
 ```bash
 curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder" \
+  -H "Content-Type: application/json" -d '{}'
+```
+
+### Trigger invoice reminder reply detection manually
+
+```bash
+curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder-reply-detection" \
   -H "Content-Type: application/json" -d '{}'
 ```
 

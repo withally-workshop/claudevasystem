@@ -16,6 +16,22 @@ assert.match(deploySource, /name:\s+'Krave .* Invoice Reminder Cron'/, 'Expected
 assert.match(deploySource, /path:\s+'krave-invoice-reminder'/, 'Expected reminder webhook path');
 assert.match(deploySource, /'Schedule 10am ICT'/, 'Expected schedule trigger node');
 assert.match(deploySource, /'Has Client Email\?'/, 'Expected email guard node');
+assert.match(deploySource, /Last Follow-Up Sent/, 'Expected latest follow-up sent tracker column');
+assert.match(deploySource, /Last Follow-Up Type/, 'Expected latest follow-up type tracker column');
+assert.match(deploySource, /Last Follow-Up Thread ID/, 'Expected latest follow-up thread id tracker column');
+assert.match(deploySource, /lastFollowUpSent/, 'Expected reminder processing to emit lastFollowUpSent');
+assert.match(deploySource, /lastFollowUpType/, 'Expected reminder processing to emit lastFollowUpType');
+assert.match(deploySource, /lastFollowUpThreadId/, 'Expected reminder processing to emit lastFollowUpThreadId');
+assert.match(
+  deploySource,
+  /lastFollowUpThreadId\s*=\s*invoiceNum/,
+  'Expected invoice number fallback for follow-up thread attribution'
+);
+assert.doesNotMatch(
+  deploySource,
+  /['"]Status['"]\s*:/,
+  'Reminder cron must not write formula/display column N'
+);
 assert.ok(
   deploySource.includes("leftValue: '={{ $json.clientEmail }}'"),
   'Expected Has Client Email? to use a valid n8n expression for clientEmail'

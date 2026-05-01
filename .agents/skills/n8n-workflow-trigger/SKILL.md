@@ -1,6 +1,6 @@
 ---
 name: n8n-workflow-trigger
-description: Use when the user asks Codex to manually trigger, run, fire, or test a deployed Krave n8n workflow webhook, including payment detection, invoice reminders, EOD, SOD, inbox triage, invoice approval polling, Slack invoice handler, or invoice request intake.
+description: Use when the user asks Codex to manually trigger, run, fire, or test a deployed Krave n8n workflow webhook, including payment detection, invoice reminders, invoice reminder reply detection, EOD, SOD, inbox triage, invoice approval polling, Slack invoice handler, or invoice request intake.
 metadata:
   short-description: Trigger Krave n8n workflows
 ---
@@ -20,7 +20,7 @@ Use this as Codex's manual n8n trigger hub for the Claude EA repo.
 
 - Use PowerShell `Invoke-RestMethod` in this Windows repo.
 - Do not expose the full webhook URL unless the user asks for the operational command.
-- Empty `{}` is acceptable for `payment-detection`, `invoice-reminder`, `eod-triage-summary`, `sod-report`, `inbox-triage-daily`, and `invoice-approval-polling`. Do not trigger deprecated `client-invoice-creation` in normal operations.
+- Empty `{}` is acceptable for `payment-detection`, `invoice-reminder`, `invoice-reminder-reply-detection`, `eod-triage-summary`, `sod-report`, `inbox-triage-daily`, and `invoice-approval-polling`. Do not trigger deprecated `client-invoice-creation` in normal operations.
 - Require a real payload for `slack-invoice-handler` and `invoice-request-intake`, unless the user explicitly wants a failure-path test.
 - Treat the workflow as asynchronous. A 200/accepted response means n8n started, not that the business process completed.
 - Payment Detection scans Gmail from n8n `lastRunTs`; it must not scan Noa's full inbox or run the Gmail search once per tracker row. It may read Column N `Status` for eligibility (`Unpaid`, `Overdue`, or blank), but writes only Column J `Payment Status`, Column M, and Column Q.
@@ -33,6 +33,7 @@ Every active n8n workflow and every deployed webhook script must remain invocabl
 |---|---|---|
 | Krave - Payment Detection | `.claude/skills/payment-detection-trigger/SKILL.md` or `.claude/skills/n8n-workflow-trigger/SKILL.md` | This skill with `payment-detection` |
 | Krave - Invoice Reminder Cron | `.claude/skills/invoice-reminder-trigger/SKILL.md` or `.claude/skills/n8n-workflow-trigger/SKILL.md` | This skill with `invoice-reminder` |
+| Krave - Invoice Reminder Reply Detection | `.claude/skills/n8n-workflow-trigger/SKILL.md` | This skill with `invoice-reminder-reply-detection` |
 | Krave - EOD Triage Summary | `.claude/skills/eod-triage-summary/SKILL.md` or `.claude/skills/n8n-workflow-trigger/SKILL.md` | This skill with `eod-triage-summary` |
 | Krave - Start Of Day Report | `.claude/skills/sod-report/SKILL.md` or `.claude/skills/n8n-workflow-trigger/SKILL.md` | This skill with `sod-report` |
 | Krave - Inbox Triage Daily | `.claude/skills/inbox-triage/SKILL.md` or `.claude/skills/n8n-workflow-trigger/SKILL.md` | This skill with `inbox-triage-daily` |

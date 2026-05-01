@@ -158,6 +158,9 @@ for (const row of rows) {
   const newReminders = remindersLog
     ? remindersLog + ' | ' + reminderType + ' ' + todayStr
     : reminderType + ' ' + todayStr;
+  const lastFollowUpSent = todayStr;
+  const lastFollowUpType = reminderType;
+  const lastFollowUpThreadId = invoiceNum;
 
   const needsSlack = ['due-today','overdue','late-fee','late-fee-followup','collections'].includes(reminderType);
   let slackMessage = '';
@@ -181,6 +184,7 @@ for (const row of rows) {
     clientEmail, ccEmails, invoiceNum, clientName,
     amount, currency, dueDateStr, daysDiff, reminderType,
     subject, body, newStatus, newReminders,
+    lastFollowUpSent, lastFollowUpType, lastFollowUpThreadId,
     needsSlack: needsSlack || emailList.length === 0,
     slackMessage
   });
@@ -272,7 +276,10 @@ const workflow = {
           value: {
             'Invoice #':      "={{ $json.invoiceNum || $('Process Invoices').item.json.invoiceNum }}",
             'Payment Status': "={{ $json.newStatus || $('Process Invoices').item.json.newStatus }}",
-            'Reminders Sent': "={{ $json.newReminders || $('Process Invoices').item.json.newReminders }}"
+            'Reminders Sent': "={{ $json.newReminders || $('Process Invoices').item.json.newReminders }}",
+            'Last Follow-Up Sent': "={{ $json.lastFollowUpSent || $('Process Invoices').item.json.lastFollowUpSent }}",
+            'Last Follow-Up Type': "={{ $json.lastFollowUpType || $('Process Invoices').item.json.lastFollowUpType }}",
+            'Last Follow-Up Thread ID': "={{ $json.lastFollowUpThreadId || $('Process Invoices').item.json.lastFollowUpThreadId }}"
           },
           matchingColumns: ['Invoice #'],
           schema: []
