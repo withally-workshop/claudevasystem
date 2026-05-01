@@ -22,10 +22,12 @@ for (const skillPath of [codexSkillPath, claudeSkillPath]) {
   assert.match(skill, /reports\/ops-report/, `${skillPath} should define dashboard output path`);
   assert.match(skill, /live-read only/i, `${skillPath} should preserve live-read-only boundary`);
   assert.match(skill, /Ignore unrelated n8n workspace workflows/i, `${skillPath} should exclude non-project n8n workflows by default`);
-  assert.match(skill, /Invoices!A:Y/, `${skillPath} should read tracker attribution columns`);
+  assert.match(skill, /Invoices!A:Z/, `${skillPath} should read tracker attribution columns`);
   assert.match(skill, /Last Follow-Up Sent/, `${skillPath} should document follow-up sent column`);
   assert.match(skill, /Client Reply Status/, `${skillPath} should document reply status column`);
   assert.match(skill, /Follow-Up Attribution/, `${skillPath} should document attribution column`);
+  assert.match(skill, /Reply Confidence/, `${skillPath} should document reply confidence column`);
+  assert.match(skill, /do not display as a dashboard field/i, `${skillPath} should hide raw follow-up thread ids`);
   assert.match(skill, /paid after follow-up/i, `${skillPath} should report paid-after-follow-up`);
   assert.match(skill, /john@kravemedia\.co/i, `${skillPath} should document John-only reply tracking`);
   assert.doesNotMatch(skill, /write to column N/i, `${skillPath} must not suggest writing formula column N`);

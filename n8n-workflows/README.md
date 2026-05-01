@@ -46,7 +46,7 @@ node n8n-workflows/deploy-payment-detection.js
 
 Scans the Client Invoice Tracker daily at 10am ICT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker.
 
-Also writes latest reminder attribution metadata to the tracker: `Last Follow-Up Sent`, `Last Follow-Up Type`, and `Last Follow-Up Thread ID`. Column L remains the historical reminder log.
+Also writes latest reminder attribution metadata to the tracker: `Last Follow-Up Sent`, `Last Follow-Up Type`, and `Last Follow-Up Thread ID`. The thread ID is blank unless Gmail returns a real thread key. Column L remains the historical reminder log.
 
 **Silent when nothing to do.** Slack alerts only fire for `due-today`, `overdue`, `late-fee`, `collections`, or missing client email.
 
@@ -81,7 +81,9 @@ Reads the Client Invoice Tracker attribution columns, scans only `john@kravemedi
 
 **No auto-response:** this workflow never sends emails, creates drafts, or posts Slack messages.
 
-**Reply statuses:** `No Reply`, `Replied`, `Promise to Pay`, `Question/Dispute`, and `Needs Human`.
+**Reply statuses:** `No Reply Found`, `Possible Reply`, `Replied`, `Promise to Pay`, `Question/Dispute`, and `Needs Human`.
+
+**Reply confidence:** `Confirmed` when a real reminder thread match is available, `Likely` when the client emailed John after the follow-up, and `Unconfirmed` when no matching John Gmail reply is found.
 
 **Webhook (manual trigger):**
 ```text

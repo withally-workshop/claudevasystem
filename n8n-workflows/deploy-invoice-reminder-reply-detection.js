@@ -31,8 +31,8 @@ for (const row of rows) {
   if (!emails.length) continue;
 
   const after = lastFollowUpSent.replace(/-/g, '/');
-  const fromClause = emails.map(e => 'from:' + e).join(' OR ');
-  const query = '(' + fromClause + ') to:(john@kravemedia.co) after:' + after + ' "' + invoiceNum + '"';
+  const senderQuery = emails.map(e => 'from:' + e).join(' OR ');
+  const query = '(' + senderQuery + ') after:' + after;
 
   out.push({
     json: {
@@ -42,6 +42,7 @@ for (const row of rows) {
       lastFollowUpSent,
       lastFollowUpType,
       lastFollowUpThreadId,
+      replyConfidence: lastFollowUpThreadId ? 'Confirmed' : 'Likely',
       currentReplyDate,
       gmailQuery: query
     }
@@ -52,12 +53,19 @@ return out;
 `.trim();
 
 const CLASSIFY_REPLY_CODE = `
-const source = $('Prepare Reply Queries').item.json;
-const messages = $input.all().map(item => item.json);
+let sourceItems = [];
+try {
+  sourceItems = $('Prepare Reply Queries').all();
+} catch (e) {
+  try { sourceItems = $items('Prepare Reply Queries'); } catch (_) { sourceItems = []; }
+}
+const sources = sourceItems.map(item => item.json);
+const messageItems = $input.all();
 
 function normalizeDate(value) {
   if (!value) return '';
-  const d = new Date(value);
+  const raw = value.toString();
+  const d = /^\\d+$/.test(raw) ? new Date(Number(raw)) : new Date(raw);
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
 }
 
@@ -66,50 +74,80 @@ function bodyText(message) {
     message.textPlain,
     message.textHtml,
     message.snippet,
-    message.subject
+    message.subject,
+    message.Subject
   ].filter(Boolean).join(' ');
 }
 
-const clientSet = new Set((source.clientEmails || []).map(e => e.toLowerCase()));
-const replies = messages
-  .filter(m => clientSet.has(((m.from && m.from.email) || m.from || '').toString().toLowerCase()))
-  .sort((a, b) => new Date(b.date || b.internalDate || 0) - new Date(a.date || a.internalDate || 0));
-
-if (!replies.length) {
-  return [{
-    json: {
-      invoiceNum: source.invoiceNum,
-      lastClientReplyDate: '',
-      clientReplyStatus: 'No Reply',
-      clientReplySummary: '',
-      followUpAttribution: 'No reply detected after ' + source.lastFollowUpType + ' follow-up on ' + source.lastFollowUpSent
-    }
-  }];
+function fromEmail(message) {
+  const raw = ((message.from && message.from.email) || message.from || message.From || '').toString();
+  const match = raw.match(/<([^>]+)>/);
+  return (match ? match[1] : raw).trim().toLowerCase();
 }
 
-const latest = replies[0];
-const text = bodyText(latest).replace(/\\s+/g, ' ').trim();
-const lower = text.toLowerCase();
-let clientReplyStatus = 'Replied';
-if (/pay|paid|payment|settle|transfer|wire|remit|tomorrow|today|this week|next week/.test(lower)) {
-  clientReplyStatus = 'Promise to Pay';
-}
-if (/question|issue|problem|wrong|incorrect|dispute|why|cannot|can't|need invoice|po\\b|purchase order/.test(lower)) {
-  clientReplyStatus = 'Question/Dispute';
-}
-if (/urgent|call|speak|confused|not our invoice|cancel|refund|legal/.test(lower)) {
-  clientReplyStatus = 'Needs Human';
+function pairedIndex(item) {
+  const paired = item.pairedItem;
+  if (Array.isArray(paired)) return paired[0] && paired[0].item;
+  return paired && paired.item;
 }
 
-return [{
-  json: {
-    invoiceNum: source.invoiceNum,
-    lastClientReplyDate: normalizeDate(latest.date || latest.internalDate),
-    clientReplyStatus,
-    clientReplySummary: text.slice(0, 240),
-    followUpAttribution: 'Reply detected after ' + source.lastFollowUpType + ' follow-up on ' + source.lastFollowUpSent
+function invoiceFromMessage(message) {
+  const text = [message.Subject, message.subject, message.snippet].filter(Boolean).join(' ');
+  const match = text.match(/INV[A-Z0-9-]*/);
+  return match ? match[0] : '';
+}
+
+const grouped = new Map();
+for (const item of messageItems) {
+  const index = pairedIndex(item);
+  const source = index === undefined || index === null ? null : sources[index];
+  const message = item.json;
+  const messageInvoiceNum = invoiceFromMessage(message);
+  const invoiceNum = messageInvoiceNum || (source && source.invoiceNum);
+  if (!invoiceNum) continue;
+  const matchedSource = source && source.invoiceNum === invoiceNum ? source : null;
+  if (!grouped.has(invoiceNum)) grouped.set(invoiceNum, { source: matchedSource, messages: [] });
+  grouped.get(invoiceNum).messages.push(message);
+}
+
+const out = [];
+for (const [invoiceNum, group] of grouped.entries()) {
+  const source = group.source || {};
+  const replies = group.messages
+    .sort((a, b) => Number(b.internalDate || 0) - Number(a.internalDate || 0));
+
+  if (!replies.length) continue;
+
+  const latest = replies[0];
+  const text = bodyText(latest).replace(/\\s+/g, ' ').trim();
+  const lower = text.toLowerCase();
+  let clientReplyStatus = source.lastFollowUpThreadId ? 'Replied' : 'Possible Reply';
+  let replyConfidence = source.lastFollowUpThreadId ? 'Confirmed' : 'Likely';
+  if (/pay|paid|payment|settle|transfer|wire|remit|tomorrow|today|this week|next week/.test(lower)) {
+    clientReplyStatus = 'Promise to Pay';
   }
-}];
+  if (/question|issue|problem|wrong|incorrect|dispute|why|cannot|can't|need invoice|po\\b|purchase order/.test(lower)) {
+    clientReplyStatus = 'Question/Dispute';
+  }
+  if (/urgent|call|speak|confused|not our invoice|cancel|refund|legal|cc\\b|finance team|w8|w-8|w8-ben|w-8ben/.test(lower)) {
+    clientReplyStatus = 'Needs Human';
+  }
+
+  out.push({
+    json: {
+      invoiceNum,
+      lastClientReplyDate: normalizeDate(latest.date || latest.internalDate),
+      clientReplyStatus,
+      clientReplySummary: text.slice(0, 240),
+      replyConfidence,
+      followUpAttribution: source.lastFollowUpType && source.lastFollowUpSent
+        ? 'Client emailed John after ' + source.lastFollowUpType + ' follow-up on ' + source.lastFollowUpSent
+        : 'Client emailed John after tracked follow-up'
+    }
+  });
+}
+
+return out;
 `.trim();
 
 const workflow = {
@@ -138,7 +176,7 @@ const workflow = {
         resource: 'sheet', operation: 'read',
         documentId: { __rl: true, value: SHEET_ID, mode: 'id' },
         sheetName: { __rl: true, value: 'Invoices', mode: 'name' },
-        range: 'A:Y',
+        range: 'A:Z',
         filtersUI: {}, options: {}
       }
     },
@@ -162,9 +200,10 @@ const workflow = {
           value: {
             'Invoice #': "={{ $json.invoiceNum }}",
             'Last Client Reply Date': '',
-            'Client Reply Status': 'No Reply',
+            'Client Reply Status': 'No Reply Found',
             'Client Reply Summary': '',
-            'Follow-Up Attribution': "={{ 'No reply detected after ' + $json.lastFollowUpType + ' follow-up on ' + $json.lastFollowUpSent }}"
+            'Follow-Up Attribution': "={{ 'No matching John Gmail reply found after ' + $json.lastFollowUpType + ' follow-up on ' + $json.lastFollowUpSent }}",
+            'Reply Confidence': 'Unconfirmed'
           },
           matchingColumns: ['Invoice #'],
           schema: []
@@ -181,7 +220,7 @@ const workflow = {
         resource: 'message',
         operation: 'getAll',
         returnAll: true,
-        filters: { q: '={{ $json.gmailQuery }}' },
+        filters: { q: "={{ $('Prepare Reply Queries').item.json.gmailQuery }}" },
         options: {}
       }
     },
@@ -207,7 +246,8 @@ const workflow = {
             'Last Client Reply Date': "={{ $json.lastClientReplyDate }}",
             'Client Reply Status': "={{ $json.clientReplyStatus }}",
             'Client Reply Summary': "={{ $json.clientReplySummary }}",
-            'Follow-Up Attribution': "={{ $json.followUpAttribution }}"
+            'Follow-Up Attribution': "={{ $json.followUpAttribution }}",
+            'Reply Confidence': "={{ $json.replyConfidence }}"
           },
           matchingColumns: ['Invoice #'],
           schema: []

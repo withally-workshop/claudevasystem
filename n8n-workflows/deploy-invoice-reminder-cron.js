@@ -160,7 +160,7 @@ for (const row of rows) {
     : reminderType + ' ' + todayStr;
   const lastFollowUpSent = todayStr;
   const lastFollowUpType = reminderType;
-  const lastFollowUpThreadId = invoiceNum;
+  const lastFollowUpThreadId = '';
 
   const needsSlack = ['due-today','overdue','late-fee','late-fee-followup','collections'].includes(reminderType);
   let slackMessage = '';
@@ -279,7 +279,7 @@ const workflow = {
             'Reminders Sent': "={{ $json.newReminders || $('Process Invoices').item.json.newReminders }}",
             'Last Follow-Up Sent': "={{ $json.lastFollowUpSent || $('Process Invoices').item.json.lastFollowUpSent }}",
             'Last Follow-Up Type': "={{ $json.lastFollowUpType || $('Process Invoices').item.json.lastFollowUpType }}",
-            'Last Follow-Up Thread ID': "={{ $json.lastFollowUpThreadId || $('Process Invoices').item.json.lastFollowUpThreadId }}"
+            'Last Follow-Up Thread ID': "={{ $json.threadId || '' }}"
           },
           matchingColumns: ['Invoice #'],
           schema: []

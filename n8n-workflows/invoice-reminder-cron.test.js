@@ -22,10 +22,15 @@ assert.match(deploySource, /Last Follow-Up Thread ID/, 'Expected latest follow-u
 assert.match(deploySource, /lastFollowUpSent/, 'Expected reminder processing to emit lastFollowUpSent');
 assert.match(deploySource, /lastFollowUpType/, 'Expected reminder processing to emit lastFollowUpType');
 assert.match(deploySource, /lastFollowUpThreadId/, 'Expected reminder processing to emit lastFollowUpThreadId');
-assert.match(
+assert.doesNotMatch(
   deploySource,
   /lastFollowUpThreadId\s*=\s*invoiceNum/,
-  'Expected invoice number fallback for follow-up thread attribution'
+  'Invoice number must not be used as a fake Gmail thread id'
+);
+assert.match(
+  deploySource,
+  /\$json\.threadId\s*\|\|\s*''/,
+  'Expected tracker mapping to use real Gmail threadId when available and blank otherwise'
 );
 assert.doesNotMatch(
   deploySource,

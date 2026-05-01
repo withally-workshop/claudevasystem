@@ -68,7 +68,7 @@ Use Google Sheets MCP:
 ```text
 sheets_get_rows(
   spreadsheet_id: "1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50",
-  range: "Invoices!A:Y"
+  range: "Invoices!A:Z"
 )
 ```
 
@@ -93,11 +93,12 @@ Column map:
 | R | Invoice URL | finalized invoice link state |
 | S | Last Follow-Up Sent | latest tracked reminder date |
 | T | Last Follow-Up Type | latest reminder tier |
-| U | Last Follow-Up Thread ID | John Gmail reminder thread key or invoice-number fallback |
+| U | Last Follow-Up Thread ID | Real John Gmail reminder thread key when available; do not display as a dashboard field |
 | V | Last Client Reply Date | latest detected client reply date from `john@kravemedia.co` only |
-| W | Client Reply Status | `No Reply`, `Replied`, `Promise to Pay`, `Question/Dispute`, or `Needs Human` |
+| W | Client Reply Status | `No Reply Found`, `Possible Reply`, `Replied`, `Promise to Pay`, `Question/Dispute`, or `Needs Human` |
 | X | Client Reply Summary | short reply summary/snippet |
 | Y | Follow-Up Attribution | reply/payment attribution note |
+| Z | Reply Confidence | `Confirmed`, `Likely`, or `Unconfirmed` |
 
 Never write to the sheet. Never mutate column N.
 
@@ -113,8 +114,8 @@ Compute current state:
 - reminders sent from column L where parseable
 - payment reminder performance:
   - follow-ups sent/logged in the requested range from Column L
-  - latest follow-up state from Columns S-U
-  - client reply status from Columns V-Y; reply tracking is John-only via `john@kravemedia.co`
+  - latest follow-up state from Columns S-T; keep Column U hidden unless debugging raw Gmail metadata
+  - client reply status from Columns V-Z; reply tracking is John-only via `john@kravemedia.co`
   - payments after follow-up by comparing Column L reminder dates to Column M payment confirmation dates
   - open invoices still unpaid after follow-up
   - next scheduled reminder based on the invoice reminder rules in `n8n-workflows/WORKFLOWS.md`

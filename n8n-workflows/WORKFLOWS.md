@@ -79,11 +79,12 @@
 | R | Invoice URL | Invoice Approval Polling, Invoice Reminder Cron |
 | S | Last Follow-Up Sent | Invoice Reminder Cron; latest reminder date for attribution |
 | T | Last Follow-Up Type | Invoice Reminder Cron; latest reminder tier such as `7d`, `overdue`, or `late-fee-followup` |
-| U | Last Follow-Up Thread ID | Invoice Reminder Cron; reminder thread key, falling back to invoice number when Gmail thread id is unavailable |
+| U | Last Follow-Up Thread ID | Invoice Reminder Cron; real Gmail reminder thread key when available, otherwise blank |
 | V | Last Client Reply Date | Invoice Reminder Reply Detection; latest client reply date from John's Gmail only |
-| W | Client Reply Status | Invoice Reminder Reply Detection; `No Reply`, `Replied`, `Promise to Pay`, `Question/Dispute`, or `Needs Human` |
+| W | Client Reply Status | Invoice Reminder Reply Detection; `No Reply Found`, `Possible Reply`, `Replied`, `Promise to Pay`, `Question/Dispute`, or `Needs Human` |
 | X | Client Reply Summary | Invoice Reminder Reply Detection; short summary/snippet of the latest detected client reply |
 | Y | Follow-Up Attribution | Invoice Reminder Reply Detection and Ops Report; attribution note for reply/payment reporting |
+| Z | Reply Confidence | Invoice Reminder Reply Detection and Ops Report; `Confirmed`, `Likely`, or `Unconfirmed` |
 
 ### Status Value Reference
 
@@ -214,7 +215,7 @@ Second payments on the same invoice: Col Q carries over, so the second run's `ne
 
 Replaces manual invoice follow-up. Once daily, it scans every open invoice in the tracker, calculates days until or since due date, sends tiered reminder emails from `john@kravemedia.co`, updates the tracker, and posts Slack alerts for overdue and escalated invoices.
 
-The workflow also writes latest follow-up metadata to Columns S-U: `Last Follow-Up Sent`, `Last Follow-Up Type`, and `Last Follow-Up Thread ID`. Column L remains the historical reminder log. Column N stays formula-only and must never be written.
+The workflow also writes latest follow-up metadata to Columns S-U: `Last Follow-Up Sent`, `Last Follow-Up Type`, and `Last Follow-Up Thread ID`. The thread ID is blank unless Gmail returns a real thread key, so reports should treat it as an implementation detail rather than a user-facing invoice reference. Column L remains the historical reminder log. Column N stays formula-only and must never be written.
 
 ### Triggers
 
@@ -293,7 +294,7 @@ The workflow also writes latest follow-up metadata to Columns S-U: `Last Follow-
 
 ### Purpose
 
-Adds reply attribution for the invoice reminder system. It reads the Client Invoice Tracker through Column Y, finds rows with latest follow-up metadata, scans only `john@kravemedia.co` Gmail for client replies after the latest follow-up, classifies the reply status conservatively, and writes reply attribution back to the tracker.
+Adds reply attribution for the invoice reminder system. It reads the Client Invoice Tracker through Column Z, finds rows with latest follow-up metadata, scans only `john@kravemedia.co` Gmail for client replies after the latest follow-up, classifies the reply status conservatively, and writes reply attribution back to the tracker with a confidence label.
 
 This workflow does not monitor Noa or strategist inboxes, does not infer client replies from Slack, and does not send client responses.
 
@@ -309,15 +310,15 @@ This workflow does not monitor Noa or strategist inboxes, does not infer client 
 ```text
 [Schedule / Webhook]
         |
-[Get Invoice Tracker]        reads Invoices!A:Y
+[Get Invoice Tracker]        reads Invoices!A:Z
         |
 [Prepare Reply Queries]      builds John-only Gmail queries per invoice
         |
 [Search John Gmail Replies]  scans replies from client emails to john@kravemedia.co
         |
-[Classify Reply]             No Reply / Replied / Promise to Pay / Question/Dispute / Needs Human
+[Classify Reply]             No Reply Found / Possible Reply / Replied / Promise to Pay / Question/Dispute / Needs Human
         |
-[Update Reply Attribution]   writes V:Y using Invoice # match
+[Update Reply Attribution]   writes V:Z using Invoice # match
 ```
 
 ### Tracker Writes
@@ -329,6 +330,7 @@ This workflow does not monitor Noa or strategist inboxes, does not infer client 
 | W | Client Reply Status | one of the approved reply statuses |
 | X | Client Reply Summary | short snippet/summary of latest reply |
 | Y | Follow-Up Attribution | note explaining reply detection state |
+| Z | Reply Confidence | `Confirmed`, `Likely`, or `Unconfirmed` |
 
 Column N remains formula-only and must never be written.
 
