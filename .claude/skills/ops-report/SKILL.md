@@ -155,15 +155,26 @@ Use this structure:
 ```markdown
 ### Ops Report - [date range]
 
-**Source caveats**
-- [Only include unavailable/incomplete sources]
+**Value Summary**
+- Invoices created: [count]
+- Invoices finalized/sent: [count]
+- Follow-ups sent/logged: [count]
+- Replies confirmed: [count]
+- Payments after follow-up: [count and amount by currency]
+- Open follow-up queue: [count]
+
+**Invoice Creation**
+- Requests created: [count]
+- Drafts created: [count]
+- Finalized/sent: [count]
+- Approval handoffs completed: [count]
 
 **Workflow health**
 - Executions: [total] total, [success] success, [failed] failed
 - Failed: [workflow - failure summary]
 - Quiet/stale: [active workflow with no execution if notable]
 
-**Payment reminder performance**
+**Payment Reminder Performance**
 - Follow-ups sent/logged: [count]
 - Client replies after follow-up: [count or unavailable]
 - Paid after follow-up: [count and amount by currency]
@@ -187,6 +198,9 @@ Use this structure:
 
 **Action queue**
 - [owner] - [specific item] - [why it matters]
+
+**Source caveats**
+- [Only include unavailable/incomplete sources]
 ```
 
 Omit empty sections. Distinguish unavailable data from zero activity.
@@ -205,12 +219,13 @@ Use a timestamped filename, for example:
 
 The dashboard should be self-contained with inline CSS and no external assets. Include:
 
-- source caveats
-- reminder impact scorecards and next-follow-up table when invoice reminder data is available
+- visibility scorecards that show invoice creation, invoice approval/finalization, follow-up response tracking, and payments after follow-up
+- next-follow-up table with last follow-up, next follow-up, late-fee/collections dates, and owner/action
 - workflow health scorecards and table lower on the page as technical support
 - finance movement scorecards
 - tracker status table
 - action queue
+- source caveats at the bottom
 
 Do not include secrets, API keys, raw private tokens, or unnecessary message dumps.
 

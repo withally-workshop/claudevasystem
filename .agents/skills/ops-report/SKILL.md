@@ -127,15 +127,26 @@ Use this structure:
 ```markdown
 ### Ops Report - [date range]
 
-**Source caveats**
-- [Only include unavailable/incomplete sources]
+**Value Summary**
+- Invoices created: [count]
+- Invoices finalized/sent: [count]
+- Follow-ups sent/logged: [count]
+- Replies confirmed: [count]
+- Payments after follow-up: [count and amount by currency]
+- Open follow-up queue: [count]
 
 **Workflow health**
 - Executions: [total] total, [success] success, [failed] failed
 - Failed: [workflow - failure summary]
 - Quiet/stale: [active workflow with no execution if notable]
 
-**Payment reminder performance**
+**Invoice Creation**
+- Requests created: [count]
+- Drafts created: [count]
+- Finalized/sent: [count]
+- Approval handoffs completed: [count]
+
+**Payment Reminder Performance**
 - Follow-ups sent/logged: [count]
 - Client replies after follow-up: [count or unavailable]
 - Paid after follow-up: [count and amount by currency]
@@ -159,6 +170,9 @@ Use this structure:
 
 **Action queue**
 - [owner] - [specific item] - [why it matters]
+
+**Source caveats**
+- [Only include unavailable/incomplete sources]
 ```
 
 Omit empty sections. Do not claim a workflow completed from a webhook acceptance alone; use n8n execution history or downstream outputs.
@@ -169,7 +183,7 @@ When useful, create a local HTML file under `reports/ops-report/` with a timesta
 
 `reports/ops-report/2026-05-01-week-to-date.html`
 
-Keep it self-contained: inline CSS, no external assets, no secrets. Lead with reminder impact scorecards when invoice reminder data is available: follow-ups sent, paid after follow-up, response tracking, and open follow-up queue. Include a next-follow-ups table with last follow-up, next follow-up, late-fee/collections dates, and owner/action. Keep workflow health lower on the page as technical support. Tell the user the local path after creating it.
+Keep it self-contained: inline CSS, no external assets, no secrets. Lead with visibility scorecards that show invoice creation, invoice approval/finalization, follow-up response tracking, and payments after follow-up. Keep workflow health lower on the page as technical support, and keep source caveats at the bottom. Include a next-follow-ups table with last follow-up, next follow-up, late-fee/collections dates, and owner/action. Tell the user the local path after creating it.
 
 ## Failure Rules
 
