@@ -34,6 +34,7 @@ assert.match(deploySource, /Replied/, 'Expected Replied status');
 assert.match(deploySource, /Confirmed/, 'Expected Confirmed confidence');
 assert.match(deploySource, /Likely/, 'Expected Likely confidence');
 assert.match(deploySource, /Unconfirmed/, 'Expected Unconfirmed confidence');
+assert.match(deploySource, /threadId\s*===\s*source\.lastFollowUpThreadId/, 'Expected exact Gmail thread id matches to be detected');
 assert.match(deploySource, /from:.*after:/s, 'Expected fallback Gmail query from client after follow-up in John mailbox');
 assert.doesNotMatch(deploySource, /gmailQuery[\s\S]{0,120}invoiceNum/, 'Fallback reply query must not require invoice number');
 assert.match(deploySource, /\$\('Prepare Reply Queries'\)\.item\.json\.gmailQuery/, 'Expected Gmail search to use prepared query after baseline write');

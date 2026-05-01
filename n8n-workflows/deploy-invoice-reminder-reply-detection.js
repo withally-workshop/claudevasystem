@@ -60,6 +60,7 @@ try {
   try { sourceItems = $items('Prepare Reply Queries'); } catch (_) { sourceItems = []; }
 }
 const sources = sourceItems.map(item => item.json);
+const sourcesByInvoice = new Map(sources.map(source => [source.invoiceNum, source]));
 const messageItems = $input.all();
 
 function normalizeDate(value) {
@@ -105,7 +106,7 @@ for (const item of messageItems) {
   const messageInvoiceNum = invoiceFromMessage(message);
   const invoiceNum = messageInvoiceNum || (source && source.invoiceNum);
   if (!invoiceNum) continue;
-  const matchedSource = source && source.invoiceNum === invoiceNum ? source : null;
+  const matchedSource = sourcesByInvoice.get(invoiceNum) || (source && source.invoiceNum === invoiceNum ? source : null);
   if (!grouped.has(invoiceNum)) grouped.set(invoiceNum, { source: matchedSource, messages: [] });
   grouped.get(invoiceNum).messages.push(message);
 }
@@ -121,8 +122,9 @@ for (const [invoiceNum, group] of grouped.entries()) {
   const latest = replies[0];
   const text = bodyText(latest).replace(/\\s+/g, ' ').trim();
   const lower = text.toLowerCase();
-  let clientReplyStatus = source.lastFollowUpThreadId ? 'Replied' : 'Possible Reply';
-  let replyConfidence = source.lastFollowUpThreadId ? 'Confirmed' : 'Likely';
+  const isExactThreadMatch = !!(source.lastFollowUpThreadId && latest.threadId && latest.threadId === source.lastFollowUpThreadId);
+  let clientReplyStatus = isExactThreadMatch ? 'Replied' : 'Possible Reply';
+  let replyConfidence = isExactThreadMatch ? 'Confirmed' : 'Likely';
   if (/pay|paid|payment|settle|transfer|wire|remit|tomorrow|today|this week|next week/.test(lower)) {
     clientReplyStatus = 'Promise to Pay';
   }
