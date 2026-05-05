@@ -56,6 +56,19 @@ for (const row of rows) {
 
   const daysDiff = Math.round((dueDate.getTime() - today.getTime()) / msDay);
 
+  // Infer payout term from gap between invoice creation date and due date
+  const creationDateRaw = j['Date Created'] ? j['Date Created'].toString().trim() : '';
+  const creationDate = creationDateRaw ? new Date(creationDateRaw) : null;
+  const gap = (creationDate && !isNaN(creationDate.getTime()))
+    ? Math.round((dueDate.getTime() - creationDate.getTime()) / msDay)
+    : 31; // fallback: treat as 30d terms if creation date is missing
+  const payoutTerm = gap <= 10 ? '7d' : gap <= 20 ? '15d' : '30d';
+  const allowedPreDueTiers = {
+    '7d':  new Set(['3d', '1d', 'due-today']),
+    '15d': new Set(['7d', '5d', '3d', 'due-today']),
+    '30d': new Set(['7d', '5d', '3d', 'due-today']),
+  };
+
   const clientName   = (j['Client Name']   || '').toString().trim();
   const rawEmail     = (j['Email Address'] || '').toString().trim();
   const emailList    = rawEmail.split(/[,;\\s]+/).map(e => e.trim()).filter(e => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(e));
@@ -86,6 +99,10 @@ for (const row of rows) {
   else if (daysDiff < -7 && daysDiff > -60)  reminderType = 'late-fee-followup';
   else if (daysDiff <= -60)                  reminderType = 'collections';
   else continue;
+
+  // Guard: skip pre-due tiers not allowed for this payout term
+  const preDueTiers = new Set(['7d', '5d', '3d', '1d', 'due-today']);
+  if (preDueTiers.has(reminderType) && !allowedPreDueTiers[payoutTerm].has(reminderType)) continue;
 
   // Deduplication — skip if same type sent within 2 days (7 days for late-fee-followup)
   let alreadySent = false;
@@ -180,6 +197,7 @@ for (const row of rows) {
   }
 
   actions.push({
+    isDigest: false,
     skipEmail: emailList.length === 0,
     clientEmail, ccEmails, invoiceNum, clientName,
     amount, currency, dueDateStr, daysDiff, reminderType,
@@ -190,7 +208,57 @@ for (const row of rows) {
   });
 }
 
-return actions.map(a => ({ json: a }));
+// Build daily digest
+const byType = {};
+for (const a of actions) {
+  if (!byType[a.reminderType]) byType[a.reminderType] = [];
+  byType[a.reminderType].push(a);
+}
+const preDue     = ['7d','5d','3d','1d'].flatMap(t => byType[t] || []);
+const dueToday   = byType['due-today']        || [];
+const overdueAct = byType['overdue']          || [];
+const lateFeeAct = byType['late-fee']         || [];
+const lfFollowup = byType['late-fee-followup']|| [];
+const collectAct = byType['collections']      || [];
+const allReminders = [...preDue, ...dueToday];
+const allOverdue   = [...overdueAct, ...lfFollowup];
+
+const digestLines = ['*📋 Invoice Reminder Digest — ' + todayStr + '*'];
+if (allReminders.length) {
+  digestLines.push('\\n*Reminders sent:* ' + allReminders.length);
+  for (const a of allReminders) {
+    const label = a.reminderType === 'due-today' ? 'due today' : a.reminderType + ' reminder';
+    digestLines.push('• ' + a.clientName + ' — ' + a.invoiceNum + ' — ' + label + ' — Due ' + a.dueDateStr);
+  }
+}
+if (allOverdue.length) {
+  digestLines.push('\\n*Overdue (action needed):* ' + allOverdue.length);
+  for (const a of allOverdue) {
+    const daysOver = Math.abs(a.daysDiff);
+    digestLines.push('• ' + a.clientName + ' — ' + a.invoiceNum + ' — ' + daysOver + ' day' + (daysOver !== 1 ? 's' : '') + ' overdue');
+  }
+}
+if (lateFeeAct.length) {
+  digestLines.push('\\n*Late fees triggered:* ' + lateFeeAct.length);
+  for (const a of lateFeeAct) {
+    digestLines.push('• ' + a.clientName + ' — ' + a.invoiceNum + ' — $200 USD late fee flagged');
+  }
+}
+if (collectAct.length) {
+  digestLines.push('\\n*Collections (escalated):* ' + collectAct.length);
+  for (const a of collectAct) {
+    const daysOver = Math.abs(a.daysDiff);
+    digestLines.push('• ' + a.clientName + ' — ' + a.invoiceNum + ' — ' + daysOver + ' days overdue');
+  }
+}
+const digestTotal = allReminders.length + allOverdue.length + lateFeeAct.length + collectAct.length;
+const digestText  = digestTotal === 0
+  ? '✅ Invoice check complete — no outstanding items.'
+  : digestLines.join('\\n');
+
+const output = actions.map(a => ({ json: a }));
+output.push({ json: { isDigest: true, digestText } });
+return output;
 `.trim();
 
 const workflow = {
@@ -201,7 +269,7 @@ const workflow = {
       id: 'n1', name: 'Schedule 10am ICT',
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [240, 300],
-      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 3 * * *' }] } }
+      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 2 * * 1-5' }] } }
     },
     {
       id: 'n2', name: 'Webhook Trigger',
@@ -321,7 +389,7 @@ const workflow = {
     {
       id: 'n10', name: 'Slack Missing Email Warning',
       type: 'n8n-nodes-base.slack', typeVersion: 2.2,
-      position: [1120, 520],
+      position: [1340, 580],
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
       parameters: {
         resource: 'message', operation: 'post',
@@ -330,13 +398,48 @@ const workflow = {
         text: '={{ $json.slackMessage }}',
         otherOptions: {}
       }
+    },
+    {
+      id: 'n11', name: 'Is Digest Item?',
+      type: 'n8n-nodes-base.if', typeVersion: 2.1,
+      position: [900, 390],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+          conditions: [{
+            id: 'c1',
+            leftValue: '={{ $json.isDigest }}',
+            rightValue: true,
+            operator: { type: 'boolean', operation: 'equals' }
+          }],
+          combinator: 'and'
+        },
+        options: {}
+      }
+    },
+    {
+      id: 'n12', name: 'Post Digest',
+      type: 'n8n-nodes-base.slack', typeVersion: 2.2,
+      position: [1120, 220],
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        resource: 'message', operation: 'post',
+        select: 'channel',
+        channelId: { __rl: true, value: SLACK_CHANNEL, mode: 'id' },
+        text: '={{ $json.digestText }}',
+        otherOptions: {}
+      }
     }
   ],
   connections: {
     'Schedule 10am ICT':        { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
     'Webhook Trigger':          { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
     'Get Invoice Tracker':      { main: [[{ node: 'Process Invoices',    type: 'main', index: 0 }]] },
-    'Process Invoices':         { main: [[{ node: 'Has Client Email?',   type: 'main', index: 0 }]] },
+    'Process Invoices':         { main: [[{ node: 'Is Digest Item?',     type: 'main', index: 0 }]] },
+    'Is Digest Item?': { main: [
+      [{ node: 'Post Digest',   type: 'main', index: 0 }],  // TRUE — digest item
+      [{ node: 'Has Client Email?', type: 'main', index: 0 }]  // FALSE — action item
+    ]},
     'Has Client Email?': { main: [
       [{ node: 'Send Email',                type: 'main', index: 0 }],  // TRUE — has email
       [{ node: 'Slack Missing Email Warning', type: 'main', index: 0 }]  // FALSE — no email

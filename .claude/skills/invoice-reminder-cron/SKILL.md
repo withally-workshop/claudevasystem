@@ -1,5 +1,5 @@
 # Skill: Invoice Reminder Cron
-**Trigger:** Scheduled daily at 10:00 AM ICT — also invocable manually: "run invoice reminders", "/invoice-reminder-cron"
+**Trigger:** Scheduled Monday–Friday at 9:00 AM ICT — also invocable manually: "run invoice reminders", "/invoice-reminder-cron"
 **Fully automated — no human input required at any step.**
 
 ---
@@ -81,13 +81,35 @@ For remaining rows, calculate: `days_diff = due_date (Col I) - today`
 
 ### Phase 3 — Apply Reminder Rules
 
+**Payout term inference:** Derive from `Col I (Due Date) - Col A (Date Created)` gap in days.
+
+| Gap | Inferred Term |
+|-----|--------------|
+| ≤ 10 days | 7d terms |
+| 11–20 days | 15d terms |
+| > 20 days | 30d terms |
+
+If Col A is missing or unparseable, fall back to 30d terms (most conservative).
+
+**Pre-due reminders by payout term:**
+
+| Tier | 30d terms | 15d terms | 7d terms |
+|------|-----------|-----------|----------|
+| 7d   | ✅ | ✅ | — |
+| 5d   | ✅ | ✅ | — |
+| 3d   | ✅ | ✅ | ✅ |
+| 1d   | — | — | ✅ |
+| Due today | ✅ | ✅ | ✅ |
+
+**Full reminder schedule:**
+
 | days_diff | Action | Reminder Type |
 |-----------|--------|---------------|
-| +7 | Send pre-due reminder | `7d` |
-| +5 | Send pre-due reminder | `5d` |
-| +3 | Send pre-due reminder | `3d` |
-| +1 | Send pre-due reminder | `1d` |
-| 0 | Send due-today reminder | `due-today` |
+| +7 | Pre-due (30d/15d only) | `7d` |
+| +5 | Pre-due (30d/15d only) | `5d` |
+| +3 | Pre-due (all terms) | `3d` |
+| +1 | Pre-due (7d terms only) | `1d` |
+| 0 | Due-today (all terms) | `due-today` |
 | -1 to -6 | Send overdue notice | `overdue` |
 | -7 | Create late fee invoice + send notice | `late-fee` |
 | -8 to -59 | Send late fee follow-up (weekly dedup) | `late-fee-followup` |
@@ -239,39 +261,34 @@ Use `sheets_update_row` with the known row number.
 **Range format note:** Use bare ranges like `J8` or `J8:L8`, not `Sheet1!J8` or `Invoices!J8`. The MCP server resolves to the correct tab automatically.
 
 ### Phase 7 — Post Daily Digest to Slack
-After all processing, post to #payments-invoices-updates (C09HN2EBPR7):
+After all processing, a digest item is routed to the `Post Digest` node and posted to #payments-invoices-updates (C09HN2EBPR7). This fires on every run, including runs with no actions.
 
+**Format:**
 ```
-*📋 Invoice Status — [DATE]*
+*📋 Invoice Reminder Digest — [DATE]*
 
-*Payments confirmed today:* [n]
-[• Client — Invoice # — Amount — ✅ Payment Complete]
-
-*Reminders sent today:* [n]
-[• Client — Invoice # — [X]-day reminder — Due [date]]
+*Reminders sent:* [n]
+• [Client] — [Invoice #] — [Xd reminder / due today] — Due [date]
 
 *Overdue (action needed):* [n]
-[• Client — Invoice # — [X] days overdue — <@strategist_id>]
+• [Client] — [Invoice #] — [X] day(s) overdue
 
-*Late fees applied today:* [n]
-[• Client — Invoice # — $200 USD late fee invoice created]
+*Late fees triggered:* [n]
+• [Client] — [Invoice #] — $200 USD late fee flagged
 
 *Collections (escalated):* [n]
-[• Client — Invoice # — [X] days overdue — <@U06TBGX9L93> <@U07J8SRCPGU>]
-
-*Upcoming (next 7 days):*
-[• Client — Invoice # — Amount — Due [date]]
-
-*No action needed:* [n invoices fully paid]
+• [Client] — [Invoice #] — [X] days overdue
 ```
 
-If nothing to report: post `✅ Invoice check complete — no outstanding items.`
+If nothing to report: `✅ Invoice check complete — no outstanding items.`
+
+**Implementation note:** `PROCESS_CODE` always appends a `{ isDigest: true, digestText }` item to its output. The `Is Digest Item?` IF node routes it directly to `Post Digest`, bypassing the email/tracker chain. Action items (`isDigest: false`) flow through the normal path.
 
 ---
 
 ## Scheduling This Cron
-ICT is UTC+7, so 10:00 AM ICT = **3:00 AM UTC**.
-Cron expression: `0 3 * * *`
+ICT is UTC+7, so 9:00 AM ICT = **2:00 AM UTC**. Weekdays only (Mon–Fri).
+Cron expression: `0 2 * * 1-5`
 
 To set up: run `/schedule` and configure with prompt: `Run /invoice-reminder-cron`
 

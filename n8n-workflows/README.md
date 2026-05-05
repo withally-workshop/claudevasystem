@@ -7,7 +7,8 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Workflow | Status | Schedule | File |
 |----------|--------|----------|------|
 | Payment Detection | Active | Every hour | [deploy-payment-detection.js](deploy-payment-detection.js) |
-| Invoice Reminder Cron | Active | 10am ICT daily | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
+| Invoice Reminder Cron | Active | 9am ICT Mon–Fri | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
+| Weekly Invoice Summary | Active | 9am ICT Mondays | [deploy-weekly-invoice-summary.js](deploy-weekly-invoice-summary.js) |
 | Invoice Reminder Reply Detection | Active | 10:30am ICT weekdays + manual webhook | [deploy-invoice-reminder-reply-detection.js](deploy-invoice-reminder-reply-detection.js) |
 | EOD Triage Summary | Active | 6pm ICT weekdays | [deploy-eod-triage-summary.js](deploy-eod-triage-summary.js) |
 | Start Of Day Report | Active | Manual trigger + production webhook | `deploy-sod-report.js` |
@@ -44,7 +45,7 @@ node n8n-workflows/deploy-payment-detection.js
 
 ## Invoice Reminder Cron
 
-Scans the Client Invoice Tracker daily at 10am ICT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker.
+Scans the Client Invoice Tracker Mon–Fri at 9am ICT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker. Payout-term-aware: 30d/15d invoices get 7d/5d/3d/due-today reminders; 7d invoices get 3d/1d/due-today only. Posts a daily digest at the end of every run.
 
 Also writes latest reminder attribution metadata to the tracker: `Last Follow-Up Sent`, `Last Follow-Up Type`, and `Last Follow-Up Thread ID`. The thread ID is blank unless Gmail returns a real thread key. Column L remains the historical reminder log.
 
@@ -66,6 +67,28 @@ node n8n-workflows/deploy-invoice-reminder-cron.js
 
 **Credentials required in n8n:**
 - `Gmail account` - `john@kravemedia.co` OAuth2
+- `Google Sheets account` - access to Client Invoice Tracker
+- `Krave Slack Bot` - bot token for `#payments-invoices-updates`
+
+---
+
+## Weekly Invoice Summary
+
+Posts a full portfolio snapshot to #payments-invoices-updates every Monday at 9 AM ICT. Reads all open invoices from the tracker and categorises them into action buckets: Collections, Late Fee Applied, Overdue Needs Chase, Due This Week, and Pending Upcoming. Gives Noa a weekly "who to chase" list without digging through the tracker.
+
+**Workflow ID:** `WX1hHek0cNTyZXkS`
+
+**Webhook (manual trigger):**
+```text
+POST https://noatakhel.app.n8n.cloud/webhook/krave-weekly-invoice-summary
+```
+
+**Deploy from scratch:**
+```bash
+node n8n-workflows/deploy-weekly-invoice-summary.js
+```
+
+**Credentials required in n8n:**
 - `Google Sheets account` - access to Client Invoice Tracker
 - `Krave Slack Bot` - bot token for `#payments-invoices-updates`
 

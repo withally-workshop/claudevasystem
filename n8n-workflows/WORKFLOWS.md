@@ -28,7 +28,7 @@
 | # | Name | ID | Status | Schedule | Purpose |
 |---|------|----|--------|----------|---------|
 | 1 | Krave - Payment Detection | `NurOLZkg3J6rur5Q` | Active | Hourly | Detect Airwallex deposits, match invoices, update tracker |
-| 2 | Krave - Invoice Reminder Cron | `Q3IqqLvmX9H49NdE` | Active | 10am ICT daily | Send invoice reminders, alert overdue, update tracker |
+| 2 | Krave - Invoice Reminder Cron | `Q3IqqLvmX9H49NdE` | Active | 9am ICT Mon–Fri | Send invoice reminders, alert overdue, update tracker, post daily digest |
 | 2b | Krave - Invoice Reminder Reply Detection | `omNFmRcDeiByLOzS` | Active | 10:30am ICT weekdays + `POST /webhook/krave-invoice-reminder-reply-detection` | Scan only `john@kravemedia.co` reminder threads, classify client replies, update reminder attribution columns |
 | 3 | Krave - EOD Triage Summary | `9hZcOcAqQdM7o1yZ` | Active | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
 | 4 | Krave - Start Of Day Report | `vUunl0NuBA6t4Gw4` | Active | Manual trigger + `POST /webhook/krave-sod-report` | Build the SOD report from validated Slack inputs and deliver to `#airwallexdrafts` plus Noa DM |
@@ -37,6 +37,7 @@
 | 7 | Krave - Invoice Request Intake | `5XHxhQ7wB2rxE3qz` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
 | 8 | Krave - Invoice Approval Polling | `uCS9lzHtVKWlqYlk` | Active | Every 2 hrs Mon-Fri 9am-5pm PHT + `POST /webhook/krave-invoice-approval-polling` | Poll tracker for pending drafts, detect John's "approve" replies, finalize in Airwallex, write tracker link, and reply in the original strategist thread |
 | 9 | Krave - Client Invoice Creation | `9eqWz6oJI5dqBesa` | Inactive legacy | Do not trigger | Deprecated finalization path; approval polling is canonical |
+| 10 | Krave - Weekly Invoice Summary | WX1hHek0cNTyZXkS | Active | 9am ICT Mondays | Post full portfolio snapshot to Slack — overdue, late fee, needs chase, due this week, upcoming |
 
 ---
 
@@ -221,7 +222,7 @@ The workflow also writes latest follow-up metadata to Columns S-U: `Last Follow-
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 3 * * *` - 10:00 AM ICT daily |
+| Schedule | `0 2 * * 1-5` - 9:00 AM ICT Monday–Friday |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder` |
 
 ### Node Flow
@@ -233,28 +234,45 @@ The workflow also writes latest follow-up metadata to Columns S-U: `Last Follow-
         |
 [Process Invoices]
         |
-[Has Client Email?]
+[Is Digest Item?]
    | true                     | false
    v                          v
-[Send Reminder Email]   [Slack Missing Email Warning]
-        |
-[Update Tracker Row]
-        |
-[Needs Slack Alert?]
-   | true
-   v
-[Slack Overdue Alert]
+[Post Digest]          [Has Client Email?]
+                          | true                     | false
+                          v                          v
+                   [Send Email]        [Slack Missing Email Warning]
+                          |
+                   [Update Tracker Row]
+                          |
+                   [Needs Slack Alert?]
+                      | true
+                      v
+                   [Slack Overdue Alert]
 ```
 
 ### Reminder Schedule
 
+Pre-due tiers are filtered by payout term, inferred from `Col I (Due Date) - Col A (Date Created)` gap. Overdue tiers fire for all invoices regardless of term.
+
+**Payout term → allowed pre-due tiers:**
+
+| Inferred Term | Gap | 7d | 5d | 3d | 1d | Due Today |
+|--------------|-----|----|----|----|----|-----------|
+| 30d terms | > 20 days | ✅ | ✅ | ✅ | — | ✅ |
+| 15d terms | 11–20 days | ✅ | ✅ | ✅ | — | ✅ |
+| 7d terms | ≤ 10 days | — | — | ✅ | ✅ | ✅ |
+
+If Col A is missing, defaults to 30d terms.
+
+**Full schedule:**
+
 | Days Until/Since Due | Trigger | Email Type | Slack Alert |
 |----------------------|---------|-----------|-------------|
-| +7 | Pre-due | Payment Reminder | No |
-| +5 | Pre-due | Payment Reminder | No |
-| +3 | Pre-due | Payment Reminder | No |
-| +1 | Pre-due | Payment Reminder | No |
-| 0 | Due today | Invoice Due Today | Yes |
+| +7 | Pre-due (30d/15d only) | Payment Reminder | No |
+| +5 | Pre-due (30d/15d only) | Payment Reminder | No |
+| +3 | Pre-due (all terms) | Payment Reminder | No |
+| +1 | Pre-due (7d terms only) | Payment Reminder | No |
+| 0 | Due today (all terms) | Invoice Due Today | Yes |
 | -1 to -6 | Overdue | Overdue Invoice | Yes |
 | -7 | Late fee | Late Fee Applied | Yes |
 | -8 to -59 | Late fee follow-up | Late Fee Applied | Yes |
@@ -835,6 +853,63 @@ Automates the approval and finalization leg of the invoice ops flow. Polls the t
 
 ---
 
+## Workflow 10 — Weekly Invoice Summary
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/WX1hHek0cNTyZXkS`
+**Deploy script:** `n8n-workflows/deploy-weekly-invoice-summary.js`
+
+### Purpose
+
+Proactive Monday portfolio snapshot for Noa. Reads every open invoice in the tracker, categorises by urgency bucket, and posts a single action-oriented summary to #payments-invoices-updates. Distinct from the daily digest (which reports what the reminder cron did that run) — this reports the full open portfolio regardless of what reminders fired.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Schedule | `0 2 * * 1` — 9:00 AM ICT every Monday |
+| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-weekly-invoice-summary` |
+
+### Node Flow
+
+```text
+[Schedule Monday 9am ICT / Webhook]
+        |
+[Get Invoice Tracker]
+        |
+[Build Weekly Summary]
+        |
+[Post Weekly Summary] → #payments-invoices-updates
+```
+
+### Portfolio Buckets
+
+| Bucket | Condition |
+|--------|-----------|
+| 🔴 Collections | `days_diff ≤ -60` OR Col J = `Collections` |
+| 🟠 Late Fee Applied | `days_diff` between -8 and -59 |
+| 🟡 Overdue — Needs Chase | `days_diff` between -1 and -7 |
+| 🔵 Due This Week | `days_diff` between 0 and 7 |
+| ⚪ Pending — Upcoming | `days_diff > 7` |
+
+Rows where Col N / Col J = `Payment Complete`, `Paid`, or starts with `Draft` are skipped. Partial payment rows show remaining balance.
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| Open invoices exist | Sectioned Slack message with per-bucket counts and line items |
+| All invoices paid / none open | `✅ No outstanding invoices — all paid or no open items.` |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| Sheets read fails | No items flow; Post Weekly Summary node receives no input; silent exit |
+| Bad due date on a row | Row skipped silently |
+| Unknown strategist in Col K | Raw name shown instead of mention; no error |
+
+---
+
 ## Runbook - Common Scenarios
 
 ### Trigger payment detection manually
@@ -886,6 +961,13 @@ curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-invoice-approval-
   -H "Content-Type: application/json" -d '{}'
 ```
 
+### Trigger weekly invoice summary manually
+
+```bash
+curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-weekly-invoice-summary" \
+  -H "Content-Type: application/json" -d '{}'
+```
+
 ### Payment matched but Airwallex mark paid failed
 
 The Sheets row still shows `Payment Complete` and Slack still shows the confirmation. Log into Airwallex and mark the invoice paid manually.
@@ -907,6 +989,7 @@ The workflow retries once. If the retry also fails, it posts the formatted summa
 ```bash
 node n8n-workflows/deploy-payment-detection.js
 node n8n-workflows/deploy-invoice-reminder-cron.js
+node n8n-workflows/deploy-weekly-invoice-summary.js
 node n8n-workflows/deploy-eod-triage-summary.js
 node n8n-workflows/deploy-invoice-request-intake.js
 node n8n-workflows/deploy-invoice-approval-polling.js

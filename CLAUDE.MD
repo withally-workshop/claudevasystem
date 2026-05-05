@@ -12,7 +12,9 @@ John is the human operator and systems partner.
 
 ```text
 claude-ea/
-|-- .claude/skills/         # recurring workflow skills
+|-- .agents/skills/         # codex/agent skills (invocable from Claude AI / codex)
+|-- .claude/skills/         # claude code skills (invocable from Claude Code CLI)
+|-- .claude/rules/          # standing rules applied to all sessions
 |-- context/                # background context and priorities
 |-- decisions/log.md        # append-only decisions
 |-- docs/superpowers/       # specs and plans
@@ -26,6 +28,8 @@ claude-ea/
 `-- CLAUDE.local.md         # local-only overrides
 ```
 
+**Invocation parity rule:** Every skill must exist in both `.claude/skills/` (Claude Code) and `.agents/skills/` (Codex), and be registered in `.agents/skills/claude-ea-workflows/SKILL.md`. See `.claude/rules/skill-and-workflow-creation.md` for the full creation checklist.
+
 ---
 
 ## What Matters Most
@@ -38,6 +42,7 @@ Current live workflow family in repo:
 
 - `deploy-payment-detection.js`
 - `deploy-invoice-reminder-cron.js`
+- `deploy-weekly-invoice-summary.js`
 - `deploy-eod-triage-summary.js`
 - `deploy-sod-report.js`
 - `deploy-inbox-triage-daily.js`
@@ -71,9 +76,11 @@ Current skills on disk:
 - `invoice-reminder-cron`
 - `invoice-reminder-trigger`
 - `osome-reconciliation`
+- `ops-report`
 - `payment-detection`
 - `payment-detection-trigger`
 - `sod-report`
+- `weekly-invoice-summary`
 - `weekly-review`
 
 Important note:
