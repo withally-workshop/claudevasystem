@@ -36,6 +36,7 @@ This repo is a Claude Code executive-assistant workspace. Treat `.claude/skills/
 | `/weekly-invoice-summary`, "weekly invoice summary", "who to chase this week", "weekly payment status", "what invoices are overdue" | `.claude/skills/weekly-invoice-summary/SKILL.md` and `.agents/skills/weekly-invoice-summary/SKILL.md` | Fire the n8n weekly summary workflow — posts a full open-invoice portfolio snapshot to #payments-invoices-updates. |
 | `/client-invoice-creation`, "client invoice creation", "process invoice requests" | `.claude/skills/client-invoice-creation/SKILL.md` | Process Slack invoice request receipts and approval replies. |
 | "Osome reconciliation" | `.claude/skills/osome-reconciliation/SKILL.md` | Triage Osome documents-needed transactions and locate PDFs. |
+| `/morning-coffee`, "morning coffee", "run morning coffee", "Noa's morning briefing", "send morning briefing", "what's on for Noa today" | `.claude/skills/morning-coffee/SKILL.md` and `.agents/skills/morning-coffee/SKILL.md` | Personal daily morning briefing DM to Noa — calendar, email attention items, ClickUp project pulse, Slack DMs and channel highlights. Sends as John's personal Slack account. |
 
 ## n8n Automation Map
 
@@ -44,9 +45,9 @@ Use `n8n-workflows/WORKFLOWS.md` for current IDs, status, webhook paths, deploym
 | Automation | Related skill | Trigger pattern |
 |---|---|---|
 | Krave - Payment Detection | `payment-detection`, `payment-detection-trigger`, `n8n-workflow-trigger` | Scheduled hourly, or manual webhook. |
-| Krave - Invoice Reminder Cron | `invoice-reminder-cron`, `invoice-reminder-trigger`, `n8n-workflow-trigger` | Scheduled 9 AM ICT Mon–Fri, or manual webhook. |
-| Krave - EOD Triage Summary | `eod-triage-summary`, `n8n-workflow-trigger` | Scheduled 6 PM ICT weekdays, or manual webhook. |
-| Krave - Start Of Day Report | `sod-report`, `n8n-workflow-trigger` | Manual trigger or webhook after required Slack inputs exist. |
+| Krave - Invoice Reminder Cron | `invoice-reminder-cron`, `invoice-reminder-trigger`, `n8n-workflow-trigger` | Scheduled 10 AM PHT Mon–Fri, or manual webhook. |
+| Krave - EOD Triage Summary | `eod-triage-summary` | **Archived n8n workflow.** Migrated to Claude cron at 6 PM Asia/Manila Mon–Fri. See `.claude/skills/eod-triage-summary/SKILL.md`. |
+| Krave - Start Of Day Report | `sod-report` | **Archived.** Migrated to Claude cron at 10 AM PHT Mon–Fri. See `.claude/skills/sod-report/SKILL.md`. |
 | Krave - Inbox Triage Daily | `inbox-triage`, `n8n-workflow-trigger` | Scheduled 9 AM ICT weekdays, or manual webhook. |
 | Krave - Slack Invoice Handler | `client-invoice-creation`, `n8n-workflow-trigger` | Slack `/invoice-request` command and modal submissions. |
 | Krave - Invoice Request Intake | `client-invoice-creation`, `n8n-workflow-trigger` | Structured Slack modal payload or manual webhook. |
@@ -54,6 +55,7 @@ Use `n8n-workflows/WORKFLOWS.md` for current IDs, status, webhook paths, deploym
 | Krave - Weekly Invoice Summary | `weekly-invoice-summary`, `n8n-workflow-trigger` | Scheduled Monday 9 AM ICT, or manual webhook. Posts open invoice portfolio snapshot to #payments-invoices-updates. |
 | Krave - Client Invoice Creation | `client-invoice-creation` | Deprecated inactive legacy webhook from `deploy-client-invoice-creation.js`; use approval polling for finalization unless explicitly rolling back. |
 | Krave - Ops Report | `ops-report` | Live-read reporting skill only; reads n8n execution history, the Client Invoice Tracker, and Slack context without triggering workflows. |
+| Morning Coffee — Noa's Daily Briefing | `morning-coffee` | Local Windows Task Scheduler task `KraveEA-MorningCoffee`, Mon–Fri 10:00 AM Asia/Manila. Not an n8n workflow, not a remote CCR — runs locally because it depends on local-only MCP servers (`gmail-noa`, `slack-noa`, `slack` bot). |
 
 ## Operating Rules
 

@@ -10,8 +10,6 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Invoice Reminder Cron | Active | 9am ICT Mon–Fri | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
 | Weekly Invoice Summary | Active | 9am ICT Mondays | [deploy-weekly-invoice-summary.js](deploy-weekly-invoice-summary.js) |
 | Invoice Reminder Reply Detection | Active | 10:30am ICT weekdays + manual webhook | [deploy-invoice-reminder-reply-detection.js](deploy-invoice-reminder-reply-detection.js) |
-| EOD Triage Summary | Active | 6pm ICT weekdays | [deploy-eod-triage-summary.js](deploy-eod-triage-summary.js) |
-| Start Of Day Report | Active | Manual trigger + production webhook | `deploy-sod-report.js` |
 | Inbox Triage Daily | Active | 9am ICT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
 | Slack Invoice Handler | Active | Slack slash command + modal submit | [deploy-slack-invoice-handler.js](deploy-slack-invoice-handler.js) |
 | Invoice Request Intake | Active | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
@@ -121,63 +119,6 @@ node n8n-workflows/deploy-invoice-reminder-reply-detection.js
 **Credentials required in n8n:**
 - `Gmail account` - `john@kravemedia.co` OAuth2
 - `Google Sheets account` - access to Client Invoice Tracker
-
----
-
-## EOD Triage Summary
-
-**Workflow ID:** `9hZcOcAqQdM7o1yZ`
-
-Reads same-day Slack activity from `#airwallexdrafts`, `#ad-production-internal`, and `#payments-invoices-updates`, builds a compact AI prompt, uses OpenAI to generate Noa's EOD summary, sends Noa a Slack DM, and posts the same summary to `#airwallexdrafts` for SOD carry-over.
-
-**Webhook (manual trigger):**
-```text
-POST https://noatakhel.app.n8n.cloud/webhook/krave-eod-triage-summary
-```
-
-**Deploy from scratch:**
-```bash
-node n8n-workflows/deploy-eod-triage-summary.js
-```
-
-**Credentials required in n8n:**
-- `Krave Slack Bot` - read/post access for the three source channels and Noa DM
-- `OpenAI account` - OpenAI API credential for the summary node
-
----
-
-## Start Of Day Report
-
-**Workflow ID:** `vUunl0NuBA6t4Gw4`
-
-Deployed in n8n and kept active so the production webhook stays registered. Run it from the webhook or from the editor once all required morning inputs are already present in `#airwallexdrafts`.
-
-**Webhook (manual trigger):**
-```text
-POST https://noatakhel.app.n8n.cloud/webhook/krave-sod-report
-```
-
-**Deploy from scratch:**
-```bash
-node n8n-workflows/deploy-sod-report.js
-```
-
-**Required inputs before running:**
-- yesterday's EOD message containing `Today's Wrap-up`
-- John's same-day morning dump
-
-**Optional input:**
-- today's `Morning Triage`
-
-**Validation behavior:** hard-stop if yesterday's EOD or John's morning dump is missing. If `Morning Triage` is missing, the workflow still sends the report and simply omits inbox-triage follow-ups.
-
-**Outputs:**
-- post the final SOD report to `#airwallexdrafts`
-- send the same report to Noa's Slack DM
-
-**Credentials required in n8n:**
-- `Krave Slack Bot` - read/post access for `#airwallexdrafts` and Noa DM
-- `OpenAI account` - OpenAI API credential for the report generation node
 
 ---
 

@@ -266,10 +266,10 @@ const workflow = {
   settings: { executionOrder: 'v1', saveManualExecutions: true },
   nodes: [
     {
-      id: 'n1', name: 'Schedule 10am ICT',
+      id: 'n1', name: 'Schedule 10am PHT',
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [240, 300],
-      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 2 * * 1-5' }] } }
+      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 10 * * 1-5' }] } }
     },
     {
       id: 'n2', name: 'Webhook Trigger',
@@ -432,7 +432,7 @@ const workflow = {
     }
   ],
   connections: {
-    'Schedule 10am ICT':        { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
+    'Schedule 10am PHT':        { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
     'Webhook Trigger':          { main: [[{ node: 'Get Invoice Tracker', type: 'main', index: 0 }]] },
     'Get Invoice Tracker':      { main: [[{ node: 'Process Invoices',    type: 'main', index: 0 }]] },
     'Process Invoices':         { main: [[{ node: 'Is Digest Item?',     type: 'main', index: 0 }]] },

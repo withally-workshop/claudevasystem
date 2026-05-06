@@ -43,11 +43,11 @@ Current live workflow family in repo:
 - `deploy-payment-detection.js`
 - `deploy-invoice-reminder-cron.js`
 - `deploy-weekly-invoice-summary.js`
-- `deploy-eod-triage-summary.js`
-- `deploy-sod-report.js`
 - `deploy-inbox-triage-daily.js`
 - `deploy-slack-invoice-handler.js`
 - `deploy-invoice-request-intake.js`
+
+EOD Triage Summary and SOD Report no longer have n8n deploy scripts — both run as scheduled remote Claude Code agents (see `.claude/skills/eod-triage-summary/SKILL.md` and `.claude/skills/sod-report/SKILL.md`).
 
 Important supporting files:
 

@@ -1,5 +1,5 @@
 # Skill: Invoice Reminder Cron
-**Trigger:** Scheduled Monday–Friday at 9:00 AM ICT — also invocable manually: "run invoice reminders", "/invoice-reminder-cron"
+**Trigger:** Scheduled Monday–Friday at 10:00 AM PHT — also invocable manually: "run invoice reminders", "/invoice-reminder-cron"
 **Fully automated — no human input required at any step.**
 
 ---
@@ -287,8 +287,8 @@ If nothing to report: `✅ Invoice check complete — no outstanding items.`
 ---
 
 ## Scheduling This Cron
-ICT is UTC+7, so 9:00 AM ICT = **2:00 AM UTC**. Weekdays only (Mon–Fri).
-Cron expression: `0 2 * * 1-5`
+PHT is UTC+8. n8n cloud runs in Asia/Manila timezone, so the cron expression is local PHT time. Weekdays only (Mon–Fri).
+Cron expression: `0 10 * * 1-5` (fires at 10:00 AM PHT)
 
 To set up: run `/schedule` and configure with prompt: `Run /invoice-reminder-cron`
 

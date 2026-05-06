@@ -25,8 +25,6 @@
 | "run payment detection" | `payment-detection` | Yes | `krave-payment-detection` | Slack payment updates if anything changed |
 | "run invoice reminders" | `invoice-reminder` | Yes | `krave-invoice-reminder` | Reminder emails and overdue Slack alerts if needed |
 | "check reminder replies" / "run reply detection" | `invoice-reminder-reply-detection` | Yes | `krave-invoice-reminder-reply-detection` | Tracker reply attribution updates for John's Gmail reminder threads |
-| "run EOD" / "today's wrap-up" | `eod-triage-summary` | Yes | `krave-eod-triage-summary` | Noa DM plus `#airwallexdrafts` archive |
-| "run SOD" / "start of day report" | `sod-report` | Yes, after required inputs exist | `krave-sod-report` | `#airwallexdrafts` plus Noa DM, or hard-stop alert |
 | "run inbox triage" / "morning triage" | `inbox-triage-daily` | Yes | `krave-inbox-triage-daily` | Gmail drafts/labels plus Slack summary |
 | "check approvals" / "run approval polling" | `invoice-approval-polling` | Yes | `krave-invoice-approval-polling` | Finalized invoices and strategist/client notifications if approvals exist |
 | "run client invoice creation" | `client-invoice-creation` | No | `krave-client-invoice-creation` | Deprecated/inactive legacy finalization path; use `invoice-approval-polling` instead |
@@ -44,8 +42,6 @@ Every active workflow in `n8n-workflows/WORKFLOWS.md`, plus any deployed webhook
 | Krave - Payment Detection | `.claude/skills/payment-detection-trigger/SKILL.md` or this skill with `payment-detection` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `payment-detection` |
 | Krave - Invoice Reminder Cron | `.claude/skills/invoice-reminder-trigger/SKILL.md` or this skill with `invoice-reminder` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `invoice-reminder` |
 | Krave - Invoice Reminder Reply Detection | this skill with `invoice-reminder-reply-detection` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `invoice-reminder-reply-detection` |
-| Krave - EOD Triage Summary | `.claude/skills/eod-triage-summary/SKILL.md` or this skill with `eod-triage-summary` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `eod-triage-summary` |
-| Krave - Start Of Day Report | `.claude/skills/sod-report/SKILL.md` or this skill with `sod-report` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `sod-report` |
 | Krave - Inbox Triage Daily | `.claude/skills/inbox-triage/SKILL.md` or this skill with `inbox-triage-daily` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `inbox-triage-daily` |
 | Krave - Slack Invoice Handler | `.claude/skills/client-invoice-creation/SKILL.md` or this skill with `slack-invoice-handler` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `slack-invoice-handler` |
 | Krave - Invoice Request Intake | `.claude/skills/client-invoice-creation/SKILL.md` or this skill with `invoice-request-intake` | `.agents/skills/n8n-workflow-trigger/SKILL.md` with `invoice-request-intake` |
@@ -81,7 +77,6 @@ Replace `WEBHOOK_PATH` with the path from the alias table.
 
 ## Pre-Run Checks
 
-- For `sod-report`, confirm the required Slack inputs exist if the user expects a successful report: yesterday EOD, John's same-day morning dump, and today's Morning Triage.
 - For `invoice-request-intake`, require a structured Slack modal-style JSON payload. Empty `{}` can write fallback/error artifacts.
 - For `slack-invoice-handler`, require a Slack slash-command or interactivity payload. Empty `{}` is not a normal run.
 - For `invoice-approval-polling`, use `krave-invoice-approval-polling`. If docs mention `krave-client-invoice-creation`, verify against `n8n-workflows/deploy-invoice-approval-polling.js`; the deploy script is authoritative.

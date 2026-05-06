@@ -12,8 +12,8 @@
 2. [Shared Infrastructure](#shared-infrastructure)
 3. [Workflow 1 - Payment Detection](#workflow-1---payment-detection)
 4. [Workflow 2 - Invoice Reminder Cron](#workflow-2---invoice-reminder-cron)
-5. [Workflow 3 - EOD Triage Summary](#workflow-3---eod-triage-summary)
-6. [Workflow 4 - Start Of Day Report](#workflow-4---start-of-day-report)
+5. ~~Workflow 3 - EOD Triage Summary~~ (removed — see `.claude/skills/eod-triage-summary/SKILL.md`)
+6. ~~Workflow 4 - Start Of Day Report~~ (removed — see `.claude/skills/sod-report/SKILL.md`)
 7. [Workflow 5 - Inbox Triage Daily](#workflow-5---inbox-triage-daily)
 8. [Workflow 6 - Slack Invoice Handler](#workflow-6---slack-invoice-handler)
 9. [Workflow 7 - Invoice Request Intake](#workflow-7---invoice-request-intake)
@@ -28,10 +28,8 @@
 | # | Name | ID | Status | Schedule | Purpose |
 |---|------|----|--------|----------|---------|
 | 1 | Krave - Payment Detection | `NurOLZkg3J6rur5Q` | Active | Hourly | Detect Airwallex deposits, match invoices, update tracker |
-| 2 | Krave - Invoice Reminder Cron | `Q3IqqLvmX9H49NdE` | Active | 9am ICT Mon–Fri | Send invoice reminders, alert overdue, update tracker, post daily digest |
+| 2 | Krave - Invoice Reminder Cron | `Q3IqqLvmX9H49NdE` | Active | 10am PHT Mon–Fri | Send invoice reminders, alert overdue, update tracker, post daily digest |
 | 2b | Krave - Invoice Reminder Reply Detection | `omNFmRcDeiByLOzS` | Active | 10:30am ICT weekdays + `POST /webhook/krave-invoice-reminder-reply-detection` | Scan only `john@kravemedia.co` reminder threads, classify client replies, update reminder attribution columns |
-| 3 | Krave - EOD Triage Summary | `9hZcOcAqQdM7o1yZ` | Active | 6pm ICT weekdays | Summarize daily Slack activity, DM Noa, archive to `#airwallexdrafts` |
-| 4 | Krave - Start Of Day Report | `vUunl0NuBA6t4Gw4` | Active | Manual trigger + `POST /webhook/krave-sod-report` | Build the SOD report from validated Slack inputs and deliver to `#airwallexdrafts` plus Noa DM |
 | 5 | Krave - Inbox Triage Daily | `3YyEjk1e6oZV786T` | Active | 9am ICT weekdays + manual webhook | Read inbox email, create Gmail drafts, apply labels, keep `EA/Unsure` in inbox, and post summary to `#airwallexdrafts` plus Noa |
 | 6 | Krave - Slack Invoice Handler | `t7MMhlUo5H4HQmgL` | Active | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
 | 7 | Krave - Invoice Request Intake | `5XHxhQ7wB2rxE3qz` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
@@ -222,7 +220,7 @@ The workflow also writes latest follow-up metadata to Columns S-U: `Last Follow-
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 2 * * 1-5` - 9:00 AM ICT Monday–Friday |
+| Schedule | `0 10 * * 1-5` - 10:00 AM PHT Monday–Friday |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder` |
 
 ### Node Flow
@@ -365,139 +363,17 @@ Only `john@kravemedia.co` Gmail is scanned. A client reply sent only to Noa, Ama
 
 ---
 
-## Workflow 3 - EOD Triage Summary
+## Workflow 3 - EOD Triage Summary — REMOVED
 
-**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/9hZcOcAqQdM7o1yZ`  
-**Deploy script:** `n8n-workflows/deploy-eod-triage-summary.js`
-
-### Purpose
-
-Replaces the scheduled Claude-based EOD summary. Every weekday at 6:00 PM ICT, the workflow reads same-day Slack activity from the three operating channels, compacts the activity into an AI-ready context block, generates Noa's final EOD wrap-up with OpenAI, sends it to Noa via Slack DM, and posts the exact same message to `#airwallexdrafts` for next-day SOD carry-over.
-
-### Triggers
-
-| Type | Details |
-|------|---------|
-| Schedule | `0 10 * * 1-5` - 6:00 PM ICT weekdays |
-| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-eod-triage-summary` |
-
-### Node Flow
-
-```text
-[Schedule / Webhook]
-        |
-[Get Airwallex Drafts History]
-        |
-[Get Ad Production History]
-        |
-[Get Payments History]
-        |
-[Build EOD Context]
-        |
-[Generate EOD Summary]
-        |
-[Send EOD to Noa]
-        |
-[Did Noa Send Fail?]
-   | false                  | true
-   v                        v
-[Post Archive Copy]    [Retry Send to Noa]
-                              |
-                        [Did Retry Fail?]
-                         | false          | true
-                         v                v
-                  [Post Archive Copy] [Post Failure Alert]
-```
-
-### Source Channels
-
-| Channel | ID | Used For |
-|---------|----|----------|
-| `#airwallexdrafts` | `C0AQZGJDR38` | John's task dump, invoice drafts, inbox triage |
-| `#payments-invoices-updates` | `C09HN2EBPR7` | Invoice requests, payment confirmations |
-
-### AI Output Rules
-
-- Uses the EOD template headed by `### 🏁 Today's Wrap-up`
-- Bullets only, no paragraphs or filler
-- Empty sections omitted
-- Blockers must name who or what is blocking
-- Quiet days still send a short summary
-- Only same-day GMT+8 Slack activity is included
-
-### Outputs
-
-| Scenario | Action |
-|----------|--------|
-| Normal day | DM Noa and archive same message to `#airwallexdrafts` |
-| Quiet day | DM Noa a short quiet-day summary and archive same message |
-| First Slack DM fails | Retry once |
-| Retry succeeds | Archive same message |
-| Retry fails | Post failure alert plus formatted summary to `#airwallexdrafts` |
-
-### Error Handling
-
-| Failure | Behaviour |
-|---------|-----------|
-| One Slack DM failure | Retry once automatically |
-| Two Slack DM failures | Post manual-send fallback to `#airwallexdrafts` |
-| OpenAI node error | Workflow errors and n8n emails the instance owner |
+Migrated out of n8n. EOD now runs as a scheduled remote Claude Code agent at 6:00 PM Asia/Manila Mon–Fri.
+Canonical source of truth: [`.claude/skills/eod-triage-summary/SKILL.md`](../.claude/skills/eod-triage-summary/SKILL.md).
 
 ---
 
-## Workflow 4 - Start Of Day Report
+## Workflow 4 - Start Of Day Report — REMOVED
 
-**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/vUunl0NuBA6t4Gw4`  
-**Deploy script:** `n8n-workflows/deploy-sod-report.js`
-
-### Purpose
-
-Builds Noa's Start Of Day report from `#airwallexdrafts` after the required morning inputs are present. The workflow reads yesterday's EOD carry-over, John's same-day morning dump, and, when available, today's `Morning Triage`, then posts the final SOD report to both `#airwallexdrafts` and Noa's Slack DM.
-
-### Triggers
-
-| Type | Details |
-|------|---------|
-| Manual Trigger | Available in the editor for manual execution |
-| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-sod-report` |
-
-### Required Inputs
-
-| Source | Requirement |
-|--------|-------------|
-| Yesterday EOD | Prior-day bot message in `#airwallexdrafts` containing `Today's Wrap-up` |
-| John morning dump | Same-day messages from John in `#airwallexdrafts` before the run |
-
-### Optional Input
-
-| Source | Requirement |
-|--------|-------------|
-| `Morning Triage` | Same-day bot message in `#airwallexdrafts` containing `Morning Triage`, used when available for BAU / inbox follow-ups |
-
-### Validation
-
-- Hard-stop if yesterday's EOD is missing
-- Hard-stop if John's morning dump is missing
-- If `Morning Triage` is missing, continue without inbox-triage follow-ups
-- On validation failure, post the alert to `#airwallexdrafts` and do not DM Noa
-
-### Outputs
-
-| Scenario | Action |
-|----------|--------|
-| All required inputs found | Post report to `#airwallexdrafts`, then DM Noa |
-| `Morning Triage` missing | Post report to `#airwallexdrafts`, then DM Noa, omitting inbox-triage follow-ups |
-| Any required input missing | Stop and alert `#airwallexdrafts` |
-
-### Error Handling
-
-| Failure | Behaviour |
-|---------|-----------|
-| Missing yesterday EOD | Stop before generation and alert `#airwallexdrafts` |
-| Missing John morning dump | Stop before generation and alert `#airwallexdrafts` |
-| Missing `Morning Triage` | Continue without inbox-triage follow-ups |
-| First Noa DM failure after archive post | Retry once automatically |
-| Second Noa DM failure after archive post | Raise a compact failure alert for manual resend without rerunning generation |
+Migrated out of n8n. SOD now runs as a scheduled Claude cron at 10:00 AM PHT Mon–Fri.
+Canonical source of truth: [`.claude/skills/sod-report/SKILL.md`](../.claude/skills/sod-report/SKILL.md).
 
 ---
 
@@ -745,7 +621,7 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 | Gmail account (john) | Gmail OAuth2 | `vsDW3WpKXqS9HUs3` | Invoice Reminder Cron | `john@kravemedia.co` |
 | Google Sheets account | Google Sheets OAuth2 | `83MQOm78gYDvziTO` | Payment Detection, Invoice Reminder Cron, Invoice Request Intake | `noa@kravemedia.co` |
 | Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | Slack-facing workflow posts, modal handling, and SOD local/manual runs | Krave Slack workspace |
-| OpenAI account | OpenAI API | `UIREXIYn59JOH1zU` | EOD Triage Summary, Inbox Triage Daily, Start Of Day Report | OpenAI API |
+| OpenAI account | OpenAI API | `UIREXIYn59JOH1zU` | Inbox Triage Daily | OpenAI API |
 
 ### Airwallex
 
@@ -933,20 +809,6 @@ curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder-
   -H "Content-Type: application/json" -d '{}'
 ```
 
-### Trigger EOD triage manually
-
-```bash
-curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-eod-triage-summary" \
-  -H "Content-Type: application/json" -d '{}'
-```
-
-### Trigger SOD report manually
-
-```bash
-curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-sod-report" \
-  -H "Content-Type: application/json" -d '{}'
-```
-
 ### Trigger invoice request intake manually
 
 ```bash
@@ -990,7 +852,6 @@ The workflow retries once. If the retry also fails, it posts the formatted summa
 node n8n-workflows/deploy-payment-detection.js
 node n8n-workflows/deploy-invoice-reminder-cron.js
 node n8n-workflows/deploy-weekly-invoice-summary.js
-node n8n-workflows/deploy-eod-triage-summary.js
 node n8n-workflows/deploy-invoice-request-intake.js
 node n8n-workflows/deploy-invoice-approval-polling.js
 ```
