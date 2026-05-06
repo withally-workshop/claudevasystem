@@ -172,9 +172,9 @@ async function fetchSheets() {
     const res = await get(url, { Authorization: `Bearer ${token}` });
     if (!res.ok) return { ok: false, reason: `Sheets API ${res.status}: ${JSON.stringify(res.body)}`, rows: [] };
     const [headers, ...rows] = res.body.values || [];
-    const mapped = rows.map((r) => {
-      const obj = {};
-      (headers || []).forEach((h, i) => { obj[h] = r[i] || ''; });
+    const mapped = rows.map((r, i) => {
+      const obj = { _rowIndex: i + 2 }; // +1 for 1-based, +1 for header row
+      (headers || []).forEach((h, j) => { obj[h] = r[j] || ''; });
       return obj;
     });
     return { ok: true, rows: mapped };
@@ -288,18 +288,19 @@ function computeTrackerStats(rows) {
     const dateCreated = dateCreatedStr ? new Date(dateCreatedStr) : null;
     const draftAgeDays = (dateCreated && !isNaN(dateCreated)) ? Math.floor((today - dateCreated) / 86400000) : null;
 
+    const rowIndex = row._rowIndex;
     if (payStatus === 'Collections') {
-      stats.actionItems.push({ invoice: invoiceNum, client, action: 'Collections — manual escalation needed' });
+      stats.actionItems.push({ invoice: invoiceNum, client, rowIndex, action: 'Collections — manual escalation needed' });
     } else if (replyStatus === 'Needs Human' || replyStatus === 'Question/Dispute') {
-      stats.actionItems.push({ invoice: invoiceNum, client, action: `Client reply needs human review (${replyStatus})` });
+      stats.actionItems.push({ invoice: invoiceNum, client, rowIndex, action: `Client reply needs human review (${replyStatus})` });
     } else if (overdueDays !== null && overdueDays > 60 && ['Sent', 'Awaiting Payment', 'Invoice Sent'].includes(payStatus)) {
-      stats.actionItems.push({ invoice: invoiceNum, client, action: `${overdueDays}d overdue — past late-fee window, consider escalation` });
+      stats.actionItems.push({ invoice: invoiceNum, client, rowIndex, action: `${overdueDays}d overdue — past late-fee window, consider escalation` });
     } else if (payStatus === 'Partial Payment' && overdueDays !== null && overdueDays > 14) {
-      stats.actionItems.push({ invoice: invoiceNum, client, action: `Partial payment, ${overdueDays}d overdue — chase remaining balance` });
+      stats.actionItems.push({ invoice: invoiceNum, client, rowIndex, action: `Partial payment, ${overdueDays}d overdue — chase remaining balance` });
     } else if (payStatus.startsWith('Draft') && draftAgeDays !== null && draftAgeDays > 3) {
-      stats.actionItems.push({ invoice: invoiceNum, client, action: `Draft pending John for ${draftAgeDays} days` });
+      stats.actionItems.push({ invoice: invoiceNum, client, rowIndex, action: `Draft pending John for ${draftAgeDays} days` });
     } else if (!email && payStatus !== 'Payment Complete' && payStatus !== '') {
-      stats.actionItems.push({ invoice: invoiceNum, client: row['Client Name'] || '', action: 'Missing client email — reminders blocked' });
+      stats.actionItems.push({ invoice: invoiceNum, client: row['Client Name'] || '', rowIndex, action: 'Missing client email — reminders blocked' });
     }
   }
 
@@ -362,6 +363,7 @@ function computeNextFollowUps(rows) {
       invoice: invoiceNum,
       client,
       owner,
+      rowIndex: row._rowIndex,
       daysUntilDue: daysDiff,
       nextFollowUp: nextDate.toISOString().split('T')[0],
       lateFeeDate: lateFeeDate.toISOString().split('T')[0],
@@ -530,6 +532,56 @@ function statusDot(ok) {
   return ok ? '<span class="dot dot-ok">●</span>' : '<span class="dot dot-fail">●</span>';
 }
 
+function buildSlackSummary(d) {
+  const ts = d.trackerStats;
+  const n8n = d.n8nStats;
+  const aging = d.aging;
+  const generated = new Date(d.generatedAt).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', hour12: false });
+  const rangeLabel = { '24h': 'last 24 hours', '7d': 'last 7 days', '30d': 'last 30 days' }[d.range || '7d'];
+  const lines = [];
+  lines.push(`*Krave Ops — ${generated} ICT (${rangeLabel})*`, '');
+  if (ts) {
+    lines.push('*Funnel*');
+    lines.push(`• Reminders sent: ${ts.remindersTotal}`);
+    lines.push(`• Replies confirmed: ${ts.repliesConfirmed}`);
+    lines.push(`• Paid after follow-up: ${ts.paidAfterFollowUp}`);
+    lines.push('');
+    lines.push('*Current state*');
+    lines.push(`• Drafts pending John: ${ts.draftPendingJohn}`);
+    lines.push(`• Sent / awaiting payment: ${ts.sentAwaiting}`);
+    lines.push(`• Partial payment: ${ts.partialPayment}`);
+    lines.push(`• Payment complete: ${ts.paymentComplete}`);
+    lines.push(`• Overdue: ${ts.overdue}`);
+    lines.push(`• Collections: ${ts.collections}`);
+    lines.push('');
+  }
+  if (aging && aging.total > 0) {
+    lines.push('*AR aging*');
+    aging.buckets.forEach((b) => { if (b.amount > 0) lines.push(`• ${b.label}: $${Math.round(b.amount).toLocaleString()} (${b.count})`); });
+    lines.push('');
+  }
+  if (ts && ts.actionItems.length) {
+    lines.push(`*Action queue (${ts.actionItems.length})*`);
+    ts.actionItems.slice(0, 8).forEach((a) => lines.push(`• ${a.invoice} ${a.client} — ${a.action}`));
+    if (ts.actionItems.length > 8) lines.push(`• …and ${ts.actionItems.length - 8} more`);
+    lines.push('');
+  }
+  if (n8n) {
+    lines.push('*Workflow health*');
+    lines.push(`• ${n8n.total} runs · ${n8n.success} success · ${n8n.failed} failed`);
+    if (n8n.failedNames.length) lines.push(`• Failed: ${n8n.failedNames.join(', ')}`);
+    if (n8n.stale.length) lines.push(`• Quiet: ${n8n.stale.join(', ')}`);
+    lines.push('');
+  }
+  if (d.caveats && d.caveats.length) {
+    lines.push('*Caveats*');
+    d.caveats.forEach((c) => lines.push(`• ${c}`));
+    lines.push('');
+  }
+  lines.push(`→ Tracker: https://docs.google.com/spreadsheets/d/${SHEET_ID}`);
+  return lines.join('\n');
+}
+
 function renderFunnelSvg(sent, replies, paid) {
   const items = [
     { label: 'Reminders sent', value: sent, color: '#60a5fa' },
@@ -646,16 +698,19 @@ function renderDashboard(d) {
     : '';
 
   const trackerUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}`;
-  const invoiceLink = (num) => `<a class="invoice-link" href="${trackerUrl}" target="_blank" rel="noopener">${num}</a>`;
+  const invoiceLink = (num, rowIdx) => {
+    const target = rowIdx ? `${trackerUrl}/edit?range=Invoices!A${rowIdx}` : trackerUrl;
+    return `<a class="invoice-link" href="${target}" target="_blank" rel="noopener">${num}</a>`;
+  };
 
   const actionRows = ts && ts.actionItems.length
-    ? ts.actionItems.map((a) => `<tr><td>${invoiceLink(a.invoice)}</td><td>${a.client}</td><td>${a.action}</td></tr>`).join('')
+    ? ts.actionItems.map((a) => `<tr><td>${invoiceLink(a.invoice, a.rowIndex)}</td><td>${a.client}</td><td>${a.action}</td></tr>`).join('')
     : '<tr><td colspan="3" class="empty">No action items</td></tr>';
 
   const followUpRows = d.nextFollowUps.length
     ? d.nextFollowUps.map((f) => `
         <tr class="${f.blocked ? 'blocked-row' : ''}">
-          <td>${invoiceLink(f.invoice)}</td>
+          <td>${invoiceLink(f.invoice, f.rowIndex)}</td>
           <td>${f.client}</td>
           <td>${f.daysUntilDue > 0 ? `+${f.daysUntilDue}d` : `${f.daysUntilDue}d`}</td>
           <td>${f.nextFollowUp}</td>
@@ -753,6 +808,11 @@ function renderDashboard(d) {
   .scope-line strong { color: #94a3b8; font-weight: 600; }
   .tracker-btn { background: linear-gradient(135deg, #16a34a, #0d9488); color: #fff; padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; border: none; transition: transform 120ms ease, box-shadow 120ms ease; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25); }
   .tracker-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(22, 163, 74, 0.4); text-decoration: none; }
+  .copy-btn { background: #1e293b; border: 1px solid #334155; color: #cbd5e1; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 120ms ease; }
+  .copy-btn:hover { background: #334155; border-color: #475569; color: #fff; }
+  .copy-btn.copied { background: #064e3b; border-color: #34d399; color: #34d399; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: #064e3b; border: 1px solid #34d399; color: #d1fae5; padding: 10px 20px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 200ms ease, transform 200ms ease; z-index: 100; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   /* invoice link inside tables */
   td a.invoice-link { color: #93c5fd; font-weight: 500; }
@@ -795,6 +855,7 @@ function renderDashboard(d) {
   <h1>Krave Ops Dashboard</h1>
   <div class="header-meta">
     <a class="tracker-btn" href="https://docs.google.com/spreadsheets/d/${SHEET_ID}" target="_blank" rel="noopener">📊 Open Tracker</a>
+    <button class="copy-btn" id="copy-btn" type="button">📋 Copy summary</button>
     <span class="range-toggle">${rangeToggle}</span>
     <span>${generatedTime} ICT</span>
     ${cacheNote}
@@ -929,6 +990,40 @@ function renderDashboard(d) {
     </div>
   </div>
 </main>
+
+<pre id="copy-text" hidden>${buildSlackSummary(d).replace(/</g, '&lt;')}</pre>
+<div class="toast" id="toast">Copied! Paste into Slack.</div>
+
+<script>
+(function () {
+  const btn = document.getElementById('copy-btn');
+  const src = document.getElementById('copy-text');
+  const toast = document.getElementById('toast');
+  if (!btn || !src) return;
+  btn.addEventListener('click', async () => {
+    const text = src.textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    btn.classList.add('copied');
+    btn.textContent = '✓ Copied';
+    toast.classList.add('show');
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.textContent = '📋 Copy summary';
+      toast.classList.remove('show');
+    }, 1800);
+  });
+})();
+</script>
+
 </body>
 </html>`;
 }
