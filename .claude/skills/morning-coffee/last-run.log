@@ -1,9 +1,0 @@
-﻿claude.cmd : Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect 
-stdin explicitly: < /dev/null to skip, or wait longer.
-At line:1 char:140
-+ ... claude-ea"; & "C:\Users\jopso\AppData\Roaming\npm\claude.cmd" -p "/mo ...
-+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (Warning: no std...or wait longer.:String) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommandError
- 
-Morning Coffee delivered to Noa's DM. Surfaced today's 2pm Krave Team Catch Up (overlaps deep work), Rahul's Care & Bloom invoice approval + retainer rescope ask, and the Little Saints overdue alert with a strategist-mapping data fix.

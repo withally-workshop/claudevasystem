@@ -9,3 +9,4 @@ projects/krave-ops-showcase/
 .playwright-mcp/
 .superpowers/
 reports/ops-report/
+.claude/skills/**/last-run.log
