@@ -31,7 +31,8 @@ const ALLOWLIST = new Set([
   'shin@kravemedia.co',
 ]);
 
-let cache = { data: null, ts: 0 };
+const RANGE_DAYS = { '24h': 1, '7d': 7, '30d': 30 };
+let cache = {}; // keyed by range
 
 // ---------------------------------------------------------------------------
 // Service account loader — supports JSON-in-env (Render) or file path (local)
@@ -346,16 +347,103 @@ function computeNextFollowUps(rows) {
   return results.slice(0, 10);
 }
 
+function computeAgingBuckets(rows) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const buckets = [
+    { label: 'Current', amount: 0, count: 0 },
+    { label: '1–30d overdue', amount: 0, count: 0 },
+    { label: '31–60d overdue', amount: 0, count: 0 },
+    { label: '61–90d overdue', amount: 0, count: 0 },
+    { label: '90+d overdue', amount: 0, count: 0 },
+  ];
+  for (const row of rows) {
+    const payStatus = (row['Payment Status'] || '').trim();
+    if (!['Sent', 'Awaiting Payment', 'Invoice Sent', 'Partial Payment'].includes(payStatus)) continue;
+    const amount = parseFloat((row['Amount'] || '0').replace(/[^0-9.]/g, '')) || 0;
+    const paid = parseFloat((row['Amount Paid'] || '0').replace(/[^0-9.]/g, '')) || 0;
+    const remaining = Math.max(0, amount - paid);
+    if (remaining <= 0) continue;
+    const dueStr = (row['Due Date'] || '').trim();
+    if (!dueStr) continue;
+    const due = new Date(dueStr);
+    if (isNaN(due)) continue;
+    const overdueDays = Math.floor((today - due) / 86400000);
+    let i;
+    if (overdueDays <= 0) i = 0;
+    else if (overdueDays <= 30) i = 1;
+    else if (overdueDays <= 60) i = 2;
+    else if (overdueDays <= 90) i = 3;
+    else i = 4;
+    buckets[i].amount += remaining;
+    buckets[i].count += 1;
+  }
+  const total = buckets.reduce((s, b) => s + b.amount, 0);
+  return { buckets, total };
+}
+
+function computeStatusDonut(rows) {
+  const counts = { Draft: 0, Sent: 0, Partial: 0, Paid: 0, Overdue: 0, Collections: 0 };
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  for (const row of rows) {
+    if (!(row['Invoice #'] || '').trim()) continue;
+    const payStatus = (row['Payment Status'] || '').trim();
+    if (payStatus === 'Collections') counts.Collections++;
+    else if (payStatus === 'Partial Payment') counts.Partial++;
+    else if (payStatus.startsWith('Draft')) counts.Draft++;
+    else if (payStatus === 'Payment Complete' || payStatus === 'Paid') counts.Paid++;
+    else if (['Sent', 'Awaiting Payment', 'Invoice Sent'].includes(payStatus)) {
+      const dueStr = (row['Due Date'] || '').trim();
+      const due = dueStr ? new Date(dueStr) : null;
+      if (due && !isNaN(due) && due < today) counts.Overdue++;
+      else counts.Sent++;
+    }
+  }
+  return counts;
+}
+
+function computeWorkflowSparklines(executions, workflows, days) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const ms = 86400000;
+  const dayKeys = [];
+  for (let i = days - 1; i >= 0; i--) {
+    dayKeys.push(new Date(today.getTime() - i * ms).toISOString().slice(0, 10));
+  }
+  const dayIndex = new Map(dayKeys.map((k, i) => [k, i]));
+  const byWorkflow = {};
+  const nameById = {};
+  for (const wf of workflows) nameById[wf.id] = wf.name;
+  for (const e of executions) {
+    const startedAt = e.startedAt || e.stoppedAt;
+    if (!startedAt) continue;
+    const k = new Date(startedAt).toISOString().slice(0, 10);
+    if (!dayIndex.has(k)) continue;
+    const name = e.workflowData?.name || nameById[e.workflowId] || 'unknown';
+    if (!byWorkflow[name]) {
+      byWorkflow[name] = { name, runs: dayKeys.map(() => 0), fails: dayKeys.map(() => 0), total: 0, failed: 0 };
+    }
+    const idx = dayIndex.get(k);
+    byWorkflow[name].runs[idx]++;
+    byWorkflow[name].total++;
+    if (e.status === 'error' || e.status === 'crashed') {
+      byWorkflow[name].fails[idx]++;
+      byWorkflow[name].failed++;
+    }
+  }
+  return Object.values(byWorkflow).sort((a, b) => b.total - a.total);
+}
+
 // ---------------------------------------------------------------------------
 // Gather all data
 // ---------------------------------------------------------------------------
 
-async function gatherData(forceRefresh = false) {
-  if (!forceRefresh && cache.data && Date.now() - cache.ts < CACHE_TTL_MS) {
-    return { ...cache.data, cached: true, cacheAge: Math.round((Date.now() - cache.ts) / 1000) };
+async function gatherData(range = '7d', forceRefresh = false) {
+  const days = RANGE_DAYS[range] || 7;
+  const cached = cache[range];
+  if (!forceRefresh && cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return { ...cached.data, cached: true, cacheAge: Math.round((Date.now() - cached.ts) / 1000) };
   }
 
-  const rangeMs = 7 * 24 * 60 * 60 * 1000; // week-to-date default
+  const rangeMs = days * 86400000;
   const [n8nRaw, sheetsRaw, paymentsRaw, draftsRaw] = await Promise.all([
     fetchN8n(),
     fetchSheets(),
@@ -366,6 +454,9 @@ async function gatherData(forceRefresh = false) {
   const trackerStats = sheetsRaw.ok ? computeTrackerStats(sheetsRaw.rows) : null;
   const n8nStats = n8nRaw.ok ? computeN8nStats(n8nRaw.executions, n8nRaw.workflows, rangeMs) : null;
   const nextFollowUps = sheetsRaw.ok ? computeNextFollowUps(sheetsRaw.rows) : [];
+  const aging = sheetsRaw.ok ? computeAgingBuckets(sheetsRaw.rows) : null;
+  const donut = sheetsRaw.ok ? computeStatusDonut(sheetsRaw.rows) : null;
+  const sparklines = n8nRaw.ok ? computeWorkflowSparklines(n8nRaw.executions, n8nRaw.workflows, Math.min(days, 14)) : [];
 
   const caveats = [];
   if (!n8nRaw.ok) caveats.push(`n8n execution history unavailable: ${n8nRaw.reason}`);
@@ -375,17 +466,21 @@ async function gatherData(forceRefresh = false) {
 
   const data = {
     generatedAt: new Date().toISOString(),
+    range, days,
     caveats,
     trackerStats,
     n8nStats,
     nextFollowUps,
+    aging,
+    donut,
+    sparklines,
     slackPaymentsCount: paymentsRaw.ok ? paymentsRaw.messages.length : null,
     slackDraftsCount: draftsRaw.ok ? draftsRaw.messages.length : null,
     cached: false,
     cacheAge: 0,
   };
 
-  cache = { data, ts: Date.now() };
+  cache[range] = { data, ts: Date.now() };
   return data;
 }
 
@@ -405,6 +500,110 @@ function scorecard(label, value, sub = '') {
 
 function statusDot(ok) {
   return ok ? '<span class="dot dot-ok">●</span>' : '<span class="dot dot-fail">●</span>';
+}
+
+function renderFunnelSvg(sent, replies, paid) {
+  const items = [
+    { label: 'Reminders sent', value: sent, color: '#60a5fa' },
+    { label: 'Replies confirmed', value: replies, color: '#fbbf24' },
+    { label: 'Paid after follow-up', value: paid, color: '#34d399' },
+  ];
+  const max = Math.max(sent, replies, paid, 1);
+  const w = 600, barH = 36, gap = 16, labelW = 180;
+  const h = items.length * (barH + gap);
+  let svg = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMin meet" style="width:100%;height:auto;max-width:${w}px;">`;
+  items.forEach((it, i) => {
+    const y = i * (barH + gap);
+    const barW = ((w - labelW - 60) * it.value) / max;
+    svg += `<text x="0" y="${y + 22}" fill="#94a3b8" font-size="13">${it.label}</text>`;
+    svg += `<rect x="${labelW}" y="${y}" width="${Math.max(2, barW)}" height="${barH}" rx="4" fill="${it.color}" opacity="0.85"/>`;
+    svg += `<text x="${labelW + Math.max(2, barW) + 10}" y="${y + 22}" fill="#f1f5f9" font-size="14" font-weight="600">${it.value}</text>`;
+  });
+  return svg + '</svg>';
+}
+
+function renderAgingSvg(aging) {
+  if (!aging || aging.total === 0) return '<div class="empty" style="padding:20px">No outstanding amounts</div>';
+  const colors = ['#34d399', '#fbbf24', '#fb923c', '#f87171', '#dc2626'];
+  const w = 600, barH = 28;
+  let svg = `<svg viewBox="0 0 ${w} ${barH + 90}" style="width:100%;height:auto;">`;
+  let x = 0;
+  aging.buckets.forEach((b, i) => {
+    const segW = (b.amount / aging.total) * w;
+    if (segW > 0) {
+      svg += `<rect x="${x}" y="0" width="${segW}" height="${barH}" fill="${colors[i]}" opacity="0.9"/>`;
+      if (segW > 60) svg += `<text x="${x + segW / 2}" y="${barH / 2 + 4}" fill="#0f1117" font-size="12" font-weight="600" text-anchor="middle">$${Math.round(b.amount).toLocaleString()}</text>`;
+    }
+    x += segW;
+  });
+  aging.buckets.forEach((b, i) => {
+    const col = i % 3;
+    const rowI = Math.floor(i / 3);
+    const cx = col * (w / 3);
+    const cy = barH + 24 + rowI * 22;
+    svg += `<rect x="${cx}" y="${cy - 10}" width="10" height="10" fill="${colors[i]}"/>`;
+    svg += `<text x="${cx + 16}" y="${cy}" fill="#94a3b8" font-size="11">${b.label}: $${Math.round(b.amount).toLocaleString()} (${b.count})</text>`;
+  });
+  return svg + '</svg>';
+}
+
+function renderDonutSvg(counts) {
+  const items = [
+    { label: 'Draft', value: counts.Draft, color: '#94a3b8' },
+    { label: 'Sent', value: counts.Sent, color: '#60a5fa' },
+    { label: 'Partial', value: counts.Partial, color: '#a78bfa' },
+    { label: 'Paid', value: counts.Paid, color: '#34d399' },
+    { label: 'Overdue', value: counts.Overdue, color: '#fb923c' },
+    { label: 'Collections', value: counts.Collections, color: '#dc2626' },
+  ];
+  const total = items.reduce((s, it) => s + it.value, 0);
+  if (total === 0) return '<div class="empty" style="padding:20px">No invoices</div>';
+  const cx = 100, cy = 100, r = 80, ri = 50;
+  let angle = -Math.PI / 2;
+  let svg = `<svg viewBox="0 0 400 200" style="width:100%;max-width:400px;height:auto;">`;
+  items.forEach((it) => {
+    if (it.value === 0) return;
+    const slice = (it.value / total) * Math.PI * 2;
+    const a2 = angle + slice;
+    const x1 = cx + r * Math.cos(angle), y1 = cy + r * Math.sin(angle);
+    const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+    const xi1 = cx + ri * Math.cos(angle), yi1 = cy + ri * Math.sin(angle);
+    const xi2 = cx + ri * Math.cos(a2), yi2 = cy + ri * Math.sin(a2);
+    const large = slice > Math.PI ? 1 : 0;
+    svg += `<path d="M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${xi2} ${yi2} A ${ri} ${ri} 0 ${large} 0 ${xi1} ${yi1} Z" fill="${it.color}" opacity="0.9"/>`;
+    angle = a2;
+  });
+  svg += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="#f1f5f9" font-size="22" font-weight="700">${total}</text>`;
+  svg += `<text x="${cx}" y="${cy + 14}" text-anchor="middle" fill="#64748b" font-size="11">invoices</text>`;
+  let ly = 16;
+  items.forEach((it) => {
+    if (it.value === 0) return;
+    svg += `<rect x="220" y="${ly}" width="10" height="10" fill="${it.color}"/>`;
+    svg += `<text x="236" y="${ly + 9}" fill="#cbd5e1" font-size="12">${it.label} (${it.value})</text>`;
+    ly += 20;
+  });
+  return svg + '</svg>';
+}
+
+function renderSparklineSvg(runs, fails) {
+  const w = 120, h = 32;
+  const max = Math.max(...runs, 1);
+  const stepX = runs.length > 1 ? w / (runs.length - 1) : 0;
+  let svg = `<svg viewBox="0 0 ${w} ${h}" style="width:${w}px;height:${h}px;">`;
+  let path = '';
+  runs.forEach((v, i) => {
+    const x = i * stepX;
+    const y = h - (v / max) * (h - 4) - 2;
+    path += (i === 0 ? 'M' : 'L') + ` ${x} ${y} `;
+  });
+  svg += `<path d="${path}" fill="none" stroke="#60a5fa" stroke-width="1.5"/>`;
+  fails.forEach((f, i) => {
+    if (f === 0) return;
+    const x = i * stepX;
+    const y = h - (runs[i] / max) * (h - 4) - 2;
+    svg += `<circle cx="${x}" cy="${y}" r="2.5" fill="#f87171"/>`;
+  });
+  return svg + '</svg>';
 }
 
 function renderDashboard(d) {
@@ -442,6 +641,23 @@ function renderDashboard(d) {
   const staleWfHtml = n8n && n8n.stale.length
     ? n8n.stale.map((n) => `<li>${n}</li>`).join('')
     : '<li class="empty">None</li>';
+
+  const sparkRows = (d.sparklines || []).length
+    ? d.sparklines.map((wf) => `
+        <tr>
+          <td>${wf.name}</td>
+          <td style="text-align:right">${wf.total}</td>
+          <td style="text-align:right;color:${wf.failed ? '#f87171' : '#475569'}">${wf.failed}</td>
+          <td>${renderSparklineSvg(wf.runs, wf.fails)}</td>
+        </tr>`).join('')
+    : '<tr><td colspan="4" class="empty">No executions in range</td></tr>';
+
+  const range = d.range || '7d';
+  const rangeLabel = { '24h': 'last 24 hours', '7d': 'last 7 days', '30d': 'last 30 days' }[range];
+  const rangeToggle = ['24h', '7d', '30d'].map((r) => {
+    const active = r === range ? ' active' : '';
+    return `<a class="range-btn${active}" href="?range=${r}">${r}</a>`;
+  }).join('');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -494,26 +710,63 @@ function renderDashboard(d) {
   .links a { font-size: 12px; padding: 5px 12px; border: 1px solid #334155; border-radius: 6px; color: #94a3b8; }
   .links a:hover { border-color: #60a5fa; color: #60a5fa; text-decoration: none; }
   .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 700px) { main { padding: 16px; } .cards { grid-template-columns: 1fr 1fr; } .health-row { flex-direction: column; } .stat-grid { grid-template-columns: 1fr; } }
+  .chart-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+  .chart-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 20px; }
+  .chart-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-bottom: 14px; }
+  .range-toggle { display: inline-flex; gap: 0; border: 1px solid #334155; border-radius: 6px; overflow: hidden; }
+  .range-btn { font-size: 12px; padding: 5px 12px; color: #94a3b8; background: transparent; border-right: 1px solid #334155; }
+  .range-btn:last-child { border-right: none; }
+  .range-btn:hover { color: #e2e8f0; text-decoration: none; }
+  .range-btn.active { background: #1e40af; color: #fff; }
+  .scope-line { font-size: 12px; color: #64748b; padding: 0 32px 12px; border-bottom: 1px solid #1e293b; }
+  .scope-line strong { color: #94a3b8; font-weight: 600; }
+  @media (max-width: 700px) { main { padding: 16px; } .cards { grid-template-columns: 1fr 1fr; } .health-row { flex-direction: column; } .stat-grid { grid-template-columns: 1fr; } .chart-row { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <div class="header">
   <h1>Krave Ops Dashboard</h1>
   <div class="header-meta">
+    <span class="range-toggle">${rangeToggle}</span>
     <span>${generatedTime} ICT</span>
     ${cacheNote}
     <form method="get" style="display:inline">
+      <input type="hidden" name="range" value="${range}">
       <button class="btn" name="refresh" value="1" type="submit">↻ Refresh</button>
     </form>
   </div>
+</div>
+
+<div class="scope-line">
+  <strong>Snapshot:</strong> invoice state at ${generatedTime} ICT &nbsp;·&nbsp;
+  <strong>Range:</strong> workflow stats and reminder activity over the ${rangeLabel}
 </div>
 
 <main>
   ${caveatHtml}
 
   <div class="section">
-    <div class="section-title">This Week — At a Glance</div>
+    <div class="chart-row">
+      <div class="chart-card">
+        <div class="chart-title">Reminder → Reply → Payment funnel (lifetime)</div>
+        ${ts ? renderFunnelSvg(ts.remindersTotal, ts.repliesConfirmed, ts.paidAfterFollowUp) : '<div class="empty">Tracker unavailable</div>'}
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Invoice status breakdown (current)</div>
+        ${d.donut ? renderDonutSvg(d.donut) : '<div class="empty">Tracker unavailable</div>'}
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="chart-card">
+      <div class="chart-title">AR aging — outstanding amounts by overdue bucket</div>
+      ${renderAgingSvg(d.aging)}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">At a Glance — current state &amp; ${rangeLabel}</div>
     <div class="cards">
       ${scorecard('Drafts Pending', ts ? ts.draftPendingJohn : null, 'Awaiting John')}
       ${scorecard('Sent / Awaiting', ts ? ts.sentAwaiting : null, arStr)}
@@ -556,6 +809,14 @@ function renderDashboard(d) {
         <ul>${staleWfHtml}</ul>
       </div>
     </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Workflow runs — last ${Math.min(d.days || 7, 14)} days</div>
+    <table>
+      <thead><tr><th>Workflow</th><th style="text-align:right">Runs</th><th style="text-align:right">Failed</th><th>Trend (red dot = failure)</th></tr></thead>
+      <tbody>${sparkRows}</tbody>
+    </table>
   </div>
 
   <div class="section">
@@ -737,9 +998,11 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  const forceRefresh = req.url.includes('refresh=1');
+  const url = new URL(req.url, baseUrl(req));
+  const forceRefresh = url.searchParams.get('refresh') === '1';
+  const range = RANGE_DAYS[url.searchParams.get('range')] ? url.searchParams.get('range') : '7d';
   try {
-    const data = await gatherData(forceRefresh);
+    const data = await gatherData(range, forceRefresh);
     const html = renderDashboard(data);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html);
