@@ -645,14 +645,17 @@ function renderDashboard(d) {
     ? `<div class="caveats"><strong>Source caveats:</strong><ul>${d.caveats.map((c) => `<li>${c}</li>`).join('')}</ul></div>`
     : '';
 
+  const trackerUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}`;
+  const invoiceLink = (num) => `<a class="invoice-link" href="${trackerUrl}" target="_blank" rel="noopener">${num}</a>`;
+
   const actionRows = ts && ts.actionItems.length
-    ? ts.actionItems.map((a) => `<tr><td>${a.invoice}</td><td>${a.client}</td><td>${a.action}</td></tr>`).join('')
+    ? ts.actionItems.map((a) => `<tr><td>${invoiceLink(a.invoice)}</td><td>${a.client}</td><td>${a.action}</td></tr>`).join('')
     : '<tr><td colspan="3" class="empty">No action items</td></tr>';
 
   const followUpRows = d.nextFollowUps.length
     ? d.nextFollowUps.map((f) => `
         <tr class="${f.blocked ? 'blocked-row' : ''}">
-          <td>${f.invoice}</td>
+          <td>${invoiceLink(f.invoice)}</td>
           <td>${f.client}</td>
           <td>${f.daysUntilDue > 0 ? `+${f.daysUntilDue}d` : `${f.daysUntilDue}d`}</td>
           <td>${f.nextFollowUp}</td>
@@ -748,6 +751,42 @@ function renderDashboard(d) {
   .range-btn.active { background: #1e40af; color: #fff; }
   .scope-line { font-size: 12px; color: #64748b; padding: 0 32px 12px; border-bottom: 1px solid #1e293b; }
   .scope-line strong { color: #94a3b8; font-weight: 600; }
+  .tracker-btn { background: linear-gradient(135deg, #16a34a, #0d9488); color: #fff; padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; border: none; transition: transform 120ms ease, box-shadow 120ms ease; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25); }
+  .tracker-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(22, 163, 74, 0.4); text-decoration: none; }
+
+  /* invoice link inside tables */
+  td a.invoice-link { color: #93c5fd; font-weight: 500; }
+  td a.invoice-link:hover { color: #60a5fa; }
+
+  /* staggered fade-in for sections */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .section { animation: fadeUp 380ms ease both; }
+  .section:nth-child(1) { animation-delay: 0ms; }
+  .section:nth-child(2) { animation-delay: 60ms; }
+  .section:nth-child(3) { animation-delay: 120ms; }
+  .section:nth-child(4) { animation-delay: 180ms; }
+  .section:nth-child(5) { animation-delay: 240ms; }
+  .section:nth-child(6) { animation-delay: 300ms; }
+  .section:nth-child(7) { animation-delay: 360ms; }
+
+  /* hover lift on cards */
+  .card, .chart-card, .health-col { transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease; }
+  .card:hover, .chart-card:hover, .health-col:hover { transform: translateY(-2px); border-color: #475569; box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+
+  /* bar grow animation for funnel + aging */
+  @keyframes barGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  svg rect { transform-origin: left center; animation: barGrow 700ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  svg path { animation: fadeUp 600ms ease both; }
+  svg circle { animation: fadeUp 800ms ease both; animation-delay: 400ms; }
+
+  /* pulsing live dot */
+  @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.4); } }
+  .cache-note.fresh::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #34d399; margin-right: 6px; vertical-align: middle; animation: pulse 1.8s ease-in-out infinite; }
+
+  /* count-up effect via opacity sweep */
+  @keyframes countIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .card-value strong { display: inline-block; animation: countIn 500ms ease both; animation-delay: 200ms; }
+
   @media (max-width: 700px) { main { padding: 16px; } .cards { grid-template-columns: 1fr 1fr; } .health-row { flex-direction: column; } .stat-grid { grid-template-columns: 1fr; } .chart-row { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -755,6 +794,7 @@ function renderDashboard(d) {
 <div class="header">
   <h1>Krave Ops Dashboard</h1>
   <div class="header-meta">
+    <a class="tracker-btn" href="https://docs.google.com/spreadsheets/d/${SHEET_ID}" target="_blank" rel="noopener">📊 Open Tracker</a>
     <span class="range-toggle">${rangeToggle}</span>
     <span>${generatedTime} ICT</span>
     ${cacheNote}
