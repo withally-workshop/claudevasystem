@@ -34,6 +34,19 @@ const ALLOWLIST = new Set([
 const RANGE_DAYS = { '24h': 1, '7d': 7, '30d': 30 };
 let cache = {}; // keyed by range
 
+// Canonical Krave/Claude EA workflow IDs from n8n-workflows/WORKFLOWS.md.
+// All other workflows in the n8n workspace are filtered out of dashboard stats.
+const KRAVE_WORKFLOW_IDS = new Set([
+  'NurOLZkg3J6rur5Q', // Payment Detection
+  'Q3IqqLvmX9H49NdE', // Invoice Reminder Cron
+  'omNFmRcDeiByLOzS', // Invoice Reminder Reply Detection
+  '3YyEjk1e6oZV786T', // Inbox Triage Daily
+  't7MMhlUo5H4HQmgL', // Slack Invoice Handler
+  '5XHxhQ7wB2rxE3qz', // Invoice Request Intake
+  'uCS9lzHtVKWlqYlk', // Invoice Approval Polling
+  'WX1hHek0cNTyZXkS', // Weekly Invoice Summary
+]);
+
 // ---------------------------------------------------------------------------
 // Service account loader — supports JSON-in-env (Render) or file path (local)
 // ---------------------------------------------------------------------------
@@ -103,10 +116,12 @@ async function fetchN8n() {
       get(`${N8N_BASE}/api/v1/executions?limit=200`, { 'X-N8N-API-KEY': key }),
       get(`${N8N_BASE}/api/v1/workflows?limit=100`, { 'X-N8N-API-KEY': key }),
     ]);
+    const allExecutions = exRes.ok ? (exRes.body.data || []) : [];
+    const allWorkflows = wfRes.ok ? (wfRes.body.data || []) : [];
     return {
       ok: exRes.ok && wfRes.ok,
-      executions: exRes.ok ? (exRes.body.data || []) : [],
-      workflows: wfRes.ok ? (wfRes.body.data || []) : [],
+      executions: allExecutions.filter((e) => KRAVE_WORKFLOW_IDS.has(e.workflowId)),
+      workflows: allWorkflows.filter((w) => KRAVE_WORKFLOW_IDS.has(w.id)),
       reason: (!exRes.ok || !wfRes.ok) ? `n8n API returned ${exRes.status}/${wfRes.status}` : null,
     };
   } catch (e) {
@@ -265,11 +280,24 @@ function computeTrackerStats(rows) {
     if (!email && payStatus !== 'Payment Complete') stats.missingEmail++;
     if (!invoiceUrl && (payStatus === 'Sent' || payStatus === 'Invoice Sent')) stats.missingInvoiceUrl++;
 
-    // Action items
+    // Action items — categories ordered by priority
+    const client = (row['Client Name'] || '').trim();
+    const dueDate = dueStr ? new Date(dueStr) : null;
+    const overdueDays = (dueDate && !isNaN(dueDate)) ? Math.floor((today - dueDate) / 86400000) : null;
+    const dateCreatedStr = (row['Date Created'] || '').trim();
+    const dateCreated = dateCreatedStr ? new Date(dateCreatedStr) : null;
+    const draftAgeDays = (dateCreated && !isNaN(dateCreated)) ? Math.floor((today - dateCreated) / 86400000) : null;
+
     if (payStatus === 'Collections') {
-      stats.actionItems.push({ invoice: invoiceNum, client: row['Client Name'] || '', action: 'Collections — manual escalation needed' });
-    } else if (payStatus === 'Needs Human') {
-      stats.actionItems.push({ invoice: invoiceNum, client: row['Client Name'] || '', action: 'Reply needs human review' });
+      stats.actionItems.push({ invoice: invoiceNum, client, action: 'Collections — manual escalation needed' });
+    } else if (replyStatus === 'Needs Human' || replyStatus === 'Question/Dispute') {
+      stats.actionItems.push({ invoice: invoiceNum, client, action: `Client reply needs human review (${replyStatus})` });
+    } else if (overdueDays !== null && overdueDays > 60 && ['Sent', 'Awaiting Payment', 'Invoice Sent'].includes(payStatus)) {
+      stats.actionItems.push({ invoice: invoiceNum, client, action: `${overdueDays}d overdue — past late-fee window, consider escalation` });
+    } else if (payStatus === 'Partial Payment' && overdueDays !== null && overdueDays > 14) {
+      stats.actionItems.push({ invoice: invoiceNum, client, action: `Partial payment, ${overdueDays}d overdue — chase remaining balance` });
+    } else if (payStatus.startsWith('Draft') && draftAgeDays !== null && draftAgeDays > 3) {
+      stats.actionItems.push({ invoice: invoiceNum, client, action: `Draft pending John for ${draftAgeDays} days` });
     } else if (!email && payStatus !== 'Payment Complete' && payStatus !== '') {
       stats.actionItems.push({ invoice: invoiceNum, client: row['Client Name'] || '', action: 'Missing client email — reminders blocked' });
     }
