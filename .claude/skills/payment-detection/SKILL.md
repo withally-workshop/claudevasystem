@@ -83,18 +83,26 @@ Filter for rows where Column N (Status) is `Unpaid`, `Overdue`, or blank, and Co
 
 Build a lookup map: `{ invoice_number: row, amount: row, client_name: row }`
 
-### Step 3 — Match Deposits to Invoices (STRICT — May 2026)
+### Step 3 — Match Deposits to Invoices (STRICT — May 2026, hardened through v5.1)
 
-For each deposit email, the matcher requires either an explicit invoice number OR all three of: amount + currency + client-name fuzzy match. **Amount-only matching is no longer supported** — the previous fallback caused a wrong-invoice mark in May 2026. See WORKFLOWS.md "Hardening Notes" for the incident postmortem.
+The matcher runs in this order:
 
-**Match priority:**
+**Tier 0 — Pre-checks (silent skip):**
+- **Depositor denylist** (parse stage) — `STRIPE PAYMENTS`, `SHOPIFY`, `PAYPAL HOLDINGS`, `GUSTO` deposits silently skipped (Krave's own Shopify/Stripe payouts, not client invoice payments)
+- **Already-reconciled check** — if the deposit's client + amount + currency matches a tracker row already in `Payment Complete`, silently dedup. Same for invoice-number matches against paid rows. Prevents Needs Review noise from late-arriving Airwallex notifications of payments we manually reconciled.
+- **EmailId idempotency** — every processed email is added to `staticData.processedEmailIds` (last 500); re-runs skip already-seen.
+- **Body keyword filter** — emails containing "shopify" silently skipped.
 
-1. **Invoice number match** (`high`) — extract `INV-XXX` from subject + body, find exact Col E match among open rows. For forwarded emails, additionally require client-name fuzzy match if both depositor and tracker client name present.
-2. **Forwarded receipts with no parseable amount** (`high-tracker-amount`) — when an invoice number matches but body has no amount (e.g., John forwarded a screenshot), use the tracker's invoice amount.
-3. **Airwallex deposit emails — amount + currency + client-name** (`medium-client`) — token-based fuzzy match drops corporate suffixes (LLC, LTD, INC, PTE, PTY, etc.).
-4. **Anything else** → route to `Slack Needs Review` with parsed signals — never silently drop, never auto-write.
+**Tier 1 — Invoice number match (`high`):**
+Extract `INV-XXX` (must have dash prefix) from subject + body. Find exact Col E match among open rows. For forwarded emails, additionally require client-name fuzzy match if both depositor and tracker client name present.
 
-**Idempotency:** every processed `emailId` is added to `staticData.processedEmailIds` (last 500). Re-runs skip already-seen emails.
+**Tier 1b — Forwarded receipts with no parseable amount (`high-tracker-amount`):**
+When an invoice number matches but body has no amount (e.g., John forwarded a screenshot), use the tracker's invoice amount.
+
+**Tier 2 — Airwallex deposit emails: amount + currency + client-name (`medium-client`):**
+Token-based fuzzy match drops corporate suffixes (LLC, LTD, INC, PTE, PTY, etc.). Forwarded receipts skip this tier — they must hit Tier 1.
+
+**No amount-only fallback.** If none of the above tiers produce a high-confidence match → route to `Slack Needs Review` with parsed signals. Never silently drop, never auto-write.
 
 ### Step 4 — Determine Full vs Partial Payment
 After matching, compare the received amount to the invoice amount:

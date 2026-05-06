@@ -2,21 +2,32 @@
 // !!! STALE — DO NOT RE-RUN WITHOUT UPDATING FIRST !!!
 //
 // This script was the original deploy-from-scratch source for the
-// Krave Payment Detection workflow. After the May 2026 incident
-// (see WORKFLOWS.md "Hardening Notes"), the live workflow was
-// surgically patched in place via the n8n REST API:
+// Krave Payment Detection workflow. After the May 2026 WELLE incident,
+// the live workflow was hardened in place via the n8n REST API
+// across multiple patches (v4, v5, v5.1):
 //
-//   - Removed:  Airwallex Auth, Airwallex Mark Paid nodes
-//   - Added:    Needs Review? (If), Slack Needs Review (Slack)
-//   - Updated:  Claim Window, Parse All Emails, Match Deposits To
-//               Invoices, Poll Airwallex Invoices code nodes
+//   - REMOVED:  Airwallex Auth, Airwallex Mark Paid nodes
+//               (no auto-mutation of external Airwallex state)
+//   - ADDED:    Needs Review? (If), Slack Needs Review (Slack)
+//   - STRICT MATCHING: invoice# OR (amount+currency+clientName fuzzy);
+//               no amount-only fallback
+//   - IDEMPOTENCY: processedEmailIds (last 500) in workflow staticData
+//   - ALREADY-RECONCILED CHECK: deposits matching paid tracker rows
+//               silently dedup instead of routing to Needs Review
+//   - DEPOSITOR DENYLIST: STRIPE PAYMENTS, SHOPIFY, PAYPAL HOLDINGS,
+//               GUSTO silently skipped at parse stage
+//   - PARSER FIX: msg.Subject/msg.From fallbacks in Gmail simple mode
+//   - FORWARDED RECEIPT SUPPORT: from:john@kravemedia.co with strict
+//               to:noa filter and reminder-phrase exclusions
+//   - INV REGEX: requires INV- dash prefix (no bare "INVOICE" matches)
 //
-// Re-running this script as-is would OVERWRITE the v4 hardened
-// workflow with the old vulnerable topology. If you need to redeploy
-// from scratch, first port the current live state (export from n8n
-// or fetch via GET /api/v1/workflows/{id}) into this script.
+// Re-running this script as-is would OVERWRITE the hardened workflow
+// with the old vulnerable topology. If you need to redeploy from
+// scratch, first port the current live state (GET /api/v1/workflows/{id})
+// into this script.
 //
 // Live workflow ID: NurOLZkg3J6rur5Q
+// Authoritative reference: n8n-workflows/WORKFLOWS.md "Workflow 1"
 // =====================================================================
 
 const https = require('https');

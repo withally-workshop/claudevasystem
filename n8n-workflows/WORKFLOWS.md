@@ -165,14 +165,23 @@ Detects client payments and updates the tracker. Runs two detection paths in par
 7. **Cross-run idempotency** — every processed `emailId` is added to `staticData.processedEmailIds` (last 500). Re-runs skip already-seen emails even if `lastRunTs` has been reset.
 8. **Time-windowing** — Gmail query uses `after:{lastRunTs}` since last run. First run falls back to `newer_than:1d`.
 
-### Hardening Notes (May 2026 incident → v4)
+### Hardening Notes (May 2026 incident → v4 → v5.1)
 
-In May 2026 the matcher's amount-only fallback wrongly assigned a Little Saints deposit to WELLE PTY LTD (both happened to have $4,600 USD invoices open at the same time) and the workflow then auto-mark-paid WELLE in Airwallex via API. Airwallex has **no unpay endpoint** — the only fix was a credit-note-and-replace process. Three structural changes followed:
+In May 2026 the matcher's amount-only fallback wrongly assigned a Little Saints deposit to WELLE PTY LTD (both happened to have $4,600 USD invoices open at the same time) and the workflow then auto-mark-paid WELLE in Airwallex via API. Airwallex has **no unpay endpoint** — the only fix was a credit-note-and-replace process. The hardening rolled out in three patches:
 
+**v4 (initial response):**
 1. **Removed** the `Airwallex Auth` and `Airwallex Mark Paid` HTTP nodes. The workflow no longer mutates Airwallex state; tracker is the only source of truth that the automation writes to. Airwallex side is reconciled manually when needed.
 2. **Strict matching** — amount-only fallback is gone. Required signals listed in Tier 1–3 above. Corner cases route to `Slack Needs Review`.
-3. **Idempotency via emailId dedup** — prevents re-processing if `lastRunTs` is reset.
+3. **Idempotency via emailId dedup** — `processedEmailIds` (last 500) in workflow staticData; prevents re-processing if `lastRunTs` is reset.
 4. **Forwarded-email filter** in Claim Window now includes a payment-keyword whitelist AND requires `to:noa@kravemedia.co` (skips reminder CCs) AND explicitly excludes `subject:reminder`, `subject:"following up"`, `subject:"due today"`, `subject:overdue`.
+
+**v5 (system awareness):**
+5. **Already-reconciled check** — before routing to Needs Review, the matcher checks if the deposit matches any tracker row already marked `Payment Complete` (by client + amount + currency, or by invoice number). If yes, silently dedup. This prevents Needs Review noise for late-arriving deposit notifications of payments we've already manually reconciled.
+6. **Depositor denylist** — silent skip at parse stage for known non-client payment processors: `STRIPE PAYMENTS`, `SHOPIFY`, `PAYPAL HOLDINGS`, `GUSTO` (Krave's own Shopify/Stripe payouts).
+7. **INV regex tightened** — requires `INV-` dash prefix; no longer matches the bare word "INVOICE" from email body text.
+
+**v5.1 (parser fix):**
+8. **Subject/From fallbacks** — Parse All Emails now reads `msg.Subject` and `msg.From` as fallbacks for Gmail simple-mode responses (not just `msg.payload.headers`). Previously, Subject extraction silently fell back to `msg.snippet` which sometimes misses the real subject (e.g., short forwards where subject IS the invoice number but body has different text).
 
 ### Partial Payment Detection
 
