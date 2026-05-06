@@ -165,23 +165,44 @@ async function getServiceAccountToken() {
   return _sheetsTokenCache.token;
 }
 
+let _invoicesGid = null;
+
+async function fetchInvoicesGid() {
+  if (_invoicesGid !== null) return _invoicesGid;
+  try {
+    const token = await getServiceAccountToken();
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`;
+    const res = await get(url, { Authorization: `Bearer ${token}` });
+    if (!res.ok) return 0;
+    const sheets = res.body.sheets || [];
+    const inv = sheets.find((s) => s.properties && s.properties.title === 'Invoices');
+    _invoicesGid = inv ? inv.properties.sheetId : 0;
+    return _invoicesGid;
+  } catch {
+    return 0;
+  }
+}
+
 async function fetchSheets() {
-  if (!hasServiceAccount()) return { ok: false, reason: 'Google service account not configured (set GOOGLE_SERVICE_ACCOUNT_KEY_JSON or GOOGLE_SERVICE_ACCOUNT_KEY_FILE)', rows: [] };
+  if (!hasServiceAccount()) return { ok: false, reason: 'Google service account not configured (set GOOGLE_SERVICE_ACCOUNT_KEY_JSON or GOOGLE_SERVICE_ACCOUNT_KEY_FILE)', rows: [], gid: 0 };
   try {
     const token = await getServiceAccountToken();
     const range = encodeURIComponent('Invoices!A:Z');
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${range}`;
-    const res = await get(url, { Authorization: `Bearer ${token}` });
-    if (!res.ok) return { ok: false, reason: `Sheets API ${res.status}: ${JSON.stringify(res.body)}`, rows: [] };
-    const [headers, ...rows] = res.body.values || [];
+    const [valuesRes, gid] = await Promise.all([
+      get(url, { Authorization: `Bearer ${token}` }),
+      fetchInvoicesGid(),
+    ]);
+    if (!valuesRes.ok) return { ok: false, reason: `Sheets API ${valuesRes.status}: ${JSON.stringify(valuesRes.body)}`, rows: [], gid };
+    const [headers, ...rows] = valuesRes.body.values || [];
     const mapped = rows.map((r, i) => {
       const obj = { _rowIndex: i + 2 }; // +1 for 1-based, +1 for header row
       (headers || []).forEach((h, j) => { obj[h] = r[j] || ''; });
       return obj;
     });
-    return { ok: true, rows: mapped };
+    return { ok: true, rows: mapped, gid };
   } catch (e) {
-    return { ok: false, reason: e.message, rows: [] };
+    return { ok: false, reason: e.message, rows: [], gid: 0 };
   }
 }
 
@@ -506,6 +527,7 @@ async function gatherData(range = '7d', forceRefresh = false) {
     aging,
     donut,
     sparklines,
+    invoicesGid: sheetsRaw.gid || 0,
     slackPaymentsCount: paymentsRaw.ok ? paymentsRaw.messages.length : null,
     slackDraftsCount: draftsRaw.ok ? draftsRaw.messages.length : null,
     cached: false,
@@ -700,8 +722,11 @@ function renderDashboard(d) {
     : '';
 
   const trackerUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}`;
+  const invoicesGid = d.invoicesGid || 0;
   const invoiceLink = (num, rowIdx) => {
-    const target = rowIdx ? `${trackerUrl}/edit?range=Invoices!A${rowIdx}` : trackerUrl;
+    const target = rowIdx
+      ? `${trackerUrl}/edit#gid=${invoicesGid}&range=A${rowIdx}`
+      : trackerUrl;
     return `<a class="invoice-link" href="${target}" target="_blank" rel="noopener">${num}</a>`;
   };
 
