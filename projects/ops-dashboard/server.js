@@ -769,16 +769,17 @@ function renderDashboard(d) {
   }
   .bg-overlay {
     position: fixed; inset: 0;
-    background: linear-gradient(180deg, rgba(15,17,23,0.55) 0%, rgba(15,17,23,0.78) 45%, rgba(15,17,23,0.92) 100%);
+    background: linear-gradient(180deg, rgba(15,17,23,0.25) 0%, rgba(15,17,23,0.45) 45%, rgba(15,17,23,0.7) 100%);
     pointer-events: none; z-index: -1;
     transition: background 200ms ease;
   }
 
   /* Glass cards over the image */
-  .card, .chart-card, .health-col, table { background: rgba(30, 41, 59, 0.72) !important; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
-  th { background: rgba(22, 32, 50, 0.85) !important; }
-  .header { background: rgba(15, 17, 23, 0.55); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-  .scope-line { background: rgba(15, 17, 23, 0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .card, .chart-card, .health-col, table { background: rgba(30, 41, 59, 0.42) !important; backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); border-color: rgba(148, 163, 184, 0.18) !important; }
+  th { background: rgba(22, 32, 50, 0.55) !important; }
+  td { border-bottom-color: rgba(148, 163, 184, 0.1) !important; }
+  .header { background: rgba(15, 17, 23, 0.4); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+  .scope-line { background: rgba(15, 17, 23, 0.3); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
   a { color: #60a5fa; text-decoration: none; } a:hover { text-decoration: underline; }
   .header { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px 16px; border-bottom: 1px solid #1e293b; }
   .header h1 { font-size: 18px; font-weight: 600; color: #f8fafc; }
@@ -1032,7 +1033,7 @@ function renderDashboard(d) {
     const p = Math.min(1, Math.max(0, window.scrollY / max));
     const scale = 1 + p * 0.7; // 1.0 → 1.7 zoom
     if (bg) bg.style.transform = 'scale(' + scale.toFixed(3) + ')';
-    if (ov) ov.style.background = 'linear-gradient(180deg, rgba(15,17,23,' + (0.5 + p * 0.15).toFixed(2) + ') 0%, rgba(15,17,23,' + (0.75 + p * 0.15).toFixed(2) + ') 45%, rgba(15,17,23,' + (0.9 + p * 0.08).toFixed(2) + ') 100%)';
+    if (ov) ov.style.background = 'linear-gradient(180deg, rgba(15,17,23,' + (0.25 + p * 0.15).toFixed(2) + ') 0%, rgba(15,17,23,' + (0.45 + p * 0.2).toFixed(2) + ') 45%, rgba(15,17,23,' + (0.7 + p * 0.15).toFixed(2) + ') 100%)';
     ticking = false;
   }
   window.addEventListener('scroll', () => {
