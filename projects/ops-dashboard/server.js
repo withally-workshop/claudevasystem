@@ -818,26 +818,25 @@ function renderDashboard(d) {
   td a.invoice-link { color: #93c5fd; font-weight: 500; }
   td a.invoice-link:hover { color: #60a5fa; }
 
-  /* staggered fade-in for sections */
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-  .section { animation: fadeUp 380ms ease both; }
-  .section:nth-child(1) { animation-delay: 0ms; }
-  .section:nth-child(2) { animation-delay: 60ms; }
-  .section:nth-child(3) { animation-delay: 120ms; }
-  .section:nth-child(4) { animation-delay: 180ms; }
-  .section:nth-child(5) { animation-delay: 240ms; }
-  .section:nth-child(6) { animation-delay: 300ms; }
-  .section:nth-child(7) { animation-delay: 360ms; }
+  /* scroll-triggered reveal */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  .section { opacity: 0; transform: translateY(20px); transition: opacity 600ms ease, transform 600ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .section.in-view { opacity: 1; transform: translateY(0); }
 
   /* hover lift on cards */
   .card, .chart-card, .health-col { transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease; }
   .card:hover, .chart-card:hover, .health-col:hover { transform: translateY(-2px); border-color: #475569; box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
 
-  /* bar grow animation for funnel + aging */
+  /* chart animations only fire once the parent section enters view */
   @keyframes barGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-  svg rect { transform-origin: left center; animation: barGrow 700ms cubic-bezier(0.22, 1, 0.36, 1) both; }
-  svg path { animation: fadeUp 600ms ease both; }
-  svg circle { animation: fadeUp 800ms ease both; animation-delay: 400ms; }
+  .section svg rect { transform-origin: left center; transform: scaleX(0); }
+  .section.in-view svg rect { animation: barGrow 700ms cubic-bezier(0.22, 1, 0.36, 1) 200ms both; }
+  .section svg path { opacity: 0; }
+  .section.in-view svg path { animation: fadeUp 600ms ease 300ms both; }
+  .section svg circle { opacity: 0; }
+  .section.in-view svg circle { animation: fadeUp 600ms ease 700ms both; }
+  .section svg text { opacity: 0; }
+  .section.in-view svg text { animation: fadeUp 500ms ease 500ms both; }
 
   /* pulsing live dot */
   @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.4); } }
@@ -996,6 +995,22 @@ function renderDashboard(d) {
 
 <script>
 (function () {
+  // Scroll-triggered section reveal
+  const sections = document.querySelectorAll('.section');
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in-view');
+          io.unobserve(e.target);
+        }
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 });
+    sections.forEach((s) => io.observe(s));
+  } else {
+    sections.forEach((s) => s.classList.add('in-view'));
+  }
+
   const btn = document.getElementById('copy-btn');
   const src = document.getElementById('copy-text');
   const toast = document.getElementById('toast');
