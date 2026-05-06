@@ -806,7 +806,7 @@ function renderDashboard(d) {
   .header { background: rgba(15, 17, 23, 0.4); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
   .scope-line { background: rgba(15, 17, 23, 0.3); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
   a { color: #60a5fa; text-decoration: none; } a:hover { text-decoration: underline; }
-  .header { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px 16px; border-bottom: 1px solid #1e293b; }
+  .header { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px 16px; border-bottom: 1px solid #1e293b; max-width: 1400px; margin: 0 auto; }
   .header h1 { font-size: 18px; font-weight: 600; color: #f8fafc; }
   .header-meta { display: flex; align-items: center; gap: 16px; font-size: 12px; color: #64748b; }
   .btn { background: #1e40af; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
@@ -815,7 +815,7 @@ function renderDashboard(d) {
   .btn-ghost:hover { border-color: #475569; color: #e2e8f0; }
   .cache-note { font-size: 11px; padding: 3px 8px; border-radius: 4px; background: #1e293b; }
   .cache-note.fresh { color: #34d399; background: #064e3b22; }
-  main { padding: 24px 32px; max-width: 1400px; }
+  main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
   .section { margin-bottom: 32px; }
   .section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin-bottom: 12px; }
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
@@ -855,7 +855,7 @@ function renderDashboard(d) {
   .range-btn:last-child { border-right: none; }
   .range-btn:hover { color: #e2e8f0; text-decoration: none; }
   .range-btn.active { background: #1e40af; color: #fff; }
-  .scope-line { font-size: 12px; color: #64748b; padding: 0 32px 12px; border-bottom: 1px solid #1e293b; }
+  .scope-line { font-size: 12px; color: #64748b; padding: 0 32px 12px; border-bottom: 1px solid #1e293b; max-width: 1400px; margin: 0 auto; }
   .scope-line strong { color: #94a3b8; font-weight: 600; }
   .tracker-btn { background: linear-gradient(135deg, #16a34a, #0d9488); color: #fff; padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; border: none; transition: transform 120ms ease, box-shadow 120ms ease; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25); }
   .tracker-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(22, 163, 74, 0.4); text-decoration: none; }
