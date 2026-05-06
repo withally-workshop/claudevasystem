@@ -6,7 +6,9 @@
 
 **Manual invoke:** "EOD summary", "today's wrap-up", "/eod-triage-summary", or off-schedule testing.
 
-**Delivery account:** John's personal Slack OAuth — use `mcp__claude_ai_Slack__slack_send_message`, NOT `mcp__slack__slack_post_message` (bot token). Same pattern as SOD report.
+**Delivery accounts (split):**
+- **Noa's DM** → John's personal Slack OAuth via `mcp__claude_ai_Slack__slack_send_message` so it lands as a personal message from John.
+- **`#airwallexdrafts` archive** → bot token via `mcp__slack__slack_post_message` so the channel post is attributed to the bot, not John's personal account.
 
 ---
 
@@ -21,8 +23,9 @@ Post task updates to `#airwallexdrafts` throughout the day as things happen — 
 | Channel | ID | Used for |
 |---|---|---|
 | `#airwallexdrafts` | `C0AQZGJDR38` | **Primary** — John's daily task dump + bot invoice drafts + inbox triage reports |
-| `#ad-production-internal` | `C0AGEM919QV` | IM8 ad production updates, Frame.io status, blockers |
 | `#payments-invoices-updates` | `C09HN2EBPR7` | Invoice requests, payment confirmations |
+
+**Do NOT read IM8 channels** (e.g. `#ad-production-internal`). The IM8 engagement has ended — any IM8 content is out of scope and must not appear in the summary.
 
 **Today-only filter:** Discard any message before midnight today in Asia/Manila (UTC+8). Do not surface old content.
 
@@ -75,17 +78,21 @@ Use this exact template:
 Rules:
 - Bullets only. No paragraphs. No filler.
 - Flag time-sensitive items with `[URGENT]` or include deadline inline.
-- Group by business (Krave / IM8 / Halo Home / Skyvane) only if multi-business and grouping aids clarity.
+- Group by business (Krave / Halo Home / Skyvane) only if multi-business and grouping aids clarity. Do not include IM8 — engagement ended.
 - Omit any section with zero items.
 - Use `_italic_` for category headlines inside a bullet; `*bold*` for section titles only.
 - Use only the validated Slack inputs — do not invent tasks or deadlines.
 
-### Step 3 — Send via John's personal Slack
+### Step 3 — Send (split delivery)
 
-Post the same message to BOTH destinations using `mcp__claude_ai_Slack__slack_send_message`:
+Post the same message body to both destinations, but via different tools:
 
-1. **Noa's DM:** `channel_id: U06TBGX9L93`
-2. **#airwallexdrafts archive:** `channel_id: C0AQZGJDR38`
+1. **Noa's DM — from John (personal OAuth):**
+   - Tool: `mcp__claude_ai_Slack__slack_send_message`
+   - `channel_id: U06TBGX9L93`
+2. **`#airwallexdrafts` archive — from the bot:**
+   - Tool: `mcp__slack__slack_post_message`
+   - `channel_id: C0AQZGJDR38`
 
 **Critical formatting rules for the send:**
 - Do NOT append `*Sent using* Claude` or any attribution footer. Message must end exactly with the last bullet.
@@ -103,7 +110,7 @@ If there are zero actionable items across all four buckets, still send a short s
 Quiet day — no notable activity logged in the operating channels.
 ```
 
-Send to both destinations as in Step 3.
+Send to both destinations using the split delivery in Step 3 (Noa's DM via `mcp__claude_ai_Slack__slack_send_message`; `#airwallexdrafts` via `mcp__slack__slack_post_message`).
 
 ---
 
