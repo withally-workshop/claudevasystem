@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: krave-ops-dashboard
+    runtime: node
+    plan: free
+    rootDir: projects/ops-dashboard
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /auth/login
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: N8N_API_KEY
+        sync: false
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_KEY_JSON
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true

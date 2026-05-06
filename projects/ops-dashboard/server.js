@@ -34,6 +34,22 @@ const ALLOWLIST = new Set([
 let cache = { data: null, ts: 0 };
 
 // ---------------------------------------------------------------------------
+// Service account loader — supports JSON-in-env (Render) or file path (local)
+// ---------------------------------------------------------------------------
+
+function hasServiceAccount() {
+  return !!(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_JSON || process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE);
+}
+
+function loadServiceAccount() {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_JSON;
+  if (raw) return JSON.parse(raw);
+  const file = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE;
+  if (file) return JSON.parse(fs.readFileSync(file, 'utf8'));
+  throw new Error('Google service account not configured');
+}
+
+// ---------------------------------------------------------------------------
 // HTTP helpers
 // ---------------------------------------------------------------------------
 
@@ -106,10 +122,7 @@ async function getServiceAccountToken() {
     return _sheetsTokenCache.token;
   }
 
-  const keyFile = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE;
-  if (!keyFile) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY_FILE not set');
-
-  const sa = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
+  const sa = loadServiceAccount();
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     iss: sa.client_email,
@@ -135,8 +148,7 @@ async function getServiceAccountToken() {
 }
 
 async function fetchSheets() {
-  const keyFile = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE;
-  if (!keyFile) return { ok: false, reason: 'GOOGLE_SERVICE_ACCOUNT_KEY_FILE not set', rows: [] };
+  if (!hasServiceAccount()) return { ok: false, reason: 'Google service account not configured (set GOOGLE_SERVICE_ACCOUNT_KEY_JSON or GOOGLE_SERVICE_ACCOUNT_KEY_FILE)', rows: [] };
   try {
     const token = await getServiceAccountToken();
     const range = encodeURIComponent('Invoices!A:Z');
@@ -593,11 +605,137 @@ function renderDashboard(d) {
 }
 
 // ---------------------------------------------------------------------------
+// Auth — Google OAuth + signed cookie session, no external deps
+// ---------------------------------------------------------------------------
+
+const SESSION_COOKIE = 'kos_sess';
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12h
+const AUTH_DISABLED = process.env.DISABLE_AUTH === '1';
+
+function baseUrl(req) {
+  if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL;
+  if (process.env.BASE_URL) return process.env.BASE_URL;
+  const proto = req.headers['x-forwarded-proto'] || 'http';
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  return `${proto}://${host}`;
+}
+
+function sign(value) {
+  const secret = process.env.SESSION_SECRET || 'dev-only-not-for-prod';
+  return crypto.createHmac('sha256', secret).update(value).digest('base64url');
+}
+
+function makeSessionCookie(email) {
+  const exp = Date.now() + SESSION_TTL_MS;
+  const payload = `${email}|${exp}`;
+  const token = `${Buffer.from(payload).toString('base64url')}.${sign(payload)}`;
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL_MS / 1000}`;
+}
+
+function readSession(req) {
+  const cookieHeader = req.headers.cookie || '';
+  const match = cookieHeader.split(';').map((c) => c.trim()).find((c) => c.startsWith(`${SESSION_COOKIE}=`));
+  if (!match) return null;
+  const token = match.slice(SESSION_COOKIE.length + 1);
+  const [b64, sig] = token.split('.');
+  if (!b64 || !sig) return null;
+  let payload;
+  try { payload = Buffer.from(b64, 'base64url').toString('utf8'); } catch { return null; }
+  if (sign(payload) !== sig) return null;
+  const [email, expStr] = payload.split('|');
+  const exp = parseInt(expStr, 10);
+  if (!email || !exp || Date.now() > exp) return null;
+  if (!ALLOWLIST.has(email.toLowerCase())) return null;
+  return { email, exp };
+}
+
+function redirect(res, location, setCookie) {
+  const headers = { Location: location };
+  if (setCookie) headers['Set-Cookie'] = setCookie;
+  res.writeHead(302, headers);
+  res.end();
+}
+
+function htmlResponse(res, status, body) {
+  res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(body);
+}
+
+async function handleAuthLogin(req, res) {
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  if (!clientId) return htmlResponse(res, 500, 'GOOGLE_OAUTH_CLIENT_ID not set');
+  const url = new URL(req.url, baseUrl(req));
+  const next = url.searchParams.get('next') || '/';
+  const state = `${crypto.randomBytes(16).toString('hex')}|${Buffer.from(next).toString('base64url')}`;
+  const stateCookie = `kos_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`;
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: `${baseUrl(req)}/auth/callback`,
+    response_type: 'code',
+    scope: 'openid email',
+    state,
+    prompt: 'select_account',
+  });
+  redirect(res, `https://accounts.google.com/o/oauth2/v2/auth?${params}`, stateCookie);
+}
+
+async function handleAuthCallback(req, res) {
+  const url = new URL(req.url, baseUrl(req));
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  const cookieHeader = req.headers.cookie || '';
+  const stateCookie = cookieHeader.split(';').map((c) => c.trim()).find((c) => c.startsWith('kos_state='));
+  if (!code || !state || !stateCookie || stateCookie.slice(10) !== state) {
+    return htmlResponse(res, 400, 'Invalid auth state. <a href="/auth/login">Try again</a>');
+  }
+
+  const tokenRes = await post('https://oauth2.googleapis.com/token', new URLSearchParams({
+    code,
+    client_id: process.env.GOOGLE_OAUTH_CLIENT_ID,
+    client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+    redirect_uri: `${baseUrl(req)}/auth/callback`,
+    grant_type: 'authorization_code',
+  }).toString(), { 'Content-Type': 'application/x-www-form-urlencoded' });
+
+  if (!tokenRes.ok || !tokenRes.body.id_token) {
+    return htmlResponse(res, 502, 'Token exchange failed.');
+  }
+  const idPayload = JSON.parse(Buffer.from(tokenRes.body.id_token.split('.')[1], 'base64url').toString('utf8'));
+  const email = (idPayload.email || '').toLowerCase();
+  if (!email || !ALLOWLIST.has(email)) {
+    return htmlResponse(res, 403, `<p>Access denied for <code>${email || 'unknown'}</code>.</p><p>This dashboard is restricted to the Krave team. <a href="/auth/login">Try a different account</a>.</p>`);
+  }
+
+  const next = state.split('|')[1] ? Buffer.from(state.split('|')[1], 'base64url').toString('utf8') : '/';
+  redirect(res, next, makeSessionCookie(email));
+}
+
+function handleAuthLogout(_req, res) {
+  res.writeHead(302, {
+    Location: '/auth/login',
+    'Set-Cookie': `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+  });
+  res.end();
+}
+
+// ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
 
 const server = http.createServer(async (req, res) => {
   if (req.url === '/favicon.ico') { res.writeHead(204); res.end(); return; }
+
+  if (req.url.startsWith('/auth/login')) return handleAuthLogin(req, res);
+  if (req.url.startsWith('/auth/callback')) return handleAuthCallback(req, res);
+  if (req.url.startsWith('/auth/logout')) return handleAuthLogout(req, res);
+
+  if (!AUTH_DISABLED) {
+    const session = readSession(req);
+    if (!session) {
+      const next = encodeURIComponent(req.url || '/');
+      return redirect(res, `/auth/login?next=${next}`);
+    }
+  }
 
   const forceRefresh = req.url.includes('refresh=1');
   try {
@@ -611,7 +749,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Krave Ops Dashboard → http://localhost:${PORT}`);
-  console.log(`Env: N8N_API_KEY=${process.env.N8N_API_KEY ? 'set' : 'MISSING'} | GOOGLE_SERVICE_ACCOUNT_KEY_FILE=${process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE ? 'set' : 'MISSING'} | SLACK_BOT_TOKEN=${process.env.SLACK_BOT_TOKEN ? 'set' : 'MISSING'}`);
+const HOST = process.env.HOST || '0.0.0.0';
+server.listen(PORT, HOST, () => {
+  console.log(`Krave Ops Dashboard → http://${HOST}:${PORT}`);
+  console.log(`Env: N8N_API_KEY=${process.env.N8N_API_KEY ? 'set' : 'MISSING'} | GoogleSA=${hasServiceAccount() ? 'set' : 'MISSING'} | SLACK_BOT_TOKEN=${process.env.SLACK_BOT_TOKEN ? 'set' : 'MISSING'} | OAUTH=${process.env.GOOGLE_OAUTH_CLIENT_ID ? 'set' : 'MISSING'} | AUTH=${AUTH_DISABLED ? 'DISABLED' : 'enabled'}`);
 });

@@ -185,6 +185,45 @@ When useful, create a local HTML file under `reports/ops-report/` with a timesta
 
 Keep it self-contained: inline CSS, no external assets, no secrets. Lead with visibility scorecards that show invoice creation, invoice approval/finalization, follow-up response tracking, and payments after follow-up. Keep workflow health lower on the page as technical support, and keep source caveats at the bottom. Include a next-follow-ups table with last follow-up, next follow-up, late-fee/collections dates, and owner/action. Tell the user the local path after creating it.
 
+## Live Dashboard Publish
+
+After computing metrics (and any optional dashboard snapshot), refresh the public dashboard at https://krave-ops.netlify.app/ by writing `projects/krave-ops-showcase/data.json` and redeploying.
+
+Schema (omit fields whose source was unavailable; do not coerce missing data to `0`):
+
+```json
+{
+  "generated_at": "2026-05-06T13:00:00+07:00",
+  "range": "week-to-date",
+  "metrics": {
+    "outstanding_count": 12,
+    "outstanding_amount_usd": 18450,
+    "paid_in_range_count": 7,
+    "paid_in_range_amount_usd": 22400,
+    "overdue_count": 3,
+    "follow_ups_sent": 9,
+    "replies_confirmed": 4,
+    "paid_after_followup_count": 2
+  },
+  "workflow_health": {
+    "executions_total": 142,
+    "success": 138,
+    "failed": 4,
+    "failed_workflows": ["payment-detection"]
+  },
+  "caveats": []
+}
+```
+
+Redeploy:
+
+```powershell
+cd projects/krave-ops-showcase
+npx --yes netlify-cli@latest deploy --dir=. --prod
+```
+
+The folder is gitignored; `data.json` does not enter git. Skip the publish step (or write only `caveats`) if a required source failed and the snapshot would mislead. Intended cadence: every 4 hours via Windows Task Scheduler.
+
 ## Failure Rules
 
 - If all sources fail, stop and report the blockers.

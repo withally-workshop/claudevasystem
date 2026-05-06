@@ -231,6 +231,47 @@ Do not include secrets, API keys, raw private tokens, or unnecessary message dum
 
 ---
 
+## Step 6 - Publish live data to the showcase dashboard
+
+After Step 4 (and Step 5 if it ran), refresh the public dashboard at https://krave-ops.netlify.app/.
+
+Write the structured snapshot to `projects/krave-ops-showcase/data.json` using exactly this schema (omit fields whose source was unavailable rather than emitting `0`):
+
+```json
+{
+  "generated_at": "2026-05-06T13:00:00+07:00",
+  "range": "week-to-date",
+  "metrics": {
+    "outstanding_count": 12,
+    "outstanding_amount_usd": 18450,
+    "paid_in_range_count": 7,
+    "paid_in_range_amount_usd": 22400,
+    "overdue_count": 3,
+    "follow_ups_sent": 9,
+    "replies_confirmed": 4,
+    "paid_after_followup_count": 2
+  },
+  "workflow_health": {
+    "executions_total": 142,
+    "success": 138,
+    "failed": 4,
+    "failed_workflows": ["payment-detection"]
+  },
+  "caveats": []
+}
+```
+
+Then redeploy:
+
+```powershell
+cd projects/krave-ops-showcase
+npx --yes netlify-cli@latest deploy --dir=. --prod
+```
+
+The folder is gitignored, so `data.json` never enters git. Skip Step 6 if any required source failed and the snapshot would mislead — record the reason in `caveats` instead, or write nothing.
+
+This step is intended to run unattended on a 4-hour cadence via Windows Task Scheduler (same pattern as morning-coffee). Manual `/ops-report` runs may also publish.
+
 ## Failure Handling
 
 - If all sources fail, stop and report the blockers.
