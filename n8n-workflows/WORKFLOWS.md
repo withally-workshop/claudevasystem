@@ -105,7 +105,7 @@
 
 ### Purpose
 
-Replaces the manual daily task of checking whether clients have paid. Runs two detection paths in parallel: (1) scans `noa@kravemedia.co` for Airwallex deposit emails, and (2) polls the Airwallex invoice API directly — catching SWIFT bank-transfer payments that may not generate an email. Matches deposits to open invoices, handles partial payments (records amount paid, defers Airwallex mark-paid), marks full payments complete, and posts Slack alerts for all outcomes.
+Detects client payments and updates the tracker. Runs two detection paths in parallel: (1) scans `noa@kravemedia.co` for Airwallex deposit notifications + John's forwarded receipts, and (2) polls the Airwallex invoice API directly — catching SWIFT bank-transfer payments that may not generate an email. Matches deposits to open invoices using **strict client-name + amount/currency matching**, handles partial payments, and posts Slack alerts. **Does NOT mark invoices paid in Airwallex** (that step was removed in May 2026 after an incident — see Hardening Notes below).
 
 ### Triggers
 
@@ -114,83 +114,94 @@ Replaces the manual daily task of checking whether clients have paid. Runs two d
 | Schedule | `0 * * * *` - hourly |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-payment-detection` |
 
-### Node Flow
+### Node Flow (post-May-2026 hardening)
 
 ```text
 [Schedule / Webhook]
         |
-[Claim Window]              ← reads/writes lastRunTs; builds after:{ts} Gmail query
+[Claim Window]              ← lastRunTs; broader Gmail query (Airwallex + John forwards)
         |
    ┌────┴────────────────────────────┐
    │                                 │
-[Search Airwallex Emails]   [Get Invoice Tracker]      ← tracker lookup; never feeds Gmail
+[Search Airwallex Emails]   [Get Invoice Tracker]
    │                                 │
-[Parse All Emails]          [Poll Airwallex Invoices]  ← API poll: SWIFT/bank transfers
-   │                                 │
+[Parse All Emails]          [Poll Airwallex Invoices]
+   │  (extracts amount,              │  (uses this.helpers.httpRequest;
+   │   currency, INV#,                  parallel to Gmail)
+   │   depositor name, source)        │
    └────────────┬────────────────────┘
                 │
-   [Combine Payment Signals]         ← waits for both paths
+   [Combine Payment Signals]
                 │
-   [Match Deposits To Invoices]      ← dedupes signals; unmatched exits silently
+   [Match Deposits To Invoices]      ← STRICT: invoice# OR (amount+currency+clientName)
+                │                       cross-run idempotency via processedEmailIds
                 │
-           [Is Partial?]
+          [Needs Review?]
             /         \
      TRUE              FALSE
       |                  |
-[Update Partial     [Is Osome?]
-  Tracker]          /        \
-      |           TRUE       FALSE
-[Slack Partial      |           |
-   Alert]   [Update Osome]  [Airwallex Auth]
-            [Status]           |
-                |         [Airwallex Mark Paid]
-            [Slack Osome]      |
-            [Confirmed]   [Update Invoice Status]
-                               |
-                          [Slack Payment Confirmed]
+[Slack Needs        [Is Partial?]
+  Review]            /         \
+                  TRUE         FALSE
+                   |              |
+            [Update Partial   [Is Osome?]
+              Tracker]         /        \
+                   |        TRUE         FALSE
+            [Slack Partial    |             |
+              Alert]    [Update Osome]  [Update Invoice Status]   ← directly, no
+                              |             |                        Airwallex Mark Paid
+                        [Slack Osome]  [Slack Payment Confirmed]
+                        [Confirmed]
 ```
 
-### Matching Logic
+### Matching Logic (strict — May 2026)
 
-1. Candidate rows must have Column N `Status` of `Unpaid`, `Overdue`, or blank and Column J `Payment Status` must not be `Payment Complete`, `Collections`, or a draft state.
-2. Invoice number match against Col E (high confidence).
-3. Exact amount + currency match against a single eligible invoice (medium confidence).
-4. Ambiguous matches are skipped silently.
-5. Unmatched deposits exit silently — no Slack alert.
-6. **Time-windowing:** Gmail query uses `after:{lastRunTs}` — only emails since last run. Stored in n8n static data. First run falls back to `newer_than:1d`. Gmail search runs once per execution and must never be fed by tracker rows.
-7. **Deduplication:** signals are deduped before tracker writes or Slack posts, using invoice/amount/currency/date when invoice number is available.
+1. **Open candidates** — Col N `Status` of `Unpaid`, `Overdue`, or blank AND Col J `Payment Status` not in `Payment Complete`, `Collections`, and not a draft state. Col E `Invoice #` must be set.
+2. **Tier 1 — Exact invoice number match** against Col E (`high` confidence). For forwarded emails, additionally require client name fuzzy match if both depositor and tracker client name present.
+3. **Tier 2 — Airwallex deposit emails only:** require all three: amount + currency + client-name fuzzy match (`medium-client` confidence). Token-based match drops corporate suffixes (LLC, LTD, INC, PTE, PTY, etc.).
+4. **No amount-only fallback** — was removed after the WELLE incident (see below).
+5. **Forwarded receipts without amount** — when the email contains the invoice number but no parseable amount, the matcher uses the tracker's invoice amount (`high-tracker-amount` confidence).
+6. **Anything else with payment signal but no high-confidence match** routes to `Slack Needs Review` instead of writing the tracker.
+7. **Cross-run idempotency** — every processed `emailId` is added to `staticData.processedEmailIds` (last 500). Re-runs skip already-seen emails even if `lastRunTs` has been reset.
+8. **Time-windowing** — Gmail query uses `after:{lastRunTs}` since last run. First run falls back to `newer_than:1d`.
+
+### Hardening Notes (May 2026 incident → v4)
+
+In May 2026 the matcher's amount-only fallback wrongly assigned a Little Saints deposit to WELLE PTY LTD (both happened to have $4,600 USD invoices open at the same time) and the workflow then auto-mark-paid WELLE in Airwallex via API. Airwallex has **no unpay endpoint** — the only fix was a credit-note-and-replace process. Three structural changes followed:
+
+1. **Removed** the `Airwallex Auth` and `Airwallex Mark Paid` HTTP nodes. The workflow no longer mutates Airwallex state; tracker is the only source of truth that the automation writes to. Airwallex side is reconciled manually when needed.
+2. **Strict matching** — amount-only fallback is gone. Required signals listed in Tier 1–3 above. Corner cases route to `Slack Needs Review`.
+3. **Idempotency via emailId dedup** — prevents re-processing if `lastRunTs` is reset.
+4. **Forwarded-email filter** in Claim Window now includes a payment-keyword whitelist AND requires `to:noa@kravemedia.co` (skips reminder CCs) AND explicitly excludes `subject:reminder`, `subject:"following up"`, `subject:"due today"`, `subject:overdue`.
 
 ### Partial Payment Detection
 
 After a match, the workflow checks if the received amount covers the full invoice:
 
-- `existingAmountPaid` = Col Q (Amount Paid) — 0 if empty
+- `existingAmountPaid` = Col Q — 0 if empty
 - `newAmountPaid` = existingAmountPaid + received amount
 - `remaining` = Col G (Amount) − newAmountPaid
-- **Partial** if remaining > $1.00 → Col J Payment Status `Partial Payment`, Col Q updated, Airwallex NOT marked paid
-- **Full** if remaining ≤ $1.00 → existing full-payment flow (mark paid, Col J Payment Status `Payment Complete`)
-
-Second payments on the same invoice: Col Q carries over, so the second run's `newAmountPaid` accumulates correctly and triggers full-payment flow when the total is reached.
+- **Partial** if remaining > $1.00 → Col J `Partial Payment`, Col Q updated, Slack 🔄
+- **Full** if remaining ≤ $1.00 → Col J `Payment Complete`, Col M date, Col Q = invoice amount, Slack ✅
 
 ### Airwallex API Poll
 
 `Poll Airwallex Invoices` (Code node, `continueOnFail: true`) runs in parallel with the Gmail scan:
-- Authenticates with Airwallex API
-- For each open non-Osome tracker row with an Airwallex Invoice ID, calls `GET /api/v1/invoices/{id}`
-- Checks `paid_amount` / `amount_paid` / `total_paid` field (field name unconfirmed — verify on first run with a live partial invoice)
-- If API shows more paid than Col Q records, injects a payment signal for the difference
-- Gmail and API signals are merged, then deduped before matching so one payment event can produce only one tracker update and one Slack post.
+- Uses `this.helpers.httpRequest` to authenticate and call `GET /api/v1/invoices/{id}` per open non-Osome tracker row
+- Checks `paid_amount` / `amount_paid` / `total_paid` for each invoice
+- If API shows more paid than Col Q records, injects a payment signal for the difference (with `clientName` from the tracker row)
+- Gmail and API signals merged + deduped before matching
 
 ### Outputs
 
 | Outcome | Action |
 |---------|--------|
-| Full payment matched (Airwallex) | Sheets Col J → Payment Complete, Col M date, Col Q = full amount, Airwallex marked paid, Slack ✅ |
-| Full payment matched (Osome) | Sheets Col J → Payment Complete, Col M date, Col Q = full amount, Slack ✅ (no Airwallex call) |
+| Full payment matched, Airwallex invoice | Sheets Col J → Payment Complete, Col M date, Col Q = full amount, Slack ✅ |
+| Full payment matched, Osome invoice | Same as above (no separate Airwallex side effect) |
 | Partial payment matched | Sheets Col J → Partial Payment, Col M date, Col Q = cumulative paid, Slack 🔄 |
+| Email has signal but matcher can't disambiguate | Slack ⚠️ "needs review" — no tracker write |
 | No emails / no API signals | Silent |
-| Unmatched deposit | Silent — no alert |
-| Shopify / payout noise | Skipped silently |
+| Shopify / payout noise / already-processed emailId | Skipped silently |
 
 ### Error Handling
 
@@ -252,24 +263,22 @@ The workflow also writes latest follow-up metadata to Columns S-U: `Last Follow-
 
 Pre-due tiers are filtered by payout term, inferred from `Col I (Due Date) - Col A (Date Created)` gap. Overdue tiers fire for all invoices regardless of term.
 
-**Payout term → allowed pre-due tiers:**
+**Payout term → allowed pre-due tiers** (tightened May 2026):
 
-| Inferred Term | Gap | 7d | 5d | 3d | 1d | Due Today |
-|--------------|-----|----|----|----|----|-----------|
-| 30d terms | > 20 days | ✅ | ✅ | ✅ | — | ✅ |
-| 15d terms | 11–20 days | ✅ | ✅ | ✅ | — | ✅ |
-| 7d terms | ≤ 10 days | — | — | ✅ | ✅ | ✅ |
+| Inferred Term | Gap | 7d | 3d | Due Today |
+|--------------|-----|----|----|-----------|
+| 30d terms | > 20 days | ✅ | ✅ | ✅ |
+| 15d terms | 11–20 days | ✅ | ✅ | ✅ |
+| 7d terms | ≤ 10 days | — | ✅ | ✅ |
 
-If Col A is missing, defaults to 30d terms.
+If Col A is missing, defaults to 30d terms. The 5d and 1d pre-due tiers are no longer used for any payout term.
 
 **Full schedule:**
 
 | Days Until/Since Due | Trigger | Email Type | Slack Alert |
 |----------------------|---------|-----------|-------------|
 | +7 | Pre-due (30d/15d only) | Payment Reminder | No |
-| +5 | Pre-due (30d/15d only) | Payment Reminder | No |
 | +3 | Pre-due (all terms) | Payment Reminder | No |
-| +1 | Pre-due (7d terms only) | Payment Reminder | No |
 | 0 | Due today (all terms) | Invoice Due Today | Yes |
 | -1 to -6 | Overdue | Overdue Invoice | Yes |
 | -7 | Late fee | Late Fee Applied | Yes |

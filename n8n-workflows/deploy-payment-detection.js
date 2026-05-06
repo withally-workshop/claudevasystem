@@ -1,3 +1,24 @@
+// =====================================================================
+// !!! STALE — DO NOT RE-RUN WITHOUT UPDATING FIRST !!!
+//
+// This script was the original deploy-from-scratch source for the
+// Krave Payment Detection workflow. After the May 2026 incident
+// (see WORKFLOWS.md "Hardening Notes"), the live workflow was
+// surgically patched in place via the n8n REST API:
+//
+//   - Removed:  Airwallex Auth, Airwallex Mark Paid nodes
+//   - Added:    Needs Review? (If), Slack Needs Review (Slack)
+//   - Updated:  Claim Window, Parse All Emails, Match Deposits To
+//               Invoices, Poll Airwallex Invoices code nodes
+//
+// Re-running this script as-is would OVERWRITE the v4 hardened
+// workflow with the old vulnerable topology. If you need to redeploy
+// from scratch, first port the current live state (export from n8n
+// or fetch via GET /api/v1/workflows/{id}) into this script.
+//
+// Live workflow ID: NurOLZkg3J6rur5Q
+// =====================================================================
+
 const https = require('https');
 
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';

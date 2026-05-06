@@ -63,10 +63,14 @@ for (const row of rows) {
     ? Math.round((dueDate.getTime() - creationDate.getTime()) / msDay)
     : 31; // fallback: treat as 30d terms if creation date is missing
   const payoutTerm = gap <= 10 ? '7d' : gap <= 20 ? '15d' : '30d';
+  // Reminder cadence (May 2026 — tightened to reduce volume):
+  //   7-day terms:  3d before due, due day
+  //   15-day terms: 7d before due, 3d before due, due day
+  //   30-day terms: 7d before due, 3d before due, due day
   const allowedPreDueTiers = {
-    '7d':  new Set(['3d', '1d', 'due-today']),
-    '15d': new Set(['7d', '5d', '3d', 'due-today']),
-    '30d': new Set(['7d', '5d', '3d', 'due-today']),
+    '7d':  new Set(['3d', 'due-today']),
+    '15d': new Set(['7d', '3d', 'due-today']),
+    '30d': new Set(['7d', '3d', 'due-today']),
   };
 
   const clientName   = (j['Client Name']   || '').toString().trim();

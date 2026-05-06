@@ -91,24 +91,22 @@ For remaining rows, calculate: `days_diff = due_date (Col I) - today`
 
 If Col A is missing or unparseable, fall back to 30d terms (most conservative).
 
-**Pre-due reminders by payout term:**
+**Pre-due reminders by payout term** (tightened May 2026):
 
 | Tier | 30d terms | 15d terms | 7d terms |
 |------|-----------|-----------|----------|
 | 7d   | ✅ | ✅ | — |
-| 5d   | ✅ | ✅ | — |
 | 3d   | ✅ | ✅ | ✅ |
-| 1d   | — | — | ✅ |
 | Due today | ✅ | ✅ | ✅ |
+
+The 5d and 1d pre-due tiers are deprecated and no longer fire for any payout term.
 
 **Full reminder schedule:**
 
 | days_diff | Action | Reminder Type |
 |-----------|--------|---------------|
 | +7 | Pre-due (30d/15d only) | `7d` |
-| +5 | Pre-due (30d/15d only) | `5d` |
 | +3 | Pre-due (all terms) | `3d` |
-| +1 | Pre-due (7d terms only) | `1d` |
 | 0 | Due-today (all terms) | `due-today` |
 | -1 to -6 | Send overdue notice | `overdue` |
 | -7 | Create late fee invoice + send notice | `late-fee` |
@@ -118,7 +116,7 @@ If Col A is missing or unparseable, fall back to 30d terms (most conservative).
 **Deduplication rule:** Before sending any reminder, check Column L (Reminders Sent).
 - Same reminder type within 2 days → skip
 - `late-fee-followup` within 7 days of last `late-fee` or `late-fee-followup` → skip
-- Format: `7d 2026-04-10 | 5d 2026-04-12 | overdue 2026-04-15`
+- Format: `7d 2026-04-10 | 3d 2026-04-14 | overdue 2026-04-22`
 
 ### Phase 4 — Send Reminder Emails
 
@@ -135,7 +133,7 @@ If Column K strategist not in lookup → still send, skip CC, flag in Slack.
 
 **Email templates:**
 
-Pre-Due (7d / 5d / 3d / 1d):
+Pre-Due (7d / 3d):
 ```
 Subject: Friendly Reminder — Invoice [Invoice #] Due [Due Date]
 

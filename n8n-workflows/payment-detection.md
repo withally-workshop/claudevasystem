@@ -1,8 +1,9 @@
 # n8n Workflow: Payment Detection
 
-**Purpose:** Daily scan of noa@kravemedia.co for Airwallex deposit emails → match to open invoices → update Client Invoice Tracker → Slack notify.
-**Replaces:** `.claude/skills/payment-detection/SKILL.md` (currently runs via Claude API daily)
-**Schedule:** 9:00 AM ICT daily = **02:00 UTC** cron: `0 2 * * *`
+> **Stale design doc.** This file describes the original V1 design. The live workflow was hardened in May 2026 (v4) — see `WORKFLOWS.md` "Workflow 1 - Payment Detection" → "Hardening Notes" for current behavior including: removed Airwallex Mark Paid node, strict client-name matching, idempotency via `processedEmailIds`, and the Needs Review Slack branch.
+
+**Purpose:** Hourly scan of noa@kravemedia.co for Airwallex deposit notifications + John's forwarded receipts → match to open invoices via strict client-name matching → update Client Invoice Tracker → Slack notify (or post to Needs Review).
+**Schedule:** Hourly (`0 * * * *`)
 
 ---
 

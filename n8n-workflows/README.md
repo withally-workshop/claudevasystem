@@ -20,7 +20,9 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 
 ## Payment Detection
 
-Runs two parallel detection paths every hour: (1) scans `noa@kravemedia.co` for Airwallex deposit emails from the last n8n scan only, and (2) polls the Airwallex invoice API directly for SWIFT/bank-transfer payments. The Gmail scan runs once per workflow execution and is never fed by tracker rows. Handles both full and partial payments. Partial payments set Col J Payment Status to `Partial Payment` and update Col Q (Amount Paid) without marking Airwallex paid; subsequent payments accumulate until the full amount is reached. Full payments set Col J Payment Status to `Payment Complete`. Column N `Status` is formula-only and is read only for eligibility: `Unpaid`, `Overdue`, or blank. Column N is never written. Posts one deduped confirmation to `#payments-invoices-updates` per payment event.
+Runs two parallel detection paths every hour: (1) scans `noa@kravemedia.co` for Airwallex deposit notifications + John's forwarded receipts, and (2) polls the Airwallex invoice API directly for SWIFT/bank-transfer payments. Uses **strict matching** — invoice number OR (amount + currency + client name fuzzy match). Anything with payment signal but no high-confidence match routes to a `needs review` Slack alert instead of writing the tracker. Cross-run idempotency via `processedEmailIds` (last 500) prevents re-processing.
+
+**Does NOT mark invoices paid in Airwallex.** That step was removed in May 2026 after an incident where the matcher mistakenly auto-marked a wrong invoice paid in Airwallex (which has no unpay API). Tracker is now the single source of truth that the workflow writes to. Partial payments set Col J `Partial Payment` and update Col Q; full payments set Col J `Payment Complete`. Column N is formula-only.
 
 **Workflow ID:** `NurOLZkg3J6rur5Q`
 
@@ -43,7 +45,7 @@ node n8n-workflows/deploy-payment-detection.js
 
 ## Invoice Reminder Cron
 
-Scans the Client Invoice Tracker Mon–Fri at 9am ICT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker. Payout-term-aware: 30d/15d invoices get 7d/5d/3d/due-today reminders; 7d invoices get 3d/1d/due-today only. Posts a daily digest at the end of every run.
+Scans the Client Invoice Tracker Mon–Fri at 9am ICT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker. **Payout-term-aware (tightened May 2026):** 30d/15d invoices get 7d/3d/due-today reminders; 7d invoices get 3d/due-today only. Posts a daily digest at the end of every run.
 
 Also writes latest reminder attribution metadata to the tracker: `Last Follow-Up Sent`, `Last Follow-Up Type`, and `Last Follow-Up Thread ID`. The thread ID is blank unless Gmail returns a real thread key. Column L remains the historical reminder log.
 
