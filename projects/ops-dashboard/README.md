@@ -85,3 +85,50 @@ The allowlist:
 4. After first deploy, copy the live URL and add it as the OAuth client's authorized redirect URI if it differs from the placeholder.
 
 Subsequent deploys: push to the linked branch, Render redeploys automatically.
+
+## Day 2 Operations
+
+### Live URL
+https://krave-ops-dashboard.onrender.com
+
+### Redeploy
+Push any commit to the linked GitHub branch — Render auto-deploys in ~2 minutes. To force a redeploy without code changes: Render dashboard → Manual Deploy → Deploy latest commit.
+
+### Cold start
+Free tier sleeps after 15 minutes of inactivity. The first request after sleep takes 30–60 seconds. Subsequent requests are instant. Upgrade to the $7/mo Starter plan to keep it always on.
+
+### Adding or removing a user
+
+Two layers of access control:
+
+1. **Google OAuth consent screen** — controls *who can attempt to log in*. Configured in Google Cloud Console → APIs & Services → OAuth consent screen.
+   - **Internal** (default for Workspace orgs): only `@kravemedia.co` accounts can sign in. External Gmail/etc accounts get blocked at Google's screen.
+   - **External**: any Google account can attempt to sign in, but you must add each one as a "Test user" while the app is in Testing mode.
+2. **Server allowlist** — controls *who is granted access after login*. Hardcoded `ALLOWLIST` Set in `server.js`. Default: noa, john, amanda, jeneena, sybil, shin @kravemedia.co.
+
+To add a new team member with a `@kravemedia.co` email:
+- Edit `server.js`, add their email to the `ALLOWLIST` Set.
+- Commit + push. Render auto-redeploys.
+
+To add a user outside `kravemedia.co` (e.g. external accountant):
+- Confirm OAuth consent screen is set to **External** (or switch it). If switched, the app is in Testing mode by default, capped at 100 test users until verified.
+- Add their email under **Test users** on the OAuth consent screen.
+- Add their email to `ALLOWLIST` in `server.js`.
+- Commit + push.
+
+To remove a user: delete from `ALLOWLIST`, commit, push. Their existing session cookie expires after 12 hours.
+
+### Logs
+Render dashboard → krave-ops-dashboard → Logs (left sidebar). Server logs every request and prints env-var status on boot.
+
+### Roll back a bad deploy
+Render dashboard → Events → find the previous good deploy → click **Rollback**.
+
+### Caches and refresh
+Server-side data cache is 5 minutes per range (`24h`/`7d`/`30d`). Click ↻ Refresh in the header to bypass the cache and force a live fetch from Sheets, n8n, and Slack.
+
+### Background image
+Single line at the top of `server.js` — `const BG_IMAGE_URL = '...'`. Replace with any landscape photo URL, commit, push.
+
+### Workflow filter
+The dashboard only shows the 8 canonical Krave workflows listed in `KRAVE_WORKFLOW_IDS` (top of `server.js`). To show a new workflow, add its n8n ID to that Set.
