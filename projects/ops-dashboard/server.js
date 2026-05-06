@@ -17,6 +17,8 @@ if (fs.existsSync(envPath)) {
 
 const PORT = process.env.PORT || 3000;
 const N8N_BASE = 'https://noatakhel.app.n8n.cloud';
+// Background image for the parallax dive. Swap this URL for any landscape photo.
+const BG_IMAGE_URL = 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=2400&q=85&auto=format&fit=crop';
 const SHEET_ID = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50';
 const PAYMENTS_CHANNEL = 'C09HN2EBPR7';
 const DRAFTS_CHANNEL = 'C0AQZGJDR38';
@@ -753,7 +755,30 @@ function renderDashboard(d) {
 <title>Krave Ops Dashboard</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; font-size: 14px; line-height: 1.5; }
+  html, body { background: #0f1117; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e2e8f0; font-size: 14px; line-height: 1.5; position: relative; min-height: 100vh; }
+
+  /* Parallax dive background — fixed layer that scales up as you scroll */
+  .bg-layer {
+    position: fixed; inset: -10%;
+    background: url('${BG_IMAGE_URL}') center/cover no-repeat;
+    transform-origin: 50% 40%;
+    transform: scale(1);
+    transition: transform 80ms linear;
+    z-index: -2; will-change: transform;
+  }
+  .bg-overlay {
+    position: fixed; inset: 0;
+    background: linear-gradient(180deg, rgba(15,17,23,0.55) 0%, rgba(15,17,23,0.78) 45%, rgba(15,17,23,0.92) 100%);
+    pointer-events: none; z-index: -1;
+    transition: background 200ms ease;
+  }
+
+  /* Glass cards over the image */
+  .card, .chart-card, .health-col, table { background: rgba(30, 41, 59, 0.72) !important; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  th { background: rgba(22, 32, 50, 0.85) !important; }
+  .header { background: rgba(15, 17, 23, 0.55); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  .scope-line { background: rgba(15, 17, 23, 0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   a { color: #60a5fa; text-decoration: none; } a:hover { text-decoration: underline; }
   .header { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px 16px; border-bottom: 1px solid #1e293b; }
   .header h1 { font-size: 18px; font-weight: 600; color: #f8fafc; }
@@ -850,6 +875,8 @@ function renderDashboard(d) {
 </style>
 </head>
 <body>
+<div class="bg-layer" id="bg-layer"></div>
+<div class="bg-overlay" id="bg-overlay"></div>
 <div class="header">
   <h1>Krave Ops Dashboard</h1>
   <div class="header-meta">
@@ -995,6 +1022,24 @@ function renderDashboard(d) {
 
 <script>
 (function () {
+  // Parallax dive: scale the background image as you scroll deeper, and
+  // darken the overlay so it feels like entering further into the room.
+  const bg = document.getElementById('bg-layer');
+  const ov = document.getElementById('bg-overlay');
+  let ticking = false;
+  function onScroll() {
+    const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    const p = Math.min(1, Math.max(0, window.scrollY / max));
+    const scale = 1 + p * 0.7; // 1.0 → 1.7 zoom
+    if (bg) bg.style.transform = 'scale(' + scale.toFixed(3) + ')';
+    if (ov) ov.style.background = 'linear-gradient(180deg, rgba(15,17,23,' + (0.5 + p * 0.15).toFixed(2) + ') 0%, rgba(15,17,23,' + (0.75 + p * 0.15).toFixed(2) + ') 45%, rgba(15,17,23,' + (0.9 + p * 0.08).toFixed(2) + ') 100%)';
+    ticking = false;
+  }
+  window.addEventListener('scroll', () => {
+    if (!ticking) { requestAnimationFrame(onScroll); ticking = true; }
+  }, { passive: true });
+  onScroll();
+
   // Scroll-triggered section reveal
   const sections = document.querySelectorAll('.section');
   if ('IntersectionObserver' in window) {
