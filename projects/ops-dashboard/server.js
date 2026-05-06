@@ -31,6 +31,7 @@ const ALLOWLIST = new Set([
   'jeneena@kravemedia.co',
   'sybil@kravemedia.co',
   'shin@kravemedia.co',
+  'sha@withally.com',
 ]);
 
 const RANGE_DAYS = { '24h': 1, '7d': 7, '30d': 30 };
