@@ -755,8 +755,8 @@ function renderDashboard(d) {
 <title>Krave Ops Dashboard</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { background: #0f1117; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e2e8f0; font-size: 14px; line-height: 1.5; position: relative; min-height: 100vh; }
+  html { background: #0f1117; } /* fallback if image fails */
+  body { background: transparent; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e2e8f0; font-size: 14px; line-height: 1.5; position: relative; min-height: 100vh; }
 
   /* Parallax dive background — fixed layer that scales up as you scroll */
   .bg-layer {
