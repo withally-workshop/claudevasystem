@@ -839,31 +839,18 @@ function renderDashboard(d) {
 <title>Krave Ops Dashboard</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { background: #0f1117; } /* fallback if image fails */
-  body { background: transparent; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e2e8f0; font-size: 14px; line-height: 1.5; position: relative; min-height: 100vh; }
+  html, body { background: #0b0f1a; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e2e8f0; font-size: 14px; line-height: 1.5; position: relative; min-height: 100vh; }
 
-  /* Parallax dive background — fixed layer that scales up as you scroll */
-  .bg-layer {
-    position: fixed; inset: -10%;
-    background: url('${BG_IMAGE_URL}') center/cover no-repeat;
-    transform-origin: 50% 40%;
-    transform: scale(1);
-    transition: transform 80ms linear;
-    z-index: -2; will-change: transform;
-  }
-  .bg-overlay {
-    position: fixed; inset: 0;
-    background: linear-gradient(180deg, rgba(15,17,23,0.25) 0%, rgba(15,17,23,0.45) 45%, rgba(15,17,23,0.7) 100%);
-    pointer-events: none; z-index: -1;
-    transition: background 200ms ease;
-  }
+  /* Background image disabled — kept selectors so JS parallax handlers no-op safely */
+  .bg-layer, .bg-overlay { display: none; }
 
-  /* Glass cards over the image */
-  .card, .chart-card, .health-col, table { background: rgba(30, 41, 59, 0.42) !important; backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); border-color: rgba(148, 163, 184, 0.18) !important; }
-  th { background: rgba(22, 32, 50, 0.55) !important; }
-  td { border-bottom-color: rgba(148, 163, 184, 0.1) !important; }
-  .header { background: rgba(15, 17, 23, 0.4); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
-  .scope-line { background: rgba(15, 17, 23, 0.3); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  /* Solid cards — readable, no glass */
+  .card, .chart-card, .health-col, table { background: #161e2e !important; border-color: #2a3348 !important; }
+  th { background: #1f293f !important; color: #cbd5e1 !important; }
+  td { border-bottom-color: #2a3348 !important; }
+  .header { background: #0f1626; border-bottom: 1px solid #2a3348; }
+  .scope-line { background: #0f1626; border-bottom: 1px solid #2a3348; }
   a { color: #60a5fa; text-decoration: none; } a:hover { text-decoration: underline; }
   .header { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px 16px; border-bottom: 1px solid #1e293b; max-width: 1400px; margin: 0 auto; }
   .header h1 { font-size: 18px; font-weight: 600; color: #f8fafc; }
