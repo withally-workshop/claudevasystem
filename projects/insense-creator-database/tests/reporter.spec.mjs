@@ -20,7 +20,7 @@ test('formats review summary counts', () => {
   assert.match(summary, /Skipped: 2/);
 });
 
-test('builds a slack summary for review mode', () => {
+test('builds a slack summary for review mode (legacy auto-invite path)', () => {
   const summary = buildSlackSummary('Halo Home', 'review', [
     { status: 'qualified', invite: true, username: 'creator.one' },
     { status: 'qualified', invite: false, blockReason: 'Previous collaborator', username: 'creator.two' },
@@ -32,8 +32,31 @@ test('builds a slack summary for review mode', () => {
   assert.match(summary, /Mode: review/);
   assert.match(summary, /Qualified: 2/);
   assert.match(summary, /Auto-invite ready: 1/);
-  assert.match(summary, /Blocklisted: 1/);
+  assert.match(summary, /Blocklisted \(previous collab\): 1/);
   assert.match(summary, /Skipped: 1/);
+});
+
+test('builds a slack summary for review mode with pending approvals', () => {
+  const summary = buildSlackSummary('Halo Home', 'review', [
+    { status: 'qualified', invite: 'pending', username: 'creator.one' },
+    { status: 'qualified', invite: 'pending', username: 'creator.two' },
+    { status: 'qualified', invite: false, blockReason: 'Already invited from Other Campaign', username: 'creator.three' },
+    { status: 'skipped', skipReason: 'No portfolio uploads', username: 'creator.four' },
+  ]);
+
+  assert.match(summary, /Pending approval: 2/);
+  assert.match(summary, /react .*candidate thread.*--mode approve/i);
+  assert.match(summary, /Deduped \(already invited from prior campaign\): 1/);
+  assert.doesNotMatch(summary, /Auto-invite ready/);
+});
+
+test('builds a clear empty review summary when nothing qualifies', () => {
+  const summary = buildSlackSummary('Halo Home', 'review', [
+    { status: 'skipped', skipReason: 'No portfolio uploads' },
+    { status: 'skipped', skipReason: 'No finished deals' },
+  ]);
+
+  assert.match(summary, /No qualified candidates this run/);
 });
 
 test('builds a slack summary for send mode', () => {

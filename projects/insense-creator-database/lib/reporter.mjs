@@ -20,6 +20,9 @@ export function buildRunSummary(campaign, mode, records) {
 
 export function buildSlackSummary(campaign, mode, records) {
   const counts = buildStatusCounts(records);
+  const pendingApproval = records.filter(
+    (record) => record.status === 'qualified' && record.invite === 'pending',
+  ).length;
   const autoInviteReady = records.filter(
     (record) => record.status === 'qualified' && record.invite === true,
   ).length;
@@ -28,6 +31,12 @@ export function buildSlackSummary(campaign, mode, records) {
       record.invite === false &&
       Boolean(record.blockReason) &&
       /previous collaborator/i.test(record.blockReason),
+  ).length;
+  const dedupedAcrossCampaigns = records.filter(
+    (record) =>
+      record.invite === false &&
+      Boolean(record.blockReason) &&
+      /already invited/i.test(record.blockReason),
   ).length;
 
   const lines = [
@@ -39,8 +48,21 @@ export function buildSlackSummary(campaign, mode, records) {
   ];
 
   if (mode === 'review') {
-    lines.push(`Auto-invite ready: ${autoInviteReady}`);
-    lines.push(`Blocklisted: ${blocklisted}`);
+    if (pendingApproval > 0) {
+      lines.push(`Pending approval: ${pendingApproval} — react ✅/❌ in the candidate thread, then run --mode approve`);
+    }
+    if (autoInviteReady > 0) {
+      lines.push(`Auto-invite ready: ${autoInviteReady}`);
+    }
+    if (blocklisted > 0) {
+      lines.push(`Blocklisted (previous collab): ${blocklisted}`);
+    }
+    if (dedupedAcrossCampaigns > 0) {
+      lines.push(`Deduped (already invited from prior campaign): ${dedupedAcrossCampaigns}`);
+    }
+    if (pendingApproval === 0 && autoInviteReady === 0 && blocklisted === 0 && dedupedAcrossCampaigns === 0) {
+      lines.push('No qualified candidates this run.');
+    }
   }
 
   if (mode === 'send') {
