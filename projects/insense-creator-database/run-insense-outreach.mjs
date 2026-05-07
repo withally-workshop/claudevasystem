@@ -9,10 +9,11 @@ import {
   collectApplicantPool,
   closeTopDrawer,
   closeApplicantProfile,
+  dismissPageOverlays,
   extractApplicantsFromCreatorsListPayload,
   extractApplicantDrawerStats,
   inspectWorkspaceContext,
-  openApplicantChatComposer,
+  openApplicantChatBySearch,
   openApplicantProfile,
   openApplicantProfileByUsername,
   openCampaignApplications,
@@ -608,6 +609,7 @@ async function executeSendMode({
     if (!pageAlreadyOnApplications) {
       await openCampaignApplications(ownedSession.page, campaign);
     }
+    await dismissPageOverlays(ownedSession.page);
   }
 
   try {
@@ -624,8 +626,7 @@ async function executeSendMode({
             throw new Error('Live send requires an authenticated Insense session');
           }
 
-          await openApplicantProfileByUsername(page, currentRecord.username);
-          await openApplicantChatComposer(page);
+          await openApplicantChatBySearch(page, currentRecord.username);
         },
       });
 

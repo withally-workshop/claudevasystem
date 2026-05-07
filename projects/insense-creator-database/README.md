@@ -256,9 +256,8 @@ Optional `INSENSE_SLACK_OPERATOR_USER_ID` restricts which user's reactions count
 2. only sends for records with `invite: true`; `pending` and `false` are skipped
 3. for `invite: true`:
    - reopens the campaign applicants route
-   - searches by username
-   - opens the creator profile
-   - opens the message composer
+   - searches by username to filter the row list
+   - clicks the row's `Chat` button to open the in-place message composer
    - scans the thread for the Typeform link
    - skips if already messaged
    - otherwise sends the Krave Creator Database invite

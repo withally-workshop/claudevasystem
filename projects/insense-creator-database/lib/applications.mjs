@@ -628,6 +628,22 @@ export async function closeApplicantProfile(page) {
   await page.waitForTimeout(1000);
 }
 
+export async function openApplicantChatBySearch(page, username) {
+  await searchApplicants(page, username);
+  await dismissPageOverlays(page);
+
+  const chatButton = page
+    .locator('button')
+    .filter({ hasText: /^Chat$/ })
+    .first();
+  await chatButton.waitFor({ state: 'visible', timeout: 15000 });
+  await chatButton.click();
+
+  const textarea = page.locator('textarea[data-test="msgField:textarea:text"]');
+  await textarea.waitFor({ state: 'visible', timeout: 15000 });
+  await page.waitForTimeout(1000);
+}
+
 export async function openApplicantChatComposer(page) {
   await dismissPageOverlays(page);
   await page.evaluate(() => {
