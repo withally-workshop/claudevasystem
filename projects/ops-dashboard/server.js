@@ -490,6 +490,62 @@ function computeWorkflowSparklines(executions, workflows, days) {
 // Gather all data
 // ---------------------------------------------------------------------------
 
+function computeInsenseStats() {
+  // Read the in-repo cache (committed). Run JSONs are gitignored so we don't
+  // depend on them at runtime — cache is the source of truth on Render.
+  const cachePath = path.resolve(__dirname, '../../data/insense/cache.json');
+  if (!fs.existsSync(cachePath)) return null;
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  } catch (_) {
+    return null;
+  }
+  const creators = raw && raw.creators && typeof raw.creators === 'object' ? raw.creators : {};
+  const entries = Object.entries(creators);
+  const dayMs = 86400000;
+  const now = Date.now();
+  const stats = {
+    totalCreators: entries.length,
+    messaged: 0,
+    blocked: 0,
+    triagedFailed: 0,
+    sentLast24h: 0,
+    sentLast7d: 0,
+    byCampaign: {}, // name -> { messaged, blocked, failed }
+    lastMessagedAt: null,
+  };
+  for (const [, v] of entries) {
+    const status = v && v.status;
+    const campaign = (v && v.lastCampaign) || 'unknown';
+    if (!stats.byCampaign[campaign]) stats.byCampaign[campaign] = { messaged: 0, blocked: 0, failed: 0 };
+    if (status === 'messaged') {
+      stats.messaged++;
+      stats.byCampaign[campaign].messaged++;
+      const sentAt = v.lastMessagedAt ? Date.parse(v.lastMessagedAt) : null;
+      if (sentAt) {
+        if (now - sentAt <= dayMs) stats.sentLast24h++;
+        if (now - sentAt <= 7 * dayMs) stats.sentLast7d++;
+        if (!stats.lastMessagedAt || sentAt > Date.parse(stats.lastMessagedAt)) {
+          stats.lastMessagedAt = v.lastMessagedAt;
+        }
+      }
+    } else if (status === 'blocked') {
+      stats.blocked++;
+      stats.byCampaign[campaign].blocked++;
+    } else if (status === 'triaged') {
+      stats.triagedFailed++;
+      stats.byCampaign[campaign].failed++;
+    }
+  }
+  // Sort campaigns by messaged count desc, top 5
+  stats.topCampaigns = Object.entries(stats.byCampaign)
+    .map(([name, c]) => ({ name, ...c }))
+    .sort((a, b) => b.messaged - a.messaged)
+    .slice(0, 5);
+  return stats;
+}
+
 async function gatherData(range = '7d', forceRefresh = false) {
   const days = RANGE_DAYS[range] || 7;
   const cached = cache[range];
@@ -511,6 +567,7 @@ async function gatherData(range = '7d', forceRefresh = false) {
   const aging = sheetsRaw.ok ? computeAgingBuckets(sheetsRaw.rows) : null;
   const donut = sheetsRaw.ok ? computeStatusDonut(sheetsRaw.rows) : null;
   const sparklines = n8nRaw.ok ? computeWorkflowSparklines(n8nRaw.executions, n8nRaw.workflows, Math.min(days, 14)) : [];
+  const insense = computeInsenseStats();
 
   const caveats = [];
   if (!n8nRaw.ok) caveats.push(`n8n execution history unavailable: ${n8nRaw.reason}`);
@@ -528,6 +585,7 @@ async function gatherData(range = '7d', forceRefresh = false) {
     aging,
     donut,
     sparklines,
+    insense,
     invoicesGid: sheetsRaw.gid || 0,
     slackPaymentsCount: paymentsRaw.ok ? paymentsRaw.messages.length : null,
     slackDraftsCount: draftsRaw.ok ? draftsRaw.messages.length : null,
@@ -992,6 +1050,33 @@ function renderDashboard(d) {
       </div>
     </div>
   </div>
+
+  ${d.insense ? `
+  <div class="section">
+    <div class="section-title">Creator Outreach — Insense</div>
+    <div class="cards">
+      ${scorecard('Sent (last 24h)', d.insense.sentLast24h)}
+      ${scorecard('Sent (last 7d)', d.insense.sentLast7d)}
+      ${scorecard('Messaged (lifetime)', d.insense.messaged)}
+      ${scorecard('Tracked creators', d.insense.totalCreators, `${d.insense.blocked} blocked · ${d.insense.triagedFailed} failed filter`)}
+    </div>
+    ${d.insense.topCampaigns && d.insense.topCampaigns.length ? `
+    <div class="stat-grid" style="margin-top:14px">
+      <table>
+        <thead><tr><th>Campaign</th><th style="text-align:right">Messaged</th><th style="text-align:right">Blocked</th><th style="text-align:right">Failed filter</th></tr></thead>
+        <tbody>
+          ${d.insense.topCampaigns.map(c => `
+            <tr>
+              <td>${c.name}</td>
+              <td style="text-align:right">${c.messaged}</td>
+              <td style="text-align:right">${c.blocked}</td>
+              <td style="text-align:right">${c.failed}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : ''}
+    ${d.insense.lastMessagedAt ? `<div class="card-sub" style="margin-top:8px">Last invite sent: ${new Date(d.insense.lastMessagedAt).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', hour12: false })} ICT</div>` : ''}
+  </div>` : ''}
 
   <div class="section">
     <div class="section-title">Workflow runs — last ${Math.min(d.days || 7, 14)} days</div>
