@@ -18,5 +18,8 @@ reports/ops-report/
 data/insense/runs/*
 !data/insense/runs/.gitkeep
 
+# n8n workflow snapshots — local-only audit artifacts from REST PUT patches
+n8n-workflows/snapshots/
+
 # Claude Code scheduled task lock
 .claude/scheduled_tasks.lock

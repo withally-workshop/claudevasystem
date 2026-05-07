@@ -105,7 +105,7 @@
 
 ### Purpose
 
-Detects client payments and updates the tracker. Runs two detection paths in parallel: (1) scans `noa@kravemedia.co` for Airwallex deposit notifications + John's forwarded receipts, and (2) polls the Airwallex invoice API directly — catching SWIFT bank-transfer payments that may not generate an email. Matches deposits to open invoices using **strict client-name + amount/currency matching**, handles partial payments, and posts Slack alerts. **Does NOT mark invoices paid in Airwallex** (that step was removed in May 2026 after an incident — see Hardening Notes below).
+Detects client payments and updates the tracker. Runs three detection paths in parallel: (1) scans `noa@kravemedia.co` for Airwallex deposit notifications + John's forwarded receipts, (2) polls the Airwallex invoice API directly — catching SWIFT bank-transfer payments that may not generate an email, and (3) scans for client-reply payment confirmations on non-Airwallex bank flows (added 2026-05-07). Path (3) routes only to `Slack Needs Review` and never auto-marks paid. Matches deposits to open invoices using **strict client-name + amount/currency matching**, handles partial payments, and posts Slack alerts. **Does NOT mark invoices paid in Airwallex** (that step was removed in May 2026 after an incident — see Hardening Notes below).
 
 ### Triggers
 
@@ -119,29 +119,34 @@ Detects client payments and updates the tracker. Runs two detection paths in par
 ```text
 [Schedule / Webhook]
         |
-[Claim Window]              ← lastRunTs; broader Gmail query (Airwallex + John forwards)
+[Claim Window]              ← lastRunTs; emits gmailQuery + clientReplyQuery
         |
-   ┌────┴────────────────────────────┐
-   │                                 │
-[Search Airwallex Emails]   [Get Invoice Tracker]
-   │                                 │
-[Parse All Emails]          [Poll Airwallex Invoices]
-   │  (extracts amount,              │  (uses this.helpers.httpRequest;
-   │   currency, INV#,                  parallel to Gmail)
-   │   depositor name, source)        │
-   └────────────┬────────────────────┘
-                │
-   [Combine Payment Signals]
-                │
+   ┌────┴───────────────────┬──────────────────────────┐
+   │                        │                          │
+[Search Airwallex Emails] [Get Invoice Tracker]  [Search Client Replies]
+   │                        │                          │  (has:attachment,
+[Parse All Emails]       [Poll Airwallex Invoices]     │   non-internal sender,
+   │  (extracts amount,     │  (uses this.helpers.       │   reminder phrases excluded)
+   │   currency, INV#,         httpRequest;             │
+   │   depositor name,         parallel to Gmail)    [Parse Client Replies]
+   │   source)              │                          │  (phrase + tracker
+   └─────────┬──────────────┘                          │   fuzzy match by domain;
+             │                                         │   processedClientReplyIds
+   [Combine Payment Signals]                           │   idempotency, cap 10/run)
+             │                                         │
+             ▼                                         │
    [Match Deposits To Invoices]      ← STRICT: invoice# OR (amount+currency+clientName)
                 │                       cross-run idempotency via processedEmailIds
+                │                                       │
+                ▼                                       ▼
                 │
-          [Needs Review?]
+          [Needs Review?]                              │
+            /         \                                 │
+     TRUE              FALSE                            │
+      |                  |                              │
+[Slack Needs ◄──────────────────────────────────────────┘ (client-reply path)
+  Review]   [Is Partial?]
             /         \
-     TRUE              FALSE
-      |                  |
-[Slack Needs        [Is Partial?]
-  Review]            /         \
                   TRUE         FALSE
                    |              |
             [Update Partial   [Is Osome?]
@@ -182,6 +187,9 @@ In May 2026 the matcher's amount-only fallback wrongly assigned a Little Saints 
 
 **v5.1 (parser fix):**
 8. **Subject/From fallbacks** — Parse All Emails now reads `msg.Subject` and `msg.From` as fallbacks for Gmail simple-mode responses (not just `msg.payload.headers`). Previously, Subject extraction silently fell back to `msg.snippet` which sometimes misses the real subject (e.g., short forwards where subject IS the invoice number but body has different text).
+
+**v6 (client-reply branch — 2026-05-07):**
+9. **Client Payment Reply branch added.** Trigger: 2026-05-07 Nutrition Kitchen 2/2 silent-miss — payment landed in Eclipse Ventures Pte. Ltd. (non-Airwallex SG bank), client confirmation came as a reply on the invoice thread, both prior detection paths blind. New nodes `Search Client Replies` (Gmail) + `Parse Client Replies` (Code) emit Needs Review payloads only — they never auto-mark paid. Match rule: phrase signal (e.g. "payment is done", "transfer details", "remittance advice") AND tracker fuzzy match by sender domain ↔ Client Email, status not Payment Complete, sender not in internal denylist. Idempotency via `processedClientReplyIds` (last 200, separate from the Airwallex branch's `processedEmailIds`). Slack volume capped at 10 posts per run. Operator workflow: Needs Review post → forward email from john@→noa@ with invoice# + amount in subject → existing forwarded-receipt path marks paid.
 
 ### Partial Payment Detection
 
@@ -240,7 +248,7 @@ The workflow also writes latest follow-up metadata to Columns S-U: `Last Follow-
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 10 * * 1-5` - 10:00 AM PHT Monday–Friday |
+| Schedule | `0 10 * * 1-5` (Asia/Manila) - 10:00 AM PHT Monday–Friday |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder` |
 
 ### Node Flow
@@ -336,7 +344,7 @@ This workflow does not monitor Noa or strategist inboxes, does not infer client 
 
 | Type | Details |
 |------|---------|
-| Schedule | `30 3 * * 1-5` - 10:30 AM ICT/PHT weekdays |
+| Schedule | `30 10 * * 1-5` (Asia/Manila) - 10:30 AM PHT weekdays |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-reminder-reply-detection` |
 
 ### Node Flow
@@ -408,7 +416,7 @@ Reads inbox email from the last 24 hours in `noa@kravemedia.co`, classifies each
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 1 * * 1-5` - 9:00 AM ICT weekdays |
+| Schedule | `0 9 * * 1-5` (Asia/Manila) - 9:00 AM PHT weekdays |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-inbox-triage-daily` |
 
 ### Tier Model
@@ -670,7 +678,7 @@ Automates the approval and finalization leg of the invoice ops flow. Polls the t
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 1,3,5,7,9 * * 1-5` - every 2 hrs, Mon-Fri, 9 AM-5 PM PHT |
+| Schedule | `0 9,11,13,15,17 * * 1-5` (Asia/Manila) - every 2 hrs, Mon-Fri, 9 AM-5 PM PHT |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-approval-polling` |
 
 ### Node Flow
@@ -760,7 +768,7 @@ Proactive Monday portfolio snapshot for Noa. Reads every open invoice in the tra
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 2 * * 1` — 9:00 AM ICT every Monday |
+| Schedule | `0 9 * * 1` (Asia/Manila) — 9:00 AM PHT every Monday |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-weekly-invoice-summary` |
 
 ### Node Flow
@@ -812,6 +820,20 @@ Rows where Col N / Col J = `Payment Complete`, `Paid`, or starts with `Draft` ar
 curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-payment-detection" \
   -H "Content-Type: application/json" -d '{}'
 ```
+
+### Client confirms payment via email reply (non-Airwallex bank flow)
+
+**Symptom:** Client sends a reply on the invoice thread saying "payment is done / transfer details attached" but no Airwallex deposit notification arrives (e.g. payment landed in Eclipse Ventures Pte. Ltd. or another non-Airwallex SG/HK account).
+
+**Expected behaviour (post-2026-05-07):** The Client Payment Reply branch fires automatically and posts a `Slack Needs Review` message in `#payments-invoices-updates` with: subject, source = `client-reply`, parsed amount/currency from tracker fuzzy match, parsed invoice number, parsed client name, reason, email ID. **No tracker write happens.**
+
+**Operator action:** Verify the reply is genuine (open the email, check the attached transfer notice). Then forward the email from `john@kravemedia.co` → `noa@kravemedia.co` with the invoice number and amount in the subject. The existing forwarded-receipt path will detect it on the next run and mark the tracker `Payment Complete`.
+
+**If branch did NOT fire when it should have:**
+- Check `staticData.processedClientReplyIds` — sender's email ID may have been seen before (strip from list to reprocess).
+- Check sender domain is not in the internal denylist (`kravemedia.co`, `airwallex.com`, etc.) — replies from kravemedia.co domains are intentionally excluded.
+- Check the body/subject contains one of the trigger phrases (`payment is done`, `transfer details`, `remittance advice`, etc.). If a new phrasing surfaces, append it to the `PHRASES` array in the `Parse Client Replies` node.
+- Check tracker has an open row whose `Client Email` domain matches the sender domain. Without a tracker hit and no inline `INV-...` regex, the email is silently skipped.
 
 ### Trigger invoice reminders manually
 
