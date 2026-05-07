@@ -30,8 +30,8 @@ export function parseArgs(argv) {
     throw new Error('Missing required --mode');
   }
 
-  if (!['review', 'send', 'daily-summary'].includes(args.mode)) {
-    throw new Error('Mode must be review, send, or daily-summary');
+  if (!['review', 'send', 'daily-summary', 'approve'].includes(args.mode)) {
+    throw new Error('Mode must be review, send, approve, or daily-summary');
   }
 
   if (args.mode !== 'daily-summary' && !args.campaign) {

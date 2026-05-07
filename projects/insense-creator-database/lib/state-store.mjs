@@ -13,10 +13,9 @@ export function writeReviewArtifact(root, campaignSlug, records) {
   });
 }
 
-export function writeDecisionSeed(root, campaignSlug, records) {
-  return writeJson(path.join(root, 'decisions', `${campaignSlug}.json`), {
-    records,
-  });
+export function writeDecisionSeed(root, campaignSlug, records, extras = {}) {
+  const payload = { records, ...extras };
+  return writeJson(path.join(root, 'decisions', `${campaignSlug}.json`), payload);
 }
 
 export function writeSendArtifact(root, campaignSlug, records) {

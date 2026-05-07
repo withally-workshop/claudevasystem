@@ -28,7 +28,7 @@ This runner solves that by moving the repetitive browser work into local code wh
 
 ## What The Runner Does
 
-The runner has three operating modes:
+The runner has four operating modes:
 
 ### `review`
 
@@ -44,6 +44,10 @@ It:
 - applies the blocklist rules
 - writes review records locally
 - posts a review summary to Slack when configured
+
+### `approve`
+
+This is the Slack approval collection step. It reads the saved candidate thread for the campaign, walks each candidate reply for ✅ / ❌ reactions, and rewrites the decision file: `pending` → `true` if approved, `false` if rejected. It posts a summary back into the thread.
 
 ### `send`
 
@@ -107,6 +111,8 @@ Optional environment variables:
   - enables Slack report delivery
 - `INSENSE_SLACK_CHANNEL_ID`
   - defaults to `C0AQZGJDR38` (`#airwallexdrafts`)
+- `INSENSE_SLACK_OPERATOR_USER_ID`
+  - when set, only this Slack user's reactions are honored by `approve`
 
 ## Commands
 
@@ -128,6 +134,13 @@ Reset a campaign's review memory and rescan from scratch:
 ```powershell
 $env:INSENSE_PASSWORD='...'
 node projects/insense-creator-database/run-insense-outreach.mjs --mode review --campaign "Little Saints - US Based Creators" --limit 5 --reset-review-history
+```
+
+Collect approvals from Slack:
+
+```powershell
+$env:INSENSE_SLACK_BOT_TOKEN='...'
+node projects/insense-creator-database/run-insense-outreach.mjs --mode approve --campaign "Little Saints - US Based Creators"
 ```
 
 Run live send mode:
@@ -155,7 +168,11 @@ node projects/insense-creator-database/run-insense-outreach.mjs --mode daily-sum
 - `lib/profile-parser.mjs`
   - parser helpers for applicant cards and profile drawer stats
 - `lib/decide.mjs`
-  - quality thresholds and invite policy
+  - quality thresholds, invite policy, cross-campaign dedup
+- `lib/scoring.mjs`
+  - 0–100 score for ranking candidates
+- `lib/approvals.mjs`
+  - reads Slack reactions and applies them to decision records
 - `lib/messaging.mjs`
   - dedup scan, message rendering, composer send helpers
 - `lib/state-store.mjs`
@@ -206,20 +223,37 @@ Quality rules:
 Blocklist rules:
 
 - `Previous Collaborator` -> `invite: false`
+- creator already messaged from any prior campaign (cross-campaign dedup against `creator-cache.json`) -> `invite: false`, blockReason names the prior campaign when known
 
 Current behavior:
 
 - creators who fail quality are skipped in the review artifact
-- creators who pass quality are written into the decision file
-- quality-passing creators default to `invite: true`
+- creators who pass quality are written into the decision file with a 0–100 `score` and detected `niches`
+- when a Slack bot token is configured, quality-passing non-blocklisted creators default to `invite: 'pending'` and are posted to a Slack approval thread; the operator reacts ✅/❌ and `--mode approve` rewrites the decisions
+- when no Slack token is configured, quality-passing non-blocklisted creators fall back to `invite: true`
 - blocklisted creators are written with `invite: false` and a `blockReason`
+
+## Approve Flow
+
+`approve` mode:
+
+1. reads the decision file's `slack` block (channelId + threadTs + per-creator replyTs)
+2. fetches the thread via `conversations.replies`
+3. for each `pending` record, walks the candidate reply's reactions:
+   - ✅ (or +1) from the operator -> `invite: true`
+   - ❌ (or -1) from the operator -> `invite: false`, blockReason `Operator rejected`
+   - mixed or no decisive reaction -> stays `pending`
+4. rewrites the decision file
+5. posts a summary back into the thread
+
+Optional `INSENSE_SLACK_OPERATOR_USER_ID` restricts which user's reactions count.
 
 ## Send Flow
 
 `send` mode:
 
 1. reads the decision file
-2. skips records with `invite: false`
+2. only sends for records with `invite: true`; `pending` and `false` are skipped
 3. for `invite: true`:
    - reopens the campaign applicants route
    - searches by username

@@ -23,7 +23,9 @@ import { createSession } from './lib/insense-session.mjs';
 import { sendInviteIfEligible, validateDecisionRecord } from './lib/messaging.mjs';
 import { parseProfileDrawerText, parseProfileStats } from './lib/profile-parser.mjs';
 import { buildDailySlackSummary, buildDailySummary, buildRunSummary } from './lib/reporter.mjs';
-import { sendSlackSummary, sendSlackText } from './lib/slack-report.mjs';
+import { postCandidateThread, sendSlackSummary, sendSlackText } from './lib/slack-report.mjs';
+import { scoreProfile } from './lib/scoring.mjs';
+import { collectApprovalsFromSlack } from './lib/approvals.mjs';
 import {
   listRunArtifactsForLocalDate,
   readCreatorCache,
@@ -131,13 +133,19 @@ function loadDailyRunArtifacts(dataRoot, date = new Date()) {
     .filter((artifact) => artifact.mode === 'review' || artifact.mode === 'send');
 }
 
-function buildFixtureReviewRecords(campaign) {
+function buildFixtureReviewRecords(campaign, cache = { creators: {} }, useApprovalGate = false) {
   return REVIEW_FIXTURE_RECORDS.map((record) => {
     const qualityDecision = evaluateProfile(record);
-    const invitePolicy = evaluateInvitePolicy({
+    const profileForPolicy = {
       ...record,
       ...qualityDecision,
       previousCollaborator: Boolean(record.previousCollaborator),
+    };
+    const invitePolicy = evaluateInvitePolicy(profileForPolicy, {
+      cache,
+      creatorKey: record.creatorKey,
+      campaign,
+      useApprovalGate,
     });
 
     return {
@@ -145,6 +153,8 @@ function buildFixtureReviewRecords(campaign) {
       campaign,
       ...qualityDecision,
       previousCollaborator: Boolean(record.previousCollaborator),
+      score: scoreProfile(profileForPolicy),
+      niches: Array.isArray(record.niches) ? record.niches : [],
       invite: invitePolicy.invite,
       blockReason: invitePolicy.blockReason,
       notes: '',
@@ -159,6 +169,8 @@ function buildReviewRecord({
   normalized,
   decision,
   invitePolicy,
+  niches,
+  score,
 }) {
   return {
     creatorKey: applicant.creatorKey,
@@ -176,6 +188,8 @@ function buildReviewRecord({
     portfolioUploads: normalized.portfolioUploads,
     finishedDeals: normalized.finishedDeals,
     engagementRate: normalized.engagementRate,
+    niches: niches || [],
+    score: score || 0,
     passesQuality: decision.passesQuality,
     skipReason: decision.skipReason,
     requiresOperatorDecision: decision.requiresOperatorDecision,
@@ -186,7 +200,7 @@ function buildReviewRecord({
   };
 }
 
-async function buildLiveReviewRecords({ campaign, page, limit }) {
+async function buildLiveReviewRecords({ campaign, page, limit, cache = { creators: {} } }) {
   await openCampaignApplications(page, campaign);
   const applicants = await collectVisibleApplicantSummaries(page, limit);
   const records = [];
@@ -210,10 +224,17 @@ async function buildLiveReviewRecords({ campaign, page, limit }) {
           drawerStats.engagementText || applicant.engagementText,
       });
       const decision = evaluateProfile(normalized);
-      const invitePolicy = evaluateInvitePolicy({
+      const profileForPolicy = {
         ...normalized,
         ...decision,
         previousCollaborator: Boolean(applicant.previousCollaborator),
+        followersText: applicant.followersText,
+      };
+      const invitePolicy = evaluateInvitePolicy(profileForPolicy, {
+        cache,
+        creatorKey: applicant.creatorKey,
+        campaign,
+        useApprovalGate: true,
       });
 
       records.push(
@@ -223,6 +244,8 @@ async function buildLiveReviewRecords({ campaign, page, limit }) {
           normalized,
           decision,
           invitePolicy,
+          niches: drawerParsed.niches || [],
+          score: scoreProfile(profileForPolicy),
         }),
       );
     } finally {
@@ -341,7 +364,9 @@ function buildDecisionSeedRecords(records) {
       portfolioUploads: record.portfolioUploads,
       finishedDeals: record.finishedDeals,
       engagementRate: record.engagementRate,
-      invite: Boolean(record.invite),
+      niches: Array.isArray(record.niches) ? record.niches : [],
+      score: Number(record.score || 0),
+      invite: record.invite === true || record.invite === 'pending' ? record.invite : false,
       blockReason: record.blockReason || '',
       notes: '',
     }));
@@ -373,6 +398,14 @@ async function runReviewMode(campaign, limit, options = {}) {
   if (options.resetReviewHistory) {
     resetCampaignReviewBucket(reviewHistory, campaignSlug);
   }
+  let cache;
+  try {
+    cache = readCreatorCache(dataRoot);
+  } catch {
+    cache = { creators: {} };
+  }
+  const slackConfig = getSlackReportingConfig();
+  const useApprovalGate = Boolean(slackConfig.token && slackConfig.channelId);
   let records;
 
   if (shouldUseLiveSession) {
@@ -435,10 +468,17 @@ async function runReviewMode(campaign, limit, options = {}) {
               drawerStats.engagementText || applicant.engagementText,
           });
           const decision = evaluateProfile(normalized);
-          const invitePolicy = evaluateInvitePolicy({
+          const profileForPolicy = {
             ...normalized,
             ...decision,
             previousCollaborator: Boolean(applicant.previousCollaborator),
+            followersText: applicant.followersText,
+          };
+          const invitePolicy = evaluateInvitePolicy(profileForPolicy, {
+            cache,
+            creatorKey: applicant.creatorKey,
+            campaign,
+            useApprovalGate,
           });
 
           records.push(
@@ -448,6 +488,8 @@ async function runReviewMode(campaign, limit, options = {}) {
               normalized,
               decision,
               invitePolicy,
+              niches: drawerParsed.niches || [],
+              score: scoreProfile(profileForPolicy),
             }),
           );
         } finally {
@@ -459,20 +501,92 @@ async function runReviewMode(campaign, limit, options = {}) {
     }
   } else {
     records = filterUnreviewedByCampaign(
-      buildFixtureReviewRecords(campaign),
+      buildFixtureReviewRecords(campaign, cache, useApprovalGate),
       campaignSlug,
       reviewHistory,
     ).slice(0, limit);
   }
 
+  const decisionRecords = buildDecisionSeedRecords(records);
+
   writeReviewArtifact(dataRoot, campaignSlug, records);
-  writeDecisionSeed(dataRoot, campaignSlug, buildDecisionSeedRecords(records));
   markReviewedRecords(reviewHistory, campaignSlug, records);
   writeReviewHistory(dataRoot, reviewHistory);
+
+  let slackThread = null;
+  try {
+    const threadResult = await postCandidateThread({
+      campaign,
+      records: decisionRecords,
+      slackConfig,
+    });
+    if (threadResult.delivered) {
+      slackThread = {
+        channelId: threadResult.channelId,
+        threadTs: threadResult.threadTs,
+        replyTsByCreator: Object.fromEntries(
+          threadResult.replies.map((reply) => [reply.creatorKey, reply.replyTs]),
+        ),
+      };
+      console.log(
+        `Candidate thread posted to Slack (${threadResult.replies.length} candidates) — react to approve/reject, then run --mode approve.`,
+      );
+    } else if (threadResult.skipped) {
+      console.log(`Candidate thread skipped: ${threadResult.reason}`);
+    }
+  } catch (error) {
+    console.warn(`Failed to post candidate thread: ${error.message}`);
+  }
+
+  writeDecisionSeed(
+    dataRoot,
+    campaignSlug,
+    decisionRecords,
+    slackThread ? { slack: slackThread } : {},
+  );
 
   const summary = buildRunSummary(campaign, 'review', records);
   console.log(summary);
   await reportRunToSlack({ campaign, mode: 'review', records });
+}
+
+async function runApproveMode(campaign) {
+  const campaignSlug = slugifyCampaign(campaign);
+  const dataRoot = path.join(__dirname, 'data');
+  const decisionFile = readDecisionSeed(dataRoot, campaignSlug);
+
+  if (!decisionFile.slack || !decisionFile.slack.threadTs) {
+    throw new Error(
+      `No Slack approval thread on file for ${campaign}. Run --mode review with Slack reporting enabled first.`,
+    );
+  }
+
+  const slackConfig = getSlackReportingConfig();
+  const operatorUserId = process.env.INSENSE_SLACK_OPERATOR_USER_ID || '';
+
+  const { records: updated, counts } = await collectApprovalsFromSlack({
+    channelId: decisionFile.slack.channelId,
+    threadTs: decisionFile.slack.threadTs,
+    records: decisionFile.records,
+    replyTsByCreator: decisionFile.slack.replyTsByCreator || {},
+    slackConfig,
+    operatorUserId,
+  });
+
+  writeDecisionSeed(dataRoot, campaignSlug, updated, { slack: decisionFile.slack });
+
+  const summaryText = `Approvals collected for ${campaign} — ${counts.approved} to send, ${counts.rejected} rejected, ${counts.pending} still pending`;
+  console.log(summaryText);
+
+  try {
+    await sendSlackText({
+      text: summaryText,
+      slackConfig: { ...slackConfig, channelId: decisionFile.slack.channelId },
+      threadTs: decisionFile.slack.threadTs,
+    });
+  } catch (error) {
+    console.warn(`Failed to post approval summary to thread: ${error.message}`);
+  }
 }
 
 async function executeSendMode({
@@ -523,6 +637,7 @@ async function executeSendMode({
       cache.creators[record.creatorKey] = {
         status: result.status,
         updatedAt: new Date().toISOString(),
+        campaign: record.campaign || '',
       };
 
       if (ownedSession?.page) {
@@ -580,6 +695,8 @@ if (args.mode === 'review') {
   });
 } else if (args.mode === 'daily-summary') {
   await runDailySummaryMode();
+} else if (args.mode === 'approve') {
+  await runApproveMode(args.campaign);
 } else {
   await runSendMode(args.campaign);
 }

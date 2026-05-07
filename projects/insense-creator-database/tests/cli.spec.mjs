@@ -39,6 +39,19 @@ test('accepts daily-summary mode without a campaign', () => {
   );
 });
 
+test('accepts approve mode with a campaign', () => {
+  assert.deepEqual(
+    parseArgs(['--mode', 'approve', '--campaign', 'Halo Home']),
+    {
+      mode: 'approve',
+      campaign: 'Halo Home',
+      headless: true,
+      limit: 10,
+      resetReviewHistory: false,
+    },
+  );
+});
+
 test('parses reset-review-history flag for review mode', () => {
   assert.deepEqual(
     parseArgs([

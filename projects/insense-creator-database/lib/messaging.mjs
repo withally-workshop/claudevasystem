@@ -33,8 +33,8 @@ export function validateDecisionRecord(record) {
     throw new Error('Decision record must include creatorKey');
   }
 
-  if (typeof record.invite !== 'boolean') {
-    throw new Error('Decision record invite must be true or false');
+  if (record.invite !== true && record.invite !== false && record.invite !== 'pending') {
+    throw new Error('Decision record invite must be true, false, or "pending"');
   }
 
   return record;
@@ -78,8 +78,9 @@ export async function sendInviteIfEligible({
 }) {
   validateDecisionRecord(record);
 
-  if (record.invite === false) {
-    return { ...record, status: 'skipped', messageSent: false, dedupMatched: false };
+  if (record.invite !== true) {
+    const status = record.invite === 'pending' ? 'pending_approval' : 'skipped';
+    return { ...record, status, messageSent: false, dedupMatched: false };
   }
 
   if (cache.creators?.[record.creatorKey]?.status === 'messaged') {

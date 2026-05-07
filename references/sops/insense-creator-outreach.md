@@ -4,13 +4,13 @@
 **Executor:** Local standalone Playwright runner
 **Trigger:** Manual, per campaign
 **Skill:** `.claude/skills/insense-creator-outreach/SKILL.md`
-**Objective:** Invite strong but non-selected Insense applicants into the Krave Creator Database without duplicate outreach.
+**Objective:** Invite strong but non-selected Insense applicants into the Krave Creator Database without duplicate outreach, with explicit Slack-based approval before any message is sent.
 
 ---
 
 ## Purpose
 
-When creators apply to an Insense campaign, many are strong enough to keep in the network even if they are not the right fit for that specific brief. This flow captures those creators into Krave's own creator pipeline by sending a direct database invite through Insense chat.
+When creators apply to an Insense campaign, many are strong enough to keep in the network even if they are not the right fit for that specific brief. This flow scores and ranks those candidates, posts them to a Slack approval thread, and only sends invites for creators the operator approves with a ✅ reaction.
 
 ---
 
@@ -24,28 +24,23 @@ A creator passes only if all three are true:
 | Finished deals | >= 1 | Profile drawer -> `X finished deals` |
 | Engagement rate | >= 1% | Profile drawer -> `X.XX% Engagement rate` |
 
-Fail any one:
-
-- no invite
-- record the skip reason
+Fail any one: skipped from outreach, recorded with a skip reason.
 
 ---
 
-## Automatic Invite Policy
+## Score and Niches
 
-The runner now auto-populates invite decisions for quality-passing creators.
+Quality-passing creators are ranked by a 0–100 score weighted by engagement (40), finished deals (30), followers (15), and portfolio uploads (15). Niches are extracted from the profile drawer text against a fixed vocabulary and shown next to each candidate in the Slack thread.
 
-Current blocklist:
+---
 
-- `Previous Collaborator`
+## Invite Policy
 
-Policy behavior:
-
-- quality fail -> skipped from outreach
-- quality pass and not blocklisted -> `invite: true`
-- quality pass and blocklisted -> `invite: false` with a `blockReason`
-
-This keeps the flow automatic while enforcing an explicit exclusion rule in code.
+- quality fail → skipped from outreach
+- previous collaborator → `invite: false`, blocked in code
+- creator already messaged from any prior campaign (cross-campaign dedup against `creator-cache.json`) → `invite: false`, blockReason names the prior campaign when known
+- otherwise, when Slack reporting is configured → `invite: 'pending'` until approved in Slack
+- Slack reporting not configured → falls back to legacy `invite: true` for quality-passing non-blocklisted creators
 
 ---
 
@@ -53,65 +48,65 @@ This keeps the flow automatic while enforcing an explicit exclusion rule in code
 
 ### Step 1: Review
 
-Run:
-
 ```powershell
 $env:INSENSE_PASSWORD='...'
+$env:INSENSE_SLACK_BOT_TOKEN='...'
 node projects/insense-creator-database/run-insense-outreach.mjs --mode review --campaign "<Campaign Name>" --limit 10
 ```
 
-This writes:
+Writes:
 
-- `projects/insense-creator-database/data/runs/<campaign-slug>-review.json`
-- `projects/insense-creator-database/data/decisions/<campaign-slug>.json`
+- `data/runs/<campaign-slug>-review.json`
+- `data/decisions/<campaign-slug>.json` — quality-passing creators written with `invite: 'pending'`, plus `slack: { channelId, threadTs, replyTsByCreator }` when the candidate thread is posted
 
-The decision file contains only quality-passing creators and already includes the current invite decision.
-When configured with a Slack bot token, the runner also posts a review summary to `#airwallexdrafts`.
+In Slack, a parent message lands in `#airwallexdrafts` followed by one reply per candidate (sorted by score desc), each pre-stamped with ✅ and ❌.
 
-### Step 2: Send
+### Step 2: Approve in Slack
 
-Run:
+Operator opens the thread and reacts on each candidate:
+
+- ✅ → invite
+- ❌ → skip
+- no reaction → stays pending and will not be sent
+
+### Step 3: Collect approvals
+
+```powershell
+$env:INSENSE_SLACK_BOT_TOKEN='...'
+node projects/insense-creator-database/run-insense-outreach.mjs --mode approve --campaign "<Campaign Name>"
+```
+
+- reads ✅ / ❌ reactions from the saved thread
+- rewrites the decision file: `pending` → `true` / `false`
+- posts a summary back into the thread (`X to send, Y rejected, Z still pending`)
+
+Optional `INSENSE_SLACK_OPERATOR_USER_ID` restricts which user's reactions count.
+
+### Step 4: Send
 
 ```powershell
 $env:INSENSE_PASSWORD='...'
 node projects/insense-creator-database/run-insense-outreach.mjs --mode send --campaign "<Campaign Name>"
 ```
 
-The runner:
-
-- skips records with `invite: false`
-- only messages creators with `invite: true`
-- writes a send artifact JSON locally
-- posts a send summary to `#airwallexdrafts` when configured
+The runner only messages creators with `invite: true`. Pending records are skipped — re-run approve or rerun review if you want them included.
 
 ---
 
 ## Deduplication
 
-Before sending, the runner opens the creator chat thread and checks for:
+Two layers, both source-of-truth:
 
-`https://form.typeform.com/to/lAPIxgqv`
+- thread scan for `https://form.typeform.com/to/lAPIxgqv` before each send
+- `creator-cache.json` — durable per-creator status used at decision time (cross-campaign dedup) and at send time
 
-If that link is already in the thread:
-
-- treat the creator as already messaged
-- skip sending
-
-The local cache in `projects/insense-creator-database/data/creator-cache.json` is helpful, but the thread check is the source-of-truth dedup rule.
-The cache remains the durable local record even when Slack reporting is enabled.
+The cache stores `{ status, updatedAt, campaign }` per creator key.
 
 ---
 
 ## Invite Message
 
-The runner uses the built-in message template in:
-
-- `projects/insense-creator-database/lib/messaging.mjs`
-
-Greeting rule:
-
-- use first name when available
-- otherwise use username
+Single template in `projects/insense-creator-database/lib/messaging.mjs`. Uses first name when available, otherwise username.
 
 ---
 
@@ -120,20 +115,25 @@ Greeting rule:
 Review run:
 
 - review artifact JSON
-- decision file JSON
-- terminal summary
+- decision file JSON with `pending` records and `slack` block
+- Slack candidate thread
+
+Approve run:
+
+- updated decision file with `true` / `false` per record
+- Slack summary in the same thread
 
 Send run:
 
-- send summary in terminal
-- updated local cache
-- sent / skipped / already-messaged statuses in the result artifact
+- send artifact JSON
+- updated `creator-cache.json` (status + campaign)
+- Slack send summary
 
 ---
 
 ## Important Notes
 
-- The current blocklist rule is `Previous Collaborator`.
-- Expand the blocklist in code when campaign-specific exclusions become clear.
-- Use bounded review runs first when validating a new campaign.
-- The live runner has already been verified on real review extraction and live sends.
+- A bot token is required to use the approval gate. Without it, the runner falls back to legacy auto-`true` behavior so the flow still works.
+- Cross-campaign dedup blocks based on the cache state at review time — it cannot block creators from two simultaneous reviews until one has run send.
+- Niches use a fixed vocabulary; unknown niches are dropped silently.
+- Use `--reset-review-history` on `review` to force-rescan a campaign.

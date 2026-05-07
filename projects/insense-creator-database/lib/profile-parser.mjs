@@ -48,5 +48,51 @@ export function parseProfileDrawerText(drawerText) {
     engagementRate: parsePercent(
       text.match(/(\d+(?:\.\d+)?)%\s+Engagement rate/i)?.[0] || '',
     ),
+    niches: parseNiches(text),
   };
+}
+
+const NICHE_VOCAB = [
+  'Beauty',
+  'Skincare',
+  'Haircare',
+  'Makeup',
+  'Fashion',
+  'Lifestyle',
+  'Food',
+  'Cooking',
+  'Beverage',
+  'Fitness',
+  'Wellness',
+  'Health',
+  'Parenting',
+  'Family',
+  'Pets',
+  'Home',
+  'Decor',
+  'Travel',
+  'Tech',
+  'Gaming',
+  'Education',
+  'Finance',
+  'Business',
+  'Automotive',
+  'Outdoors',
+  'Sports',
+  'Music',
+  'Art',
+  'Photography',
+  'Comedy',
+  'DIY',
+];
+
+function parseNiches(text) {
+  const found = new Set();
+  for (const niche of NICHE_VOCAB) {
+    const pattern = new RegExp(`\\b${niche}\\b`, 'i');
+    if (pattern.test(text)) {
+      found.add(niche.toLowerCase());
+    }
+  }
+  return Array.from(found);
 }

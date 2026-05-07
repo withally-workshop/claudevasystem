@@ -48,3 +48,64 @@ test('blocks previous collaborators from auto-invite', () => {
   assert.equal(result.invite, false);
   assert.match(result.blockReason, /previous collaborator/i);
 });
+
+test('returns pending when approval gate is enabled', () => {
+  const result = evaluateInvitePolicy(
+    {
+      passesQuality: true,
+      previousCollaborator: false,
+    },
+    { useApprovalGate: true },
+  );
+
+  assert.equal(result.invite, 'pending');
+  assert.equal(result.blockReason, '');
+});
+
+test('blocks creators already invited from another campaign', () => {
+  const cache = {
+    creators: {
+      'creator-a': { status: 'messaged', campaign: 'Halo Home' },
+    },
+  };
+
+  const result = evaluateInvitePolicy(
+    {
+      passesQuality: true,
+      previousCollaborator: false,
+    },
+    {
+      cache,
+      creatorKey: 'creator-a',
+      campaign: 'Little Saints',
+      useApprovalGate: true,
+    },
+  );
+
+  assert.equal(result.invite, false);
+  assert.match(result.blockReason, /already invited from halo home/i);
+});
+
+test('cross-campaign dedup falls back when prior campaign is unknown', () => {
+  const cache = {
+    creators: {
+      'creator-b': { status: 'messaged' },
+    },
+  };
+
+  const result = evaluateInvitePolicy(
+    {
+      passesQuality: true,
+      previousCollaborator: false,
+    },
+    {
+      cache,
+      creatorKey: 'creator-b',
+      campaign: 'Little Saints',
+      useApprovalGate: true,
+    },
+  );
+
+  assert.equal(result.invite, false);
+  assert.match(result.blockReason, /prior campaign/i);
+});

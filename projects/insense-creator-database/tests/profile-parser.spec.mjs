@@ -22,6 +22,21 @@ test('parses visible profile stats into normalized numbers', () => {
   assert.equal(result.engagementRate, 1.8);
 });
 
+test('extracts niches from drawer text vocabulary', () => {
+  const result = parseProfileDrawerText(`
+    eduardo.lara
+    Beauty, Skincare and Lifestyle creator
+    5 finished deals
+    3 uploads in 2 different categories
+    4.2% Engagement rate
+  `);
+
+  assert.deepEqual(
+    result.niches.sort(),
+    ['beauty', 'lifestyle', 'skincare'].sort(),
+  );
+});
+
 test('parses drawer text for finished deals and upload counts', () => {
   const result = parseProfileDrawerText(`
 eduardo.lara

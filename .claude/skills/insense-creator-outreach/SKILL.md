@@ -11,9 +11,10 @@ Uses the local runner in `projects/insense-creator-database/` to:
 
 - review a campaign's visible applicants in Insense
 - extract quality signals from the real profile drawer
-- auto-classify invite eligibility for quality-passing creators
-- block known exclusions in code
-- send the Krave Creator Database invite for creators marked `invite: true`
+- compute a 0–100 score and tag detected niches per candidate
+- enforce a cross-campaign dedup rule against prior outreach
+- post candidates to a Slack approval thread for explicit ✅ / ❌ decisions
+- send the Krave Creator Database invite only for creators approved in Slack
 
 ---
 
@@ -26,12 +27,10 @@ Uses the local runner in `projects/insense-creator-database/` to:
 
 Optional:
 
-- `INSENSE_EMAIL`
-  - defaults to `noa@kravemedia.co`
-- `INSENSE_SLACK_BOT_TOKEN` or `SLACK_BOT_TOKEN`
-  - posts review and send summaries to `#airwallexdrafts`
-- `INSENSE_SLACK_CHANNEL_ID`
-  - defaults to `C0AQZGJDR38`
+- `INSENSE_EMAIL` — defaults to `noa@kravemedia.co`
+- `INSENSE_SLACK_BOT_TOKEN` or `SLACK_BOT_TOKEN` — required for the approval thread
+- `INSENSE_SLACK_CHANNEL_ID` — defaults to `C0AQZGJDR38` (`#airwallexdrafts`)
+- `INSENSE_SLACK_OPERATOR_USER_ID` — when set, only this user's reactions count
 
 ---
 
@@ -45,97 +44,96 @@ A creator must meet all three:
 | Finished deals on Insense | >= 1 |
 | Engagement rate | >= 1% |
 
-Fail any one:
+Fail any one: skipped, not added to the decision file.
 
-- skip the creator
-- record the skip reason
-- do not include them in the invite decision file
+---
+
+## Score and Niches
+
+Quality-passing candidates are ranked by a 0–100 score:
+
+| Signal | Weight | Cap |
+|--------|--------|-----|
+| Engagement rate | 40 | 10% |
+| Finished deals | 30 (log) | 20 deals |
+| Followers | 15 (log) | 500k |
+| Portfolio uploads | 15 | 10 uploads |
+
+Niches are extracted from the profile drawer text against a fixed vocabulary (Beauty, Skincare, Fashion, Lifestyle, Food, Fitness, Tech, etc.). Both fields are written into the decision file and shown in the Slack thread.
 
 ---
 
 ## Blocklist Rules
 
-Current enforced blocklist:
+Enforced in code:
 
-- `Previous Collaborator`
-
-Blocklisted creators:
-
-- remain in the quality-passing decision file
-- are written with `invite: false`
-- carry a `blockReason`
-- are skipped by `send` mode
+- `Previous Collaborator` — `invite: false`, `blockReason: 'Previous collaborator'`
+- Cross-campaign dedup — if `creator-cache.json` already shows this creator as `messaged` / `ready_to_send` / `already_messaged` from any prior campaign, `invite: false` with `blockReason: 'Already invited from <prior campaign>'`
 
 ---
 
-## Review Flow
+## Three-step Flow
 
-Run:
+### 1. Review
 
 ```powershell
 $env:INSENSE_PASSWORD='...'
 node projects/insense-creator-database/run-insense-outreach.mjs --mode review --campaign "<Campaign Name>" --limit 10
 ```
 
-This produces:
+Writes:
 
-- `projects/insense-creator-database/data/runs/<campaign-slug>-review.json`
-- `projects/insense-creator-database/data/decisions/<campaign-slug>.json`
-- Slack review summary to `#airwallexdrafts` when configured
+- `data/runs/<campaign-slug>-review.json`
+- `data/decisions/<campaign-slug>.json` — quality-passing creators are written with `invite: 'pending'`
+- review history updated
 
-Decision behavior:
+When Slack is configured, the runner posts a parent message to `#airwallexdrafts` and one reply per candidate (sorted by score desc), each pre-stamped with ✅ and ❌. Thread/reply timestamps are saved into the decision file under `slack`.
 
-- quality-passing creators default to `invite: true`
-- blocklisted creators are written as `invite: false`
-- skipped creators stay only in the review artifact
+### 2. Approve (in Slack)
 
----
+Operator opens the thread and reacts on each candidate:
 
-## Send Flow
+- ✅ → invite
+- ❌ → skip
+- no reaction → stays pending
 
-Run:
+Then collect:
+
+```powershell
+$env:INSENSE_SLACK_BOT_TOKEN='...'
+node projects/insense-creator-database/run-insense-outreach.mjs --mode approve --campaign "<Campaign Name>"
+```
+
+Reads reactions, rewrites the decision file (`pending` → `true` / `false`), posts a summary back into the thread.
+
+### 3. Send
 
 ```powershell
 $env:INSENSE_PASSWORD='...'
 node projects/insense-creator-database/run-insense-outreach.mjs --mode send --campaign "<Campaign Name>"
 ```
 
-The runner will:
-
-1. reopen the campaign applicants route
-2. search by username
-3. open the creator profile
-4. open the message composer
-5. scan the thread for the Typeform link
-6. skip if already messaged
-7. send the invite only for `invite: true`
-8. write `projects/insense-creator-database/data/runs/<campaign-slug>-send.json`
-9. post a send summary to `#airwallexdrafts` when configured
+Only records with `invite === true` are messaged. Pending records are skipped (run `--mode approve` first).
 
 ---
 
-## Dedup Rule
+## Dedup Rules
 
-The presence of:
+Two layers, both source-of-truth:
 
-`https://form.typeform.com/to/lAPIxgqv`
-
-anywhere in the existing chat thread means:
-
-- already messaged
-- do not send again
+- thread scan for `https://form.typeform.com/to/lAPIxgqv` — skip if present
+- `creator-cache.json` — durable per-creator status used by both `send` and the decision-time cross-campaign check
 
 ---
 
 ## Message Template
 
-The runner uses the built-in template in `lib/messaging.mjs` and substitutes the creator's first name when available, otherwise the username.
+Single template in `lib/messaging.mjs`. Substitutes the creator's first name when available, otherwise the username.
 
 ---
 
 ## Current Limits
 
-- review mode currently works on the first visible applicants, bounded by `--limit`
-- the current auto-policy only blocklists `Previous Collaborator`
-- the local cache helps avoid accidental repeats, but thread dedup is still the source-of-truth check
-- `creator-cache.json` remains the local durable record for creator statuses
+- review still bounded by `--limit` and visible-pool scroll
+- niche vocabulary is a fixed list; unknown niches are dropped
+- the Slack approval thread requires a bot token; without one, the runner falls back to legacy auto-`invite: true` for quality-passing non-blocklisted creators
