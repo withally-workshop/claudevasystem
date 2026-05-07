@@ -30,6 +30,7 @@ export async function dismissPageOverlays(page) {
 
   const knownCookieButtons = [
     '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll',
+    '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection',
     '#CybotCookiebotDialogBodyButtonAccept',
   ];
 
@@ -43,6 +44,20 @@ export async function dismissPageOverlays(page) {
     } catch {
       // Cookie banner ids vary between sessions.
     }
+  }
+
+  // Last-resort: rip the Cookiebot dialog out of the DOM. The role/click paths
+  // above sometimes silently fail because the dialog uses fixed positioning and
+  // intercepts pointer events. Removing it guarantees row buttons become hittable.
+  try {
+    await page.evaluate(() => {
+      for (const id of ['CybotCookiebotDialog', 'CybotCookiebotDialogBodyUnderlay']) {
+        const node = document.getElementById(id);
+        if (node) node.remove();
+      }
+    });
+  } catch {
+    // best-effort; do not block the flow
   }
 }
 
@@ -632,11 +647,27 @@ export async function openApplicantChatBySearch(page, username) {
   await searchApplicants(page, username);
   await dismissPageOverlays(page);
 
-  const chatButton = page
-    .locator('button')
-    .filter({ hasText: /^Chat$/ })
-    .first();
-  await chatButton.waitFor({ state: 'visible', timeout: 15000 });
+  // getByRole filters to the accessible name and prefers visible nodes,
+  // which avoids picking hidden buttons left in the DOM after row filtering.
+  const chatButton = page.getByRole('button', { name: /^Chat$/i }).first();
+  try {
+    await chatButton.waitFor({ state: 'visible', timeout: 15000 });
+  } catch (error) {
+    // Fall back to the locator-based path with explicit scroll-into-view.
+    const fallback = page
+      .locator('button')
+      .filter({ hasText: /^Chat$/ })
+      .first();
+    await fallback.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
+    await fallback.waitFor({ state: 'visible', timeout: 5000 });
+    await fallback.click();
+    const textarea = page.locator('textarea[data-test="msgField:textarea:text"]');
+    await textarea.waitFor({ state: 'visible', timeout: 15000 });
+    await page.waitForTimeout(1000);
+    return;
+  }
+
+  await chatButton.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
   await chatButton.click();
 
   const textarea = page.locator('textarea[data-test="msgField:textarea:text"]');
