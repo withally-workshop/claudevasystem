@@ -52,7 +52,7 @@ Automated workflows built from recurring tasks. Located in [`.claude/skills/`](.
 ```
 claude-ea/
 ├── context/              # Who Noa is, her businesses, team, priorities, goals
-├── projects/             # Active workstreams (Halo Home US, Insense DB, Automation)
+├── projects/             # Active workstreams (Halo Home US, Automation)
 ├── references/sops/      # Standard operating procedures
 ├── templates/            # Reusable templates (session summary, etc.)
 ├── decisions/log.md      # Append-only decision log

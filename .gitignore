@@ -13,3 +13,10 @@ reports/ops-report/
 
 # Local Netlify folder
 .netlify
+
+# Insense run audit logs (cache + templates + campaigns are committed)
+data/insense/runs/*
+!data/insense/runs/.gitkeep
+
+# Claude Code scheduled task lock
+.claude/scheduled_tasks.lock

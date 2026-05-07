@@ -72,6 +72,7 @@ Current skills on disk:
 - `creator-invoice-processing`
 - `eod-triage-summary`
 - `inbox-triage`
+- `insense-outreach`
 - `invoice-approval-polling`
 - `invoice-reminder-cron`
 - `invoice-reminder-trigger`
@@ -93,7 +94,6 @@ Important note:
 Current project folders:
 
 - `halo-home-us-expansion`
-- `insense-creator-database`
 - `system-automation-build-out`
 - `krave-ops-showcase`
 

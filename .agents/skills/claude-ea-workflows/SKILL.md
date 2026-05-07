@@ -37,6 +37,7 @@ This repo is a Claude Code executive-assistant workspace. Treat `.claude/skills/
 | `/client-invoice-creation`, "client invoice creation", "process invoice requests" | `.claude/skills/client-invoice-creation/SKILL.md` | Process Slack invoice request receipts and approval replies. |
 | "Osome reconciliation" | `.claude/skills/osome-reconciliation/SKILL.md` | Triage Osome documents-needed transactions and locate PDFs. |
 | `/morning-coffee`, "morning coffee", "run morning coffee", "Noa's morning briefing", "send morning briefing", "what's on for Noa today" | `.claude/skills/morning-coffee/SKILL.md` and `.agents/skills/morning-coffee/SKILL.md` | Personal daily morning briefing DM to Noa — calendar, email attention items, ClickUp project pulse, Slack DMs and channel highlights. Sends as John's personal Slack account. |
+| `/insense-outreach`, "run insense outreach", "insense outreach" | `.claude/skills/insense-outreach/SKILL.md` and `.agents/skills/insense-outreach/SKILL.md` | Combined pass: attaches to operator's everyday Chrome via `playwright-cdp` (Playwright Extension), walks one campaign's applicants, applies pass/fail filter + blocklist + cross-campaign cache, and (with `--send`) messages passing creators with the templated invite immediately. Defaults to dry-run. |
 
 ## n8n Automation Map
 
@@ -56,6 +57,7 @@ Use `n8n-workflows/WORKFLOWS.md` for current IDs, status, webhook paths, deploym
 | Krave - Client Invoice Creation | `client-invoice-creation` | Deprecated inactive legacy webhook from `deploy-client-invoice-creation.js`; use approval polling for finalization unless explicitly rolling back. |
 | Krave - Ops Report | `ops-report` | Live-read reporting skill only; reads n8n execution history, the Client Invoice Tracker, and Slack context without triggering workflows. |
 | Morning Coffee — Noa's Daily Briefing | `morning-coffee` | Local Windows Task Scheduler task `KraveEA-MorningCoffee`, Mon–Fri 10:00 AM Asia/Manila. Not an n8n workflow, not a remote CCR — runs locally because it depends on local-only MCP servers (`gmail-noa`, `slack-noa`, `slack` bot). |
+| Insense Outreach | `insense-outreach` | No n8n workflow. One combined Claude routine, manual or scheduled per campaign. Attaches to operator's Chrome via `playwright-cdp` MCP (Playwright Extension). Cache + template under `data/insense/`. |
 
 ## Operating Rules
 
