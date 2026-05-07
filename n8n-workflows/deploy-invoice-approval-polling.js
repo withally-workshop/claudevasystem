@@ -265,14 +265,14 @@ return [{ json: {
 
 const workflow = {
   name: 'Krave — Invoice Approval Polling',
-  settings: { executionOrder: 'v1', saveManualExecutions: true },
+  settings: { executionOrder: 'v1', saveManualExecutions: true, timezone: 'Asia/Manila' },
   nodes: [
     {
       id: 'n1', name: 'Schedule Trigger',
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [240, 200],
       parameters: {
-        rule: { interval: [{ field: 'cronExpression', expression: '0 1,3,5,7,9 * * 1-5' }] }
+        rule: { interval: [{ field: 'cronExpression', expression: '0 9,11,13,15,17 * * 1-5' }] }
       },
     },
     {

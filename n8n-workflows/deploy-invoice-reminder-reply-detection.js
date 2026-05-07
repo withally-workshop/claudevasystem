@@ -154,13 +154,13 @@ return out;
 
 const workflow = {
   name: 'Krave - Invoice Reminder Reply Detection',
-  settings: { executionOrder: 'v1', saveManualExecutions: true },
+  settings: { executionOrder: 'v1', saveManualExecutions: true, timezone: 'Asia/Manila' },
   nodes: [
     {
       id: 'n1', name: 'Schedule Reply Check',
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [220, 300],
-      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '30 3 * * 1-5' }] } }
+      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '30 10 * * 1-5' }] } }
     },
     {
       id: 'n2', name: 'Webhook Trigger',

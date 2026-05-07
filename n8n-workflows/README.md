@@ -7,7 +7,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Workflow | Status | Schedule | File |
 |----------|--------|----------|------|
 | Payment Detection | Active | Every hour | [deploy-payment-detection.js](deploy-payment-detection.js) |
-| Invoice Reminder Cron | Active | 9am ICT Mon–Fri | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
+| Invoice Reminder Cron | Active | 10am PHT Mon–Fri | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
 | Weekly Invoice Summary | Active | 9am ICT Mondays | [deploy-weekly-invoice-summary.js](deploy-weekly-invoice-summary.js) |
 | Invoice Reminder Reply Detection | Active | 10:30am ICT weekdays + manual webhook | [deploy-invoice-reminder-reply-detection.js](deploy-invoice-reminder-reply-detection.js) |
 | Inbox Triage Daily | Active | 9am ICT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |

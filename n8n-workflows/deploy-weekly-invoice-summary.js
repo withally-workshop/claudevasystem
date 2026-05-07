@@ -125,13 +125,13 @@ return [{ json: { summaryText } }];
 
 const workflow = {
   name: 'Krave — Weekly Invoice Summary',
-  settings: { executionOrder: 'v1', saveManualExecutions: true },
+  settings: { executionOrder: 'v1', saveManualExecutions: true, timezone: 'Asia/Manila' },
   nodes: [
     {
       id: 'n1', name: 'Schedule Monday 9am ICT',
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [240, 300],
-      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 2 * * 1' }] } }
+      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 9 * * 1' }] } }
     },
     {
       id: 'n2', name: 'Webhook Trigger',

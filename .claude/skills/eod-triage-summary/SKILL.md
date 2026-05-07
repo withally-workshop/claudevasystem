@@ -25,8 +25,6 @@ Post task updates to `#airwallexdrafts` throughout the day as things happen — 
 | `#airwallexdrafts` | `C0AQZGJDR38` | **Primary** — John's daily task dump + bot invoice drafts + inbox triage reports |
 | `#payments-invoices-updates` | `C09HN2EBPR7` | Invoice requests, payment confirmations |
 
-**Do NOT read IM8 channels** (e.g. `#ad-production-internal`). The IM8 engagement has ended — any IM8 content is out of scope and must not appear in the summary.
-
 **Today-only filter:** Discard any message before midnight today in Asia/Manila (UTC+8). Do not surface old content.
 
 ---
@@ -35,7 +33,7 @@ Post task updates to `#airwallexdrafts` throughout the day as things happen — 
 
 ### Step 0 — Pull Slack context
 
-For each channel, call `mcp__claude_ai_Slack__slack_read_channel` with `limit: 50`. Filter to messages with `ts >= today_start_epoch` where `today_start_epoch` is midnight today in Asia/Manila.
+For each channel, call `mcp__claude_ai_Slack__slack_read_channel` with `limit: 50`. Filter to messages with `ts >= today_start_epoch` where `today_start_epoch` is midnight today in Asia/Manila. Discard any message before midnight today in Asia/Manila (UTC+8).
 
 ### Step 1 — Categorize
 
@@ -78,7 +76,7 @@ Use this exact template:
 Rules:
 - Bullets only. No paragraphs. No filler.
 - Flag time-sensitive items with `[URGENT]` or include deadline inline.
-- Group by business (Krave / Halo Home / Skyvane) only if multi-business and grouping aids clarity. Do not include IM8 — engagement ended.
+- Group by business (Krave / Halo Home / Skyvane) only if multi-business and grouping aids clarity.
 - Omit any section with zero items.
 - Use `_italic_` for category headlines inside a bullet; `*bold*` for section titles only.
 - Use only the validated Slack inputs — do not invent tasks or deadlines.

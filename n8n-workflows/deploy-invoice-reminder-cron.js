@@ -267,7 +267,7 @@ return output;
 
 const workflow = {
   name: 'Krave — Invoice Reminder Cron',
-  settings: { executionOrder: 'v1', saveManualExecutions: true },
+  settings: { executionOrder: 'v1', saveManualExecutions: true, timezone: 'Asia/Manila' },
   nodes: [
     {
       id: 'n1', name: 'Schedule 10am PHT',

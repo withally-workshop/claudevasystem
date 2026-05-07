@@ -95,7 +95,7 @@ const workflow = {
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [0, 200],
       parameters: {
-        rule: { interval: [{ field: 'cronExpression', expression: '0 1,3,5,7,9 * * 1-5' }] }
+        rule: { interval: [{ field: 'cronExpression', expression: '0 9,11,13,15,17 * * 1-5' }] }
       }
     },
     {
@@ -441,7 +441,7 @@ const workflow = {
       }
     },
   ],
-  settings: { executionOrder: 'v1' },
+  settings: { executionOrder: 'v1', timezone: 'Asia/Manila' },
   connections: {
     'Schedule':                { main: [[{ node: 'Read Invoice Tracker', type: 'main', index: 0 }]] },
     'Webhook Trigger':         { main: [[{ node: 'Read Invoice Tracker', type: 'main', index: 0 }]] },

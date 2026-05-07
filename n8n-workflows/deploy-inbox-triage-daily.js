@@ -294,7 +294,7 @@ return [{ json: { summary_text: sections.join('\\n') } }];
 
 const workflow = {
   name: 'Krave - Inbox Triage Daily',
-  settings: { executionOrder: 'v1', saveManualExecutions: true },
+  settings: { executionOrder: 'v1', saveManualExecutions: true, timezone: 'Asia/Manila' },
   nodes: [
     {
       id: 'n1',
@@ -302,7 +302,7 @@ const workflow = {
       type: 'n8n-nodes-base.scheduleTrigger',
       typeVersion: 1.2,
       position: [240, 180],
-      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 1 * * 1-5' }] } },
+      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 9 * * 1-5' }] } },
     },
     {
       id: 'n2',

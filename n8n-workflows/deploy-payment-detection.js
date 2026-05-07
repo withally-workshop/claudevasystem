@@ -258,7 +258,7 @@ const AW_BEARER = "={{ 'Bearer ' + $json.token }}";
 
 const workflow = {
   name: 'Krave — Payment Detection',
-  settings: { executionOrder: 'v1', saveManualExecutions: true },
+  settings: { executionOrder: 'v1', saveManualExecutions: true, timezone: 'Asia/Manila' },
   nodes: [
     {
       id: 'n1', name: 'Hourly',
