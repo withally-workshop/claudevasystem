@@ -985,11 +985,6 @@ function renderDashboard(d) {
   .scope-line strong { color: #94a3b8; font-weight: 600; }
   .tracker-btn { background: linear-gradient(135deg, #16a34a, #0d9488); color: #fff; padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; border: none; transition: transform 120ms ease, box-shadow 120ms ease; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25); }
   .tracker-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(22, 163, 74, 0.4); text-decoration: none; }
-  .copy-btn { background: #1e293b; border: 1px solid #334155; color: #cbd5e1; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 120ms ease; }
-  .copy-btn:hover { background: #334155; border-color: #475569; color: #fff; }
-  .copy-btn.copied { background: #064e3b; border-color: #34d399; color: #34d399; }
-  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: #064e3b; border: 1px solid #34d399; color: #d1fae5; padding: 10px 20px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 200ms ease, transform 200ms ease; z-index: 100; }
-  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   /* invoice link inside tables */
   td a.invoice-link { color: #93c5fd; font-weight: 500; }
@@ -1034,7 +1029,7 @@ function renderDashboard(d) {
   <div class="header-meta">
     <a class="tracker-btn" href="https://docs.google.com/spreadsheets/d/${SHEET_ID}" target="_blank" rel="noopener">📊 Open Tracker</a>
     <a class="tracker-btn" href="https://app.clickup.com/9018123501/v/l/8crb97d-378" target="_blank" rel="noopener">✅ ClickUp</a>
-    <button class="copy-btn" id="copy-btn" type="button">📋 Copy summary</button>
+    <a class="tracker-btn" href="https://app.slack.com/client/T06U38A4NV6" target="_blank" rel="noopener">💬 Slack</a>
     <span class="range-toggle">${rangeToggle}</span>
     <span>${generatedTime} ICT</span>
     ${cacheNote}
@@ -1249,8 +1244,6 @@ function renderDashboard(d) {
   </div>
 </main>
 
-<pre id="copy-text" hidden>${buildSlackSummary(d).replace(/</g, '&lt;')}</pre>
-<div class="toast" id="toast">Copied! Paste into Slack.</div>
 
 <script>
 (function () {
@@ -1304,31 +1297,6 @@ function renderDashboard(d) {
     }, INTERVAL_MS);
   })();
 
-  const btn = document.getElementById('copy-btn');
-  const src = document.getElementById('copy-text');
-  const toast = document.getElementById('toast');
-  if (!btn || !src) return;
-  btn.addEventListener('click', async () => {
-    const text = src.textContent;
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (_) {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
-    }
-    btn.classList.add('copied');
-    btn.textContent = '✓ Copied';
-    toast.classList.add('show');
-    setTimeout(() => {
-      btn.classList.remove('copied');
-      btn.textContent = '📋 Copy summary';
-      toast.classList.remove('show');
-    }, 1800);
-  });
 })();
 </script>
 
