@@ -1155,6 +1155,22 @@ function renderDashboard(d) {
     sections.forEach((s) => s.classList.add('in-view'));
   }
 
+  // Auto-refresh every 5 minutes (matches server cache TTL).
+  // Preserves the current ?range= selection. Does not refresh if the user
+  // has an unsaved form interaction in progress (focus inside a form element).
+  (function autoRefresh() {
+    const INTERVAL_MS = 5 * 60 * 1000;
+    setTimeout(function tick() {
+      if (document.activeElement && document.activeElement.closest('form')) {
+        setTimeout(tick, 30000);
+        return;
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.delete('refresh');
+      window.location.replace(url.toString());
+    }, INTERVAL_MS);
+  })();
+
   const btn = document.getElementById('copy-btn');
   const src = document.getElementById('copy-text');
   const toast = document.getElementById('toast');
