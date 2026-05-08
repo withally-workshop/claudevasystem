@@ -546,6 +546,82 @@ function computeInsenseStats() {
   return stats;
 }
 
+async function fetchClickUp() {
+  const apiKey = process.env.CLICKUP_API_KEY;
+  const listId = process.env.CLICKUP_LIST_ID;
+  if (!apiKey || !listId) return { ok: false, reason: 'CLICKUP_API_KEY or CLICKUP_LIST_ID not set' };
+  try {
+    // Fetch active tasks (exclude closed/payment complete) — page 0, up to 100
+    const url = `https://api.clickup.com/api/v2/list/${listId}/task?include_closed=false&subtasks=false&page=0`;
+    const res = await get(url, { Authorization: apiKey });
+    if (!res.ok) return { ok: false, reason: `ClickUp API ${res.status}` };
+    const tasks = res.body.tasks || [];
+    return { ok: true, tasks };
+  } catch (e) {
+    return { ok: false, reason: String(e.message || e) };
+  }
+}
+
+function computeClickUpStats(tasks) {
+  const byStatus = {};
+  const creatorPaid = { paidInFull: 0, notPaid: 0, other: 0 };
+  const byAssignee = {};
+  const active = [];
+
+  for (const t of tasks) {
+    // Status counts
+    const status = (t.status && t.status.status) ? t.status.status : 'unknown';
+    byStatus[status] = (byStatus[status] || 0) + 1;
+
+    // Custom fields
+    const fields = {};
+    for (const f of (t.custom_fields || [])) {
+      const name = (f.name || '').toLowerCase().replace(/\s+/g, '_');
+      // dropdown fields have value as option index, use type_config to resolve
+      if (f.type === 'drop_down' && f.type_config && f.type_config.options && f.value != null) {
+        const opt = f.type_config.options.find(o => o.orderindex === f.value);
+        fields[name] = opt ? opt.name : null;
+      } else {
+        fields[name] = f.value != null ? f.value : null;
+      }
+    }
+
+    // Creator paid breakdown
+    const paid = (fields['creator_paid'] || '').toLowerCase();
+    if (paid.includes('paid in full')) creatorPaid.paidInFull++;
+    else if (paid.includes('not paid')) creatorPaid.notPaid++;
+    else creatorPaid.other++;
+
+    // Assignee breakdown
+    for (const a of (t.assignees || [])) {
+      const name = a.username || a.email || 'unknown';
+      byAssignee[name] = (byAssignee[name] || 0) + 1;
+    }
+
+    // Active project list (top 10 most recent by date_updated)
+    active.push({
+      name: t.name,
+      status,
+      assignee: (t.assignees || []).map(a => a.initials || a.username).join(', ') || '—',
+      service: fields['service'] || '—',
+      creatorPaid: fields['creator_paid'] || '—',
+      kickOff: fields['kick_off_date'] || null,
+      url: `https://app.clickup.com/t/${t.id}`,
+      dateUpdated: t.date_updated ? Number(t.date_updated) : 0,
+    });
+  }
+
+  active.sort((a, b) => b.dateUpdated - a.dateUpdated);
+
+  return {
+    totalActive: tasks.length,
+    byStatus,
+    creatorPaid,
+    byAssignee,
+    activeProjects: active.slice(0, 10),
+  };
+}
+
 async function gatherData(range = '7d', forceRefresh = false) {
   const days = RANGE_DAYS[range] || 7;
   const cached = cache[range];
@@ -554,11 +630,12 @@ async function gatherData(range = '7d', forceRefresh = false) {
   }
 
   const rangeMs = days * 86400000;
-  const [n8nRaw, sheetsRaw, paymentsRaw, draftsRaw] = await Promise.all([
+  const [n8nRaw, sheetsRaw, paymentsRaw, draftsRaw, clickupRaw] = await Promise.all([
     fetchN8n(),
     fetchSheets(),
     fetchSlack(PAYMENTS_CHANNEL),
     fetchSlack(DRAFTS_CHANNEL),
+    fetchClickUp(),
   ]);
 
   const trackerStats = sheetsRaw.ok ? computeTrackerStats(sheetsRaw.rows) : null;
@@ -568,12 +645,14 @@ async function gatherData(range = '7d', forceRefresh = false) {
   const donut = sheetsRaw.ok ? computeStatusDonut(sheetsRaw.rows) : null;
   const sparklines = n8nRaw.ok ? computeWorkflowSparklines(n8nRaw.executions, n8nRaw.workflows, Math.min(days, 14)) : [];
   const insense = computeInsenseStats();
+  const clickup = clickupRaw.ok ? computeClickUpStats(clickupRaw.tasks) : null;
 
   const caveats = [];
   if (!n8nRaw.ok) caveats.push(`n8n execution history unavailable: ${n8nRaw.reason}`);
   if (!sheetsRaw.ok) caveats.push(`Invoice tracker unavailable: ${sheetsRaw.reason}`);
   if (!paymentsRaw.ok) caveats.push(`#payments-invoices-updates unavailable: ${paymentsRaw.reason}`);
   if (!draftsRaw.ok) caveats.push(`#airwallexdrafts unavailable: ${draftsRaw.reason}`);
+  if (!clickupRaw.ok) caveats.push(`ClickUp unavailable: ${clickupRaw.reason}`);
 
   const data = {
     generatedAt: new Date().toISOString(),
@@ -586,6 +665,7 @@ async function gatherData(range = '7d', forceRefresh = false) {
     donut,
     sparklines,
     insense,
+    clickup,
     invoicesGid: sheetsRaw.gid || 0,
     slackPaymentsCount: paymentsRaw.ok ? paymentsRaw.messages.length : null,
     slackDraftsCount: draftsRaw.ok ? draftsRaw.messages.length : null,
@@ -1065,6 +1145,52 @@ function renderDashboard(d) {
     </div>` : ''}
     ${d.insense.lastMessagedAt ? `<div class="card-sub" style="margin-top:8px">Last invite sent: ${new Date(d.insense.lastMessagedAt).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', hour12: false })} ICT</div>` : ''}
   </div>` : ''}
+
+  ${d.clickup ? (() => {
+    const cu = d.clickup;
+    const statusRows = Object.entries(cu.byStatus)
+      .sort((a, b) => b[1] - a[1])
+      .map(([s, n]) => `<tr><td style="text-transform:capitalize">${s}</td><td style="text-align:right">${n}</td></tr>`)
+      .join('');
+    const assigneeRows = Object.entries(cu.byAssignee)
+      .sort((a, b) => b[1] - a[1])
+      .map(([a, n]) => `<tr><td>${a}</td><td style="text-align:right">${n}</td></tr>`)
+      .join('');
+    const projectRows = cu.activeProjects.map(p => `
+      <tr>
+        <td><a href="${p.url}" target="_blank" rel="noopener" style="color:#7dd3fc;text-decoration:none">${p.name}</a></td>
+        <td style="text-transform:capitalize">${p.status}</td>
+        <td>${p.assignee}</td>
+        <td>${p.service}</td>
+        <td style="color:${p.creatorPaid.toLowerCase().includes('not paid') ? '#f87171' : '#4ade80'}">${p.creatorPaid}</td>
+      </tr>`).join('');
+    return `
+  <div class="section">
+    <div class="section-title">UGC Projects — ClickUp <a href="https://app.clickup.com/9018123501/v/l/8crb97d-378" target="_blank" rel="noopener" style="color:#7dd3fc;font-size:11px;margin-left:8px;text-decoration:none">↗ Open</a></div>
+    <div class="cards">
+      ${scorecard('Active Projects', cu.totalActive)}
+      ${scorecard('Creator Paid', cu.creatorPaid.paidInFull, `${cu.creatorPaid.notPaid} not paid · ${cu.creatorPaid.other} unknown`)}
+    </div>
+    <div class="stat-grid" style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:8px">By Status</div>
+        <table><tbody>${statusRows}</tbody></table>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:8px">By Assignee</div>
+        <table><tbody>${assigneeRows}</tbody></table>
+      </div>
+    </div>
+    ${projectRows ? `
+    <div style="margin-top:14px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:8px">Active Projects (most recent 10)</div>
+      <table>
+        <thead><tr><th>Project</th><th>Status</th><th>Assignee</th><th>Service</th><th>Creator Paid</th></tr></thead>
+        <tbody>${projectRows}</tbody>
+      </table>
+    </div>` : ''}
+  </div>`;
+  })() : ''}
 
   <div class="section">
     <div class="section-title">Workflow runs — last ${Math.min(d.days || 7, 14)} days</div>
