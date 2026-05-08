@@ -38,3 +38,17 @@ Key references:
 ## Output
 
 Slack summary to `#airwallexdrafts` (`C0AQZGJDR38`) using the bot token: walked / passed / sent / skipped / failed / blocked counts, plus per-creator detail.
+
+---
+
+## After the Run
+
+After any `--send` run, push `cache.json` to update the ops dashboard ([krave-ops-dashboard.onrender.com](https://krave-ops-dashboard.onrender.com)):
+
+```bash
+git add data/insense/cache.json
+git commit -m "chore(insense): update outreach cache post-run"
+git push
+```
+
+Render auto-deploys on push. Dashboard reflects new data within ~1 minute. Do not push raw batch files (`data/insense/batch*-raw.json`).
