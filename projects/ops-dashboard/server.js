@@ -1030,6 +1030,7 @@ function renderDashboard(d) {
     <a class="tracker-btn" href="https://docs.google.com/spreadsheets/d/${SHEET_ID}" target="_blank" rel="noopener">📊 Open Tracker</a>
     <a class="tracker-btn" href="https://app.clickup.com/9018123501/v/l/8crb97d-378" target="_blank" rel="noopener">✅ ClickUp</a>
     <a class="tracker-btn" href="slack://open?team=T06U38A4NV6">💬 Slack</a>
+    <a class="tracker-btn" href="https://app.slack.com/client/T06U38A4NV6" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;opacity:0.7">web</a>
     <span class="range-toggle">${rangeToggle}</span>
     <span>${generatedTime} ICT</span>
     ${cacheNote}
