@@ -1029,7 +1029,7 @@ function renderDashboard(d) {
   <div class="header-meta">
     <a class="tracker-btn" href="https://docs.google.com/spreadsheets/d/${SHEET_ID}" target="_blank" rel="noopener">📊 Open Tracker</a>
     <a class="tracker-btn" href="https://app.clickup.com/9018123501/v/l/8crb97d-378" target="_blank" rel="noopener">✅ ClickUp</a>
-    <a class="tracker-btn" href="https://app.slack.com/client/T06U38A4NV6" target="_blank" rel="noopener" onclick="(function(e){e.preventDefault();window.location='slack://open?team=T06U38A4NV6';setTimeout(function(){window.open('https://app.slack.com/client/T06U38A4NV6','_blank');},600);})(event)">💬 Slack</a>
+    <a class="tracker-btn" href="slack://open?team=T06U38A4NV6">💬 Slack</a>
     <span class="range-toggle">${rangeToggle}</span>
     <span>${generatedTime} ICT</span>
     ${cacheNote}
