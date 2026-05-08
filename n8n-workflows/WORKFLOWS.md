@@ -1,7 +1,7 @@
 # Krave Media - n8n Automation Workflows
 
 **Instance:** `noatakhel.app.n8n.cloud`  
-**Last updated:** `2026-04-21`  
+**Last updated:** `2026-05-08`  
 **Maintained by:** John (Systems Partner) - `john@kravemedia.co`
 
 ---
@@ -191,6 +191,18 @@ In May 2026 the matcher's amount-only fallback wrongly assigned a Little Saints 
 **v6 (client-reply branch — 2026-05-07):**
 9. **Client Payment Reply branch added.** Trigger: 2026-05-07 Nutrition Kitchen 2/2 silent-miss — payment landed in Eclipse Ventures Pte. Ltd. (non-Airwallex SG bank), client confirmation came as a reply on the invoice thread, both prior detection paths blind. New nodes `Search Client Replies` (Gmail) + `Parse Client Replies` (Code) emit Needs Review payloads only — they never auto-mark paid. Match rule: phrase signal (e.g. "payment is done", "transfer details", "remittance advice") AND tracker fuzzy match by sender domain ↔ Client Email, status not Payment Complete, sender not in internal denylist. Idempotency via `processedClientReplyIds` (last 200, separate from the Airwallex branch's `processedEmailIds`). Slack volume capped at 10 posts per run. Operator workflow: Needs Review post → forward email from john@→noa@ with invoice# + amount in subject → existing forwarded-receipt path marks paid.
 
+**v6.1 (full-message fetch + broadened API poll — 2026-05-08):**
+10. **Full-message fetch in Parse All Emails (`n3`).** When Gmail search returns a stripped payload (no `parts`), the node calls `GET /gmail/v1/users/me/messages/{id}?format=full` via `requestWithAuthentication` (gmailOAuth2 credential `vxHex5lFrkakcsPi` added to the node). This ensures the complete MIME tree is available for body extraction.
+11. **PDF attachment extraction (v6.1 attempt — superseded by v6.2).** Attempted to extract invoice references from PDF attachments via `zlib.inflateSync`. Abandoned: NotoSans Identity-H CID encoding makes text extraction from the PDF impractical without a full ToUnicode CMap parser.
+12. **Broadened `paid_amount` field detection in Poll Airwallex Invoices (`n17`).** Added `amount_settled`, `amount_received`, `collected_amount` as field candidates. Added status-based fallback: if `status` is `PAID`, `COMPLETED`, or `SETTLED` and all amount-field candidates are null, uses the invoice total as paid amount.
+
+**v6.3 (PDF attachment extraction + dedup hardening — 2026-05-08):**
+14. **PDF text extraction in Parse All Emails (`n3`).** Root cause: Airwallex Global Account "Confirmation of Receipt of Funds" emails have a completely empty body — all data (remitter name, reference) is in a `ga_deposit_confirmation_letter-*.pdf` attachment (Typst 0.13.1, NotoSans Identity-H CID encoding). v6.2's recursive MIME walker correctly found no text parts. Fix: when body is still empty AND source is `airwallex-email` AND an `application/pdf` attachment exists, download via Gmail Attachments API (`requestWithAuthentication`, gmailOAuth2 `vxHex5lFrkakcsPi`), inflate all FlateDecode streams to find ToUnicode CMaps, build CID→Unicode maps (handles `beginbfchar`/`beginbfrange`), then decode the page content stream (BT/ET/Tf/Tj/TJ operators) to plain text. Extracted text then flows through existing `clientName` and `INV-` regex parsers as normal.
+15. **Amount+currency fallback dedup in Match Deposits To Invoices (`n5`).** Belt-and-suspenders for the case where PDF extraction fails (clientName still null). When `source === 'airwallex-email'` and `clientName` is null, checks `completedRows` for amount+currency match within a 90-day payment window. If found, silently deduplicates (adds to `processedEmailIds`). Prevents repeat `needsReview` alerts for already-manually-reconciled deposit confirmation emails.
+
+**v6.2 (recursive MIME traversal — 2026-05-08):**
+13. **Recursive MIME walker in Parse All Emails (`n3`).** Replaced the 2-level nested for-loop with a `findBodyParts()` recursive function that walks the MIME tree to any depth. Handles Airwallex invoice-paid notification emails that nest `text/html` at level 3+. Does not handle the deposit confirmation email type (empty body) — that is v6.3's scope. Extraction order: `text/plain` → `text/html` (deepest match at any nesting level) → PDF attachment (v6.3) → `msg.snippet`.
+
 ### Partial Payment Detection
 
 After a match, the workflow checks if the received amount covers the full invoice:
@@ -205,7 +217,8 @@ After a match, the workflow checks if the received amount covers the full invoic
 
 `Poll Airwallex Invoices` (Code node, `continueOnFail: true`) runs in parallel with the Gmail scan:
 - Uses `this.helpers.httpRequest` to authenticate and call `GET /api/v1/invoices/{id}` per open non-Osome tracker row
-- Checks `paid_amount` / `amount_paid` / `total_paid` for each invoice
+- Checks `paid_amount` / `amount_paid` / `total_paid` / `amount_settled` / `amount_received` / `collected_amount` for each invoice (v6.1: broadened candidates)
+- Status-based fallback: if Airwallex status is `PAID`/`COMPLETED`/`SETTLED` and no paid-amount field is populated, uses invoice total as paid amount (v6.1)
 - If API shows more paid than Col Q records, injects a payment signal for the difference (with `clientName` from the tracker row)
 - Gmail and API signals merged + deduped before matching
 

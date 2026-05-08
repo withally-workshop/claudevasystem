@@ -4,7 +4,7 @@
 // This script was the original deploy-from-scratch source for the
 // Krave Payment Detection workflow. After the May 2026 WELLE incident,
 // the live workflow was hardened in place via the n8n REST API
-// across multiple patches (v4, v5, v5.1):
+// across multiple patches (v4, v5, v5.1, v6, v6.1):
 //
 //   - REMOVED:  Airwallex Auth, Airwallex Mark Paid nodes
 //               (no auto-mutation of external Airwallex state)
@@ -20,6 +20,27 @@
 //   - FORWARDED RECEIPT SUPPORT: from:john@kravemedia.co with strict
 //               to:noa filter and reminder-phrase exclusions
 //   - INV REGEX: requires INV- dash prefix (no bare "INVOICE" matches)
+//   - v6.3 PDF ATTACHMENT EXTRACTION (2026-05-08):
+//       n3 (Parse All Emails): added PDF extraction for Airwallex Global
+//       Account "Confirmation of Receipt of Funds" emails, which have a
+//       completely empty body. Extraction: download attachment via Gmail
+//       API, inflate FlateDecode streams, parse ToUnicode CMaps, decode
+//       CID content stream → plain text → parsed for clientName/INV# as
+//       normal. Guard: airwallex-email source + empty body + pdf present.
+//       n5 (Match Deposits To Invoices): added amount+currency fallback
+//       dedup (90-day window) for airwallex-email when clientName null
+//       after PDF extraction. Belt-and-suspenders against repeat noise.
+//   - v6.2 RECURSIVE MIME TRAVERSAL (2026-05-08):
+//       n3 (Parse All Emails): replaced 2-level nested for-loop with
+//       a recursive findBodyParts() walker that traverses any depth of
+//       MIME nesting. Airwallex invoice-paid notification emails nest
+//       text/html at level 3+. gmailOAuth2 credential vxHex5lFrkakcsPi
+//       kept on node for full-message fetch via requestWithAuthentication.
+//   - v6.1 BROADENED paid_amount DETECTION (2026-05-08):
+//       n17 (Poll Airwallex Invoices): added amount_settled,
+//       amount_received, collected_amount candidates; added status-based
+//       fallback — if status is PAID/COMPLETED/SETTLED and all field
+//       candidates are null, uses invoice total as paid amount.
 //
 // Re-running this script as-is would OVERWRITE the hardened workflow
 // with the old vulnerable topology. If you need to redeploy from
@@ -48,46 +69,282 @@ const gmailQuery = 'from:airwallex.com (subject:payment OR subject:deposit OR su
 return [{ json: { lastRunTs, nowTs, gmailQuery } }];
 `.trim();
 
+// v6.3: PDF extraction for Airwallex deposit confirmation emails (2026-05-08).
+// Added findPdfParts, parseCMap, decodeContentStream, extractAirwallexPdfText
+// helpers. Trigger: airwallex-email source + empty body + pdf attachment found.
+// Gmail OAuth2 credential (vxHex5lFrkakcsPi) must be present on the n3 node
+// for both full-message fetch and attachment download via requestWithAuthentication.
 const PARSE_CODE = `
 const items = $input.all();
+const NON_CLIENT_DEPOSITORS = ['STRIPE PAYMENTS', 'SHOPIFY', 'PAYPAL HOLDINGS', 'GUSTO'];
+
+function stripHtml(html) {
+  return html
+    .replace(/<script[\\s\\S]*?<\\/script>/gi, '')
+    .replace(/<style[\\s\\S]*?<\\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\\s+/g, ' ')
+    .trim();
+}
+
+function findBodyParts(parts, result) {
+  if (!result) result = { plain: null, html: null };
+  if (!Array.isArray(parts)) return result;
+  for (const part of parts) {
+    if (part.mimeType === 'text/plain' && part.body && part.body.data && !result.plain) {
+      result.plain = Buffer.from(part.body.data, 'base64').toString('utf-8');
+    } else if (part.mimeType === 'text/html' && part.body && part.body.data && !result.html) {
+      result.html = stripHtml(Buffer.from(part.body.data, 'base64').toString('utf-8'));
+    } else if (part.parts) {
+      findBodyParts(part.parts, result);
+    }
+  }
+  return result;
+}
+
+// v6.3: PDF attachment helpers for Airwallex deposit confirmation emails
+function findPdfParts(parts) {
+  const found = [];
+  if (!Array.isArray(parts)) return found;
+  for (const p of parts) {
+    if (p.mimeType === 'application/pdf' && p.body && p.body.attachmentId) {
+      found.push(p);
+    } else if (p.parts) {
+      found.push(...findPdfParts(p.parts));
+    }
+  }
+  return found;
+}
+
+function parseCMap(cmapText) {
+  const map = new Map();
+  if (!cmapText) return map;
+  const charRe = /beginbfchar([\\s\\S]*?)endbfchar/g;
+  let m;
+  while ((m = charRe.exec(cmapText)) !== null) {
+    for (const line of m[1].trim().split('\\n')) {
+      const pair = line.match(/<([0-9a-fA-F]+)>\\s*<([0-9a-fA-F]+)>/);
+      if (pair) map.set(parseInt(pair[1], 16), String.fromCodePoint(parseInt(pair[2], 16)));
+    }
+  }
+  const rangeRe = /beginbfrange([\\s\\S]*?)endbfrange/g;
+  while ((m = rangeRe.exec(cmapText)) !== null) {
+    for (const line of m[1].trim().split('\\n')) {
+      const triple = line.match(/<([0-9a-fA-F]+)>\\s*<([0-9a-fA-F]+)>\\s*<([0-9a-fA-F]+)>/);
+      if (triple) {
+        const start = parseInt(triple[1], 16), end = parseInt(triple[2], 16), uStart = parseInt(triple[3], 16);
+        for (let i = 0; i <= end - start; i++) map.set(start + i, String.fromCodePoint(uStart + i));
+      }
+    }
+  }
+  return map;
+}
+
+function decodeContentStream(contentText, fontCmaps) {
+  let text = '';
+  let currentCmap = null;
+  let inText = false;
+  for (const line of contentText.split('\\n')) {
+    const t = line.trim();
+    if (t === 'BT') { inText = true; continue; }
+    if (t === 'ET') { inText = false; continue; }
+    if (!inText) continue;
+    const fontM = t.match(/\\/(F\\d+)\\s+[\\d.]+\\s+Tf/);
+    if (fontM) { currentCmap = fontCmaps.get(fontM[1]) || null; continue; }
+    if (t === 'T*' || /^-?[\\d.]+\\s+-?[\\d.]+\\s+T[dD]$/i.test(t) || /^-?[\\d.]+\\s+-?[\\d.]+\\s+-?[\\d.]+\\s+-?[\\d.]+\\s+-?[\\d.]+\\s+-?[\\d.]+\\s+Tm$/i.test(t)) {
+      text += '\\n'; continue;
+    }
+    if (!currentCmap) continue;
+    const tjHex = t.match(/^<([0-9a-fA-F]+)>\\s+Tj$/);
+    if (tjHex) {
+      const hex = tjHex[1];
+      for (let i = 0; i + 4 <= hex.length; i += 4) text += currentCmap.get(parseInt(hex.slice(i, i + 4), 16)) || '';
+      continue;
+    }
+    const tjArr = t.match(/^\\[(.*)\\]\\s+TJ$/);
+    if (tjArr) {
+      const hexRe = /<([0-9a-fA-F]+)>/g;
+      let hm;
+      while ((hm = hexRe.exec(tjArr[1])) !== null) {
+        const hex = hm[1];
+        for (let i = 0; i + 4 <= hex.length; i += 4) text += currentCmap.get(parseInt(hex.slice(i, i + 4), 16)) || '';
+      }
+    }
+  }
+  return text;
+}
+
+function extractAirwallexPdfText(pdfBuf) {
+  const zlib = require('zlib');
+  const raw = pdfBuf.toString('latin1');
+
+  function inflate(startIdx) {
+    try {
+      const streamStart = raw.indexOf('stream', startIdx);
+      if (streamStart === -1) return null;
+      const nl = raw.indexOf('\\n', streamStart);
+      const streamEnd = raw.indexOf('endstream', nl);
+      if (streamEnd === -1) return null;
+      const compressed = Buffer.from(raw.slice(nl + 1, streamEnd), 'binary');
+      try { return zlib.inflateSync(compressed).toString('utf8'); }
+      catch(e) { return zlib.inflateRawSync(compressed).toString('utf8'); }
+    } catch(e) { return null; }
+  }
+
+  function findObjOffset(objNum) {
+    const idx = raw.search(new RegExp('\\\\b' + objNum + '\\\\s+0\\\\s+obj\\\\b'));
+    return idx === -1 ? null : idx;
+  }
+
+  // Pass 1: find all CMap streams by inflating FlateDecode objects
+  const cmapByObjNum = new Map();
+  const objNumRe = /\\b(\\d+)\\s+0\\s+obj\\b/g;
+  let om;
+  while ((om = objNumRe.exec(raw)) !== null) {
+    const objNum = parseInt(om[1]);
+    if (!raw.slice(om.index, om.index + 200).includes('FlateDecode')) continue;
+    const decompressed = inflate(om.index);
+    if (decompressed && (decompressed.includes('beginbfchar') || decompressed.includes('beginbfrange'))) {
+      cmapByObjNum.set(objNum, parseCMap(decompressed));
+    }
+  }
+
+  // Pass 2: map font names to CMaps via /ToUnicode refs
+  const fontCmaps = new Map();
+  const fontRefRe = /\\/(F\\d+)\\s+(\\d+)\\s+0\\s+R/g;
+  let frm;
+  while ((frm = fontRefRe.exec(raw)) !== null) {
+    const fontName = frm[1];
+    if (fontCmaps.has(fontName)) continue;
+    const fontObjOffset = findObjOffset(parseInt(frm[2]));
+    if (fontObjOffset === null) continue;
+    const fontChunk = raw.slice(fontObjOffset, fontObjOffset + 400);
+    const tuMatch = fontChunk.match(/\\/ToUnicode\\s+(\\d+)\\s+0\\s+R/);
+    if (!tuMatch) continue;
+    const cmapObjNum = parseInt(tuMatch[1]);
+    let cmap = cmapByObjNum.get(cmapObjNum);
+    if (!cmap) {
+      const cmapOffset = findObjOffset(cmapObjNum);
+      if (cmapOffset !== null) {
+        const d = inflate(cmapOffset);
+        if (d) { cmap = parseCMap(d); cmapByObjNum.set(cmapObjNum, cmap); }
+      }
+    }
+    if (cmap) fontCmaps.set(fontName, cmap);
+  }
+
+  if (fontCmaps.size === 0) return '';
+
+  // Pass 3: decode page content streams
+  let pageText = '';
+  const pageTypeRe = /\\/Type\\s*\\/Page\\b/g;
+  let pgm;
+  while ((pgm = pageTypeRe.exec(raw)) !== null) {
+    const pageObjEnd = raw.indexOf('endobj', pgm.index);
+    const pageSlice = raw.slice(pgm.index, pageObjEnd > 0 ? pageObjEnd : pgm.index + 600);
+    const cm = pageSlice.match(/\\/Contents\\s+(\\d+)\\s+0\\s+R/);
+    if (!cm) continue;
+    const contentOffset = findObjOffset(parseInt(cm[1]));
+    if (contentOffset === null) continue;
+    const contentText = inflate(contentOffset);
+    if (contentText) pageText += decodeContentStream(contentText, fontCmaps) + '\\n';
+  }
+
+  return pageText.replace(/\\n{3,}/g, '\\n\\n').trim();
+}
+
 const emails = [];
 for (const item of items) {
   const msg = item.json;
   let body = '';
   try {
     const payload = msg.payload || {};
+    if (msg.id && !payload.parts && !(payload.body && payload.body.data)) {
+      try {
+        const fullMsg = await this.helpers.requestWithAuthentication.call(this, 'gmailOAuth2', {
+          method: 'GET',
+          url: \`https://gmail.googleapis.com/gmail/v1/users/me/messages/\${msg.id}?format=full\`,
+          json: true
+        });
+        if (fullMsg && fullMsg.payload) Object.assign(payload, fullMsg.payload);
+      } catch(e) {}
+    }
     if (payload.body && payload.body.data) {
       body = Buffer.from(payload.body.data, 'base64').toString('utf-8');
     } else if (payload.parts) {
-      for (const part of (payload.parts || [])) {
-        if (part.mimeType === 'text/plain' && part.body && part.body.data) {
-          body = Buffer.from(part.body.data, 'base64').toString('utf-8'); break;
-        }
-        for (const sub of (part.parts || [])) {
-          if (sub.mimeType === 'text/plain' && sub.body && sub.body.data) {
-            body = Buffer.from(sub.body.data, 'base64').toString('utf-8'); break;
-          }
+      const { plain, html } = findBodyParts(payload.parts);
+      body = plain || html || '';
+    }
+    // v6.3: For Airwallex emails with empty body, extract text from PDF attachment
+    if (!body) {
+      const _headers = payload.headers || (msg.payload && msg.payload.headers) || [];
+      const _from = (_headers.find(h => h.name && h.name.toLowerCase() === 'from') || {}).value || '';
+      if (_from.toLowerCase().includes('airwallex.com')) {
+        const pdfParts = findPdfParts(payload.parts || []);
+        for (const pdfPart of pdfParts) {
+          try {
+            const attResp = await this.helpers.requestWithAuthentication.call(this, 'gmailOAuth2', {
+              method: 'GET',
+              url: \`https://gmail.googleapis.com/gmail/v1/users/me/messages/\${msg.id}/attachments/\${pdfPart.body.attachmentId}\`,
+              json: true
+            });
+            if (attResp && attResp.data) {
+              const extracted = extractAirwallexPdfText(Buffer.from(attResp.data, 'base64'));
+              if (extracted && extracted.trim()) { body = extracted; break; }
+            }
+          } catch(e) {}
         }
       }
     }
     if (!body && msg.snippet) body = msg.snippet;
   } catch(e) {}
-  const headers = (msg.payload && msg.payload.headers) || [];
-  const subject = (headers.find(h => h.name && h.name.toLowerCase() === 'subject') || {}).value || msg.snippet || '';
+
+  const headerArr = (msg.payload && msg.payload.headers) || [];
+  const subjectFromHeaders = (headerArr.find(h => h.name && h.name.toLowerCase() === 'subject') || {}).value;
+  const subject = subjectFromHeaders || msg.Subject || msg.subject || msg.snippet || '';
+  const fromFromHeaders = (headerArr.find(h => h.name && h.name.toLowerCase() === 'from') || {}).value;
+  const fromHeader = fromFromHeaders || msg.From || msg.from || '';
   const searchText = body + ' ' + subject;
   if (searchText.toLowerCase().includes('shopify')) continue;
+  const fromLower = (fromHeader || '').toLowerCase();
+  const source = fromLower.includes('airwallex.com') ? 'airwallex-email'
+    : fromLower.includes('john@kravemedia.co') ? 'forwarded'
+    : 'unknown';
   let amount = null, currency = null;
   const p1 = searchText.match(/([A-Z]{3})[\\s$]*([\\d,]+\\.?\\d*)/);
-  const p2 = searchText.match(/([\\d,]+\\.?\\d*)\\s*(USD|SGD|HKD|AUD|EUR|GBP)/);
-  if (p1 && /^[A-Z]{3}$/.test(p1[1])) { currency = p1[1]; amount = parseFloat(p1[2].replace(/,/g,'')); }
-  else if (p2) { amount = parseFloat(p2[1].replace(/,/g,'')); currency = p2[2]; }
-  const invMatch = searchText.match(/INV-[\\w\\d-]+/i);
+  const p2 = searchText.match(/([\\d,]+\\.?\\d*)\\s*(USD|SGD|HKD|AUD|EUR|GBP|MYR|JPY|CNY|INR)/);
+  if (p1 && /^[A-Z]{3}$/.test(p1[1]) && ['USD','SGD','HKD','AUD','EUR','GBP','MYR','JPY','CNY','INR'].includes(p1[1])) {
+    currency = p1[1]; amount = parseFloat(p1[2].replace(/,/g,''));
+  } else if (p2) {
+    amount = parseFloat(p2[1].replace(/,/g,'')); currency = p2[2];
+  }
+  const invMatch = (subject + ' ' + body).match(/INV-[A-Z0-9]+(?:-\\d+)?/i);
   const invoiceNumber = invMatch ? invMatch[0].toUpperCase() : null;
-  // Detect "Payment 1/2", "Payment 2/2", etc. in email reference/body
   const fracMatch = searchText.match(/Payment\\s+(\\d+)\\s*\\/\\s*(\\d+)/i);
   const paymentNumber = fracMatch ? parseInt(fracMatch[1]) : null;
   const totalPayments = fracMatch ? parseInt(fracMatch[2]) : null;
-  emails.push({ emailId: msg.id, subject, amount, currency, invoiceNumber, date: new Date().toISOString().split('T')[0], paymentNumber, totalPayments });
+  let clientName = null;
+  const patterns = [
+    /from\\s+([A-Z][A-Z0-9\\s.,&'-]+?)\\s+via\\s+your/i,
+    /(?:received|payment|deposit|wire|transfer)\\s+from\\s+([A-Z][A-Z0-9\\s.,&'-]{3,}?)(?:[.,;\\n]|\\s+for\\s|\\s+on\\s|$)/i,
+    /paid\\s+by\\s+([A-Z][A-Z0-9\\s.,&'-]{3,}?)(?:[.,;\\n]|\\s+for\\s|\\s+on\\s|$)/i,
+    /sender:\\s*([A-Z][A-Z0-9\\s.,&'-]{3,}?)(?:[.,;\\n]|$)/i
+  ];
+  for (const pat of patterns) {
+    const m = searchText.match(pat);
+    if (m) { clientName = m[1].trim().replace(/[\\s.,]+$/, ''); break; }
+  }
+  if (clientName) {
+    const upper = clientName.toUpperCase();
+    if (NON_CLIENT_DEPOSITORS.some(d => upper.includes(d))) continue;
+  }
+  emails.push({ emailId: msg.id, subject, source, amount, currency, invoiceNumber, date: new Date().toISOString().split('T')[0], paymentNumber, totalPayments, clientName });
 }
 return [{ json: { emails, count: emails.length } }];
 `.trim();
@@ -144,8 +401,16 @@ for (const row of openRows) {
       url: 'https://api.airwallex.com/api/v1/invoices/' + awId,
       headers: { 'Authorization': 'Bearer ' + token, 'x-api-version': '2025-06-16' }
     });
-    // Check common Airwallex field name candidates for amount received
-    const apiPaidAmount = inv.paid_amount ?? inv.amount_paid ?? inv.total_paid ?? null;
+    // Check Airwallex field name candidates for amount received (v6.1: broadened)
+    let apiPaidAmount = inv.paid_amount ?? inv.amount_paid ?? inv.total_paid ??
+      inv.amount_settled ?? inv.amount_received ?? inv.collected_amount ?? null;
+    if (apiPaidAmount === null) {
+      const paidStatuses = ['PAID', 'paid', 'COMPLETED', 'completed', 'SETTLED', 'settled'];
+      if (paidStatuses.includes(String(inv.status || ''))) {
+        const totalStr = String(inv.total_amount ?? inv.total ?? inv.amount ?? inv.amount_due ?? 0);
+        apiPaidAmount = parseFloat(totalStr.replace(/,/g, ''));
+      }
+    }
     if (apiPaidAmount === null) continue;
     const newPaymentAmount = apiPaidAmount - existingAmountPaid;
     if (newPaymentAmount > 1.00) {
@@ -181,12 +446,20 @@ const emails = [...gmailEmails, ...apiEmails.filter(e => !e.invoiceNumber || !se
 return [{ json: { emails, count: emails.length } }];
 `.trim();
 
+// v6.3: Updated to match live hardened state (idempotency, strict matching,
+// clientName fuzzy, already-reconciled dedup, PDF-extraction fallback dedup).
 const MATCH_CODE = `
+// STRICT MATCHING with idempotency + already-reconciled awareness (v5).
+const staticData = $getWorkflowStaticData('global');
+staticData.processedEmailIds = staticData.processedEmailIds || [];
+const processedSet = new Set(staticData.processedEmailIds);
+
 const signalItems = $('Combine Payment Signals').all();
 const rawEmails = signalItems.flatMap(item => item.json.emails || []);
 const seenEvents = new Set();
 const emails = [];
 for (const email of rawEmails) {
+  if (email.emailId && processedSet.has(email.emailId)) continue;
   const invoiceKey = (email.invoiceNumber || '').toString().trim().toUpperCase();
   const amountKey = email.amount === null || email.amount === undefined ? '' : Number(email.amount).toFixed(2);
   const currencyKey = (email.currency || '').toString().trim().toUpperCase();
@@ -201,6 +474,7 @@ for (const email of rawEmails) {
 }
 const today = new Date().toISOString().split('T')[0];
 if (emails.length === 0) return [];
+
 const allRows = $('Get Invoice Tracker').all();
 const openRows = allRows.filter(r => {
   const displayStatus = (r.json['Status'] || '').toString().trim();
@@ -210,23 +484,103 @@ const openRows = allRows.filter(r => {
     !paymentStatus.startsWith('Draft') &&
     r.json['Invoice #'];
 });
+const completedRows = allRows.filter(r => (r.json['Payment Status'] || '').toString().trim() === 'Payment Complete');
+
+const normalize = (s) => (s || '').toString().toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\\s+/g, ' ').trim();
+const SUFFIX_TOKENS = ['LLC','LTD','INC','PTE','PTY','CORP','CO','GMBH','SDN','BHD','LIMITED'];
+const tokenize = (s) => normalize(s).split(' ').filter(t => t.length >= 3 && !SUFFIX_TOKENS.includes(t));
+const clientNameMatches = (emailClient, trackerClient) => {
+  const a = tokenize(emailClient);
+  const b = tokenize(trackerClient);
+  if (!a.length || !b.length) return false;
+  return a.some(t => b.includes(t)) || b.some(t => a.includes(t));
+};
+
 const results = [];
 for (const email of emails) {
-  let match = null, confidence = 'none';
+  // Tier 0: already-reconciled check — silently dedup if deposit matches a paid row
+  if (email.amount && email.currency && email.clientName) {
+    const reconciled = completedRows.find(r => {
+      const amt = parseFloat((r.json['Amount Paid'] || r.json['Amount'] || '0').toString().replace(/,/g,''));
+      const cur = (r.json['Currency'] || '').toString().trim().toUpperCase();
+      if (Math.abs(amt - email.amount) >= 0.01 || cur !== email.currency) return false;
+      return clientNameMatches(email.clientName, r.json['Client Name']);
+    });
+    if (reconciled) {
+      processedSet.add(email.emailId);
+      continue;
+    }
+  }
+  // v6.3: Belt-and-suspenders dedup for Airwallex deposit confirmation emails
+  // where PDF extraction failed (clientName still null). Dedup by amount+currency
+  // against recently-paid rows (90-day window) to silence repeat notifications.
+  if (!email.clientName && email.source === 'airwallex-email' && email.amount && email.currency) {
+    const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const recentlyPaid = completedRows.find(r => {
+      const amt = parseFloat((r.json['Amount Paid'] || r.json['Amount'] || '0').toString().replace(/,/g,''));
+      const cur = (r.json['Currency'] || '').toString().trim().toUpperCase();
+      const payDate = (r.json['Payment Confirmed Date'] || '').toString();
+      return Math.abs(amt - email.amount) < 0.01 && cur === email.currency && payDate >= cutoff;
+    });
+    if (recentlyPaid) {
+      processedSet.add(email.emailId);
+      continue;
+    }
+  }
+  // For invoice-number forwards: also check if the invoice is already paid
+  if (email.invoiceNumber) {
+    const completedInv = completedRows.find(r =>
+      (r.json['Invoice #'] || '').toString().trim().toUpperCase() === email.invoiceNumber);
+    if (completedInv) {
+      processedSet.add(email.emailId);
+      continue;
+    }
+  }
+
+  let match = null, confidence = 'none', reason = null;
+
+  // 1. Exact invoice number match (high)
   if (email.invoiceNumber) {
     const found = openRows.find(r => (r.json['Invoice #'] || '').toString().trim().toUpperCase() === email.invoiceNumber);
-    if (found) { match = found; confidence = 'high'; }
+    if (found) {
+      if (email.source === 'forwarded' && email.clientName) {
+        if (!clientNameMatches(email.clientName, found.json['Client Name'])) {
+          reason = 'invoice number found but forwarded client name does not match tracker client';
+        } else {
+          match = found; confidence = 'high';
+        }
+      } else {
+        match = found; confidence = 'high';
+      }
+      if (match && (email.source === 'forwarded' || email.source === 'unknown') && (!email.amount || email.amount <= 0)) {
+        const invAmount = parseFloat((match.json['Amount'] || '0').toString().replace(/,/g, ''));
+        const invCurrency = (match.json['Currency'] || '').toString().trim().toUpperCase();
+        if (invAmount > 0) {
+          email.amount = invAmount;
+          email.currency = invCurrency;
+          confidence = 'high-tracker-amount';
+        }
+      }
+    } else {
+      reason = 'invoice number ' + email.invoiceNumber + ' not in open invoices';
+    }
   }
-  if (!match && email.amount) {
-    const hits = openRows.filter(r => {
+
+  // 2. Airwallex emails: amount + currency + clientName fuzzy (medium-client)
+  if (!match && email.source === 'airwallex-email' && email.amount && email.currency && email.clientName) {
+    const candidates = openRows.filter(r => {
       const amt = parseFloat((r.json['Amount'] || '0').toString().replace(/,/g,''));
       const cur = (r.json['Currency'] || '').toString().trim().toUpperCase();
-      return Math.abs(amt - email.amount) < 0.01 && cur === email.currency;
+      if (Math.abs(amt - email.amount) >= 0.01 || cur !== email.currency) return false;
+      return clientNameMatches(email.clientName, r.json['Client Name']);
     });
-    if (hits.length === 1) { match = hits[0]; confidence = 'medium'; }
-    else if (hits.length > 1) confidence = 'ambiguous';
+    if (candidates.length === 1) { match = candidates[0]; confidence = 'medium-client'; }
+    else if (candidates.length > 1) { confidence = 'ambiguous-after-client'; reason = candidates.length + ' open invoices match amount+currency+client'; }
+    else { reason = 'no open invoice matches amount+currency+client (depositor: ' + email.clientName + ')'; }
   }
-  if (match) {
+
+  const hasSignal = email.amount || email.invoiceNumber;
+  if (match && (confidence === 'high' || confidence === 'high-tracker-amount' || confidence === 'medium-client')) {
     const notes = (match.json['Notes'] || '').toString().toLowerCase();
     const airwallexId = (match.json['Airwallex Invoice ID'] || '').toString().trim();
     const isOsome = notes.includes('osome') || !airwallexId;
@@ -234,19 +588,45 @@ for (const email of emails) {
     const existingAmountPaid = parseFloat((match.json['Amount Paid'] || '0').toString().replace(/,/g, ''));
     const newAmountPaid = existingAmountPaid + (email.amount || 0);
     const remainingAmount = Math.max(0, invoiceAmount - newAmountPaid);
-    // Partial if cumulative paid still falls short of invoice total by more than $1
     const isPartial = remainingAmount > 1.00;
     results.push({
-      clientName: match.json['Client Name'] || '',
-      invoiceNumber: match.json['Invoice #'] || '',
-      airwallexInvoiceId: airwallexId,
-      amount: email.amount, currency: email.currency, paymentDate: today,
-      isOsome, isPartial,
-      invoiceAmount, newAmountPaid, remainingAmount
+      json: {
+        needsReview: false,
+        emailId: email.emailId,
+        clientName: match.json['Client Name'] || '',
+        invoiceNumber: match.json['Invoice #'] || '',
+        airwallexInvoiceId: airwallexId,
+        amount: email.amount, currency: email.currency, paymentDate: today,
+        isOsome, isPartial,
+        invoiceAmount, newAmountPaid, remainingAmount,
+        matchConfidence: confidence,
+        source: email.source
+      }
     });
+    processedSet.add(email.emailId);
+  } else if (hasSignal) {
+    results.push({
+      json: {
+        needsReview: true,
+        emailId: email.emailId,
+        subject: email.subject,
+        source: email.source,
+        parsedAmount: email.amount,
+        parsedCurrency: email.currency,
+        parsedInvoiceNumber: email.invoiceNumber,
+        parsedClientName: email.clientName,
+        reason: reason || 'no high-confidence match',
+        matchConfidence: confidence
+      }
+    });
+    processedSet.add(email.emailId);
+  } else {
+    processedSet.add(email.emailId);
   }
 }
-return results.map(r => ({ json: r }));
+
+staticData.processedEmailIds = Array.from(processedSet).slice(-500);
+return results;
 `.trim();
 
 const SLACK_PARTIAL_TEXT = "={{ '🔄 *Partial Payment Received — ' + $json.clientName + '*\\n• Invoice: ' + $json.invoiceNumber + '\\n• Received: ' + $json.amount + ' ' + $json.currency + '\\n• Total paid: ' + $json.newAmountPaid + ' / ' + $json.invoiceAmount + ' ' + $json.currency + '\\n• Remaining: ' + $json.remainingAmount + ' ' + $json.currency + '\\n• Tracker: Updated to Partial Payment' }}";

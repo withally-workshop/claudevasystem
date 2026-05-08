@@ -65,8 +65,12 @@ The forwarded clause requires `to:noa@kravemedia.co` (skips reminder CCs) AND ex
 For each result, call `gmail_get_message` (or `gmail_read_message`) to extract:
 - Sender
 - Subject line
-- Email body — look for: amount, currency, reference number, invoice number
+- Email body — extraction order: `text/plain` → `text/html` (strip tags) → PDF attachment (if Airwallex email + empty body + `application/pdf` attachment present) → `msg.snippet`
 - Date received
+
+**Body extraction order (v6.3):** Node `n3` uses a recursive MIME walker (`findBodyParts`) for text parts. If body is still empty AND source is `airwallex-email` AND the MIME tree contains an `application/pdf` attachment: download via Gmail Attachments API (`requestWithAuthentication`, gmailOAuth2 `vxHex5lFrkakcsPi`), inflate FlateDecode streams, parse ToUnicode CMaps, decode CID content stream operators (BT/ET/Tf/Tj/TJ) → plain text. This handles Airwallex Global Account "Confirmation of Receipt of Funds" PDFs (Typst 0.13.1, NotoSans Identity-H encoding) whose email body is completely empty. If Gmail search returns a stripped payload, a full-message fetch is performed first (same credential).
+
+**Body extraction order (v6.2):** Node `n3` uses a recursive MIME walker (`findBodyParts`) that traverses the full MIME tree at any nesting depth. Airwallex invoice-paid notification emails nest `text/html` at level 3+ (`multipart/mixed → multipart/alternative → text/html`) — the invoice reference is in the HTML body. The v6.3 PDF path handles the deposit confirmation email type which v6.2 could not (empty body, no HTML).
 
 **Classify each email:**
 - **Client payment:** rounded number (e.g. $3,400.00 USD, $4,590.00 SGD) — no Shopify reference
@@ -90,6 +94,7 @@ The matcher runs in this order:
 **Tier 0 — Pre-checks (silent skip):**
 - **Depositor denylist** (parse stage) — `STRIPE PAYMENTS`, `SHOPIFY`, `PAYPAL HOLDINGS`, `GUSTO` deposits silently skipped (Krave's own Shopify/Stripe payouts, not client invoice payments)
 - **Already-reconciled check** — if the deposit's client + amount + currency matches a tracker row already in `Payment Complete`, silently dedup. Same for invoice-number matches against paid rows. Prevents Needs Review noise from late-arriving Airwallex notifications of payments we manually reconciled.
+- **PDF-extraction fallback dedup (v6.3)** — for `airwallex-email` where PDF extraction failed (clientName still null after PDF parse), check `completedRows` by amount + currency within a 90-day payment window. If matched, silently dedup. Belt-and-suspenders against the deposit confirmation email type routing to Needs Review repeatedly.
 - **EmailId idempotency** — every processed email is added to `staticData.processedEmailIds` (last 500); re-runs skip already-seen.
 - **Body keyword filter** — emails containing "shopify" silently skipped.
 

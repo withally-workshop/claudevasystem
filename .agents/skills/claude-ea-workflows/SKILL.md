@@ -23,7 +23,7 @@ This repo is a Claude Code executive-assistant workspace. Treat `.claude/skills/
 |---|---|---|
 | `/invoice-triage`, "process invoices", "run invoice triage" | `.claude/skills/creator-invoice-processing/SKILL.md` | Prepare creator invoice bill report from Slack/Gmail inputs. |
 | `/inbox-triage`, "triage inbox", "morning triage", "inbox zero setup" | `.claude/skills/inbox-triage/SKILL.md` | Run inbox setup or daily triage for `noa@kravemedia.co`. |
-| `/payment-detection`, "check for payments", "scan for payments" | `.claude/skills/payment-detection/SKILL.md` | Scan Airwallex payment emails and update invoice tracker. |
+| `/payment-detection`, "check for payments", "scan for payments" | `.claude/skills/payment-detection/SKILL.md` and `.agents/skills/payment-detection/SKILL.md` | Scan Airwallex payment emails and update invoice tracker. |
 | `/payment-detection-trigger`, "run payment detection" | `.claude/skills/payment-detection-trigger/SKILL.md` | Fire the n8n payment detection webhook. |
 | `/n8n-trigger`, "trigger n8n", "run n8n workflow", "fire webhook", "run automation" | `.claude/skills/n8n-workflow-trigger/SKILL.md` | Manually trigger approved deployed n8n workflow webhooks. |
 | `/invoice-reminder-cron`, "run invoice reminders" | `.claude/skills/invoice-reminder-cron/SKILL.md` | Full daily reminder workflow, including payment detection first. |
