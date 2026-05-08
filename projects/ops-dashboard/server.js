@@ -953,6 +953,7 @@ function renderDashboard(d) {
   <h1>Krave Ops Dashboard</h1>
   <div class="header-meta">
     <a class="tracker-btn" href="https://docs.google.com/spreadsheets/d/${SHEET_ID}" target="_blank" rel="noopener">📊 Open Tracker</a>
+    <a class="tracker-btn" href="https://app.clickup.com/9018123501/v/l/8crb97d-378" target="_blank" rel="noopener">✅ ClickUp</a>
     <button class="copy-btn" id="copy-btn" type="button">📋 Copy summary</button>
     <span class="range-toggle">${rangeToggle}</span>
     <span>${generatedTime} ICT</span>
