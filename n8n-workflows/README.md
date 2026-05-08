@@ -200,6 +200,8 @@ node n8n-workflows/deploy-invoice-request-intake.js
 
 Polls the tracker for rows where Col J `Payment Status` is `Draft - Pending John Review`, scans John's approval channel for approve replies, finalizes the Airwallex draft, refreshes Col E `Invoice #` from the finalized Airwallex `number`, matches tracker updates by stable Col F `Airwallex Invoice ID`, writes Col J `Payment Status = Invoice Sent`, writes Col R `Invoice URL`, and replies in the original `#payments-invoices-updates` receipt thread from Col P `Origin Thread TS` when present. Threaded Slack replies use Slack Web API `chat.postMessage` with explicit `thread_ts`.
 
+**ClickUp sync:** John can include a ClickUp task URL in his approval reply (`approve https://app.clickup.com/t/XXXXXXXXX`). If present, the workflow updates the UGC task status to `collections`, writes Invoice Sent + Due dates to the task, and stores the task ID in tracker Col U. Optional — `approve` alone still works. All ClickUp steps are `continueOnFail: true`.
+
 **Manual trigger:**
 ```text
 POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-approval-polling

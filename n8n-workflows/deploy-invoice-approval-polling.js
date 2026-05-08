@@ -11,6 +11,7 @@ const JOHN_APPROVAL_CHANNEL = 'C0AQZGJDR38';
 const PAYMENTS_CHANNEL = 'C09HN2EBPR7';
 const AW_CLIENT_ID = process.env.AIRWALLEX_CLIENT_ID;
 const AW_API_KEY = process.env.AIRWALLEX_API_KEY;
+const CLICKUP_API_KEY = process.env.CLICKUP_API_KEY;
 
 // ── Code nodes ──────────────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ return $input.all().map((item, index) => {
     return text.includes('approve') && r.bot_id == null;
   });
   if (!approveReply) return null;
-  return { json: { ...ctx, approve_reply_ts: approveReply.ts } };
+  return { json: { ...ctx, approve_reply_ts: approveReply.ts, approve_reply_text: approveReply.text || '' } };
 }).filter(Boolean);
 const response = ($input.all()[0] || {}).json || {};
 const replies = response.messages || [];
@@ -77,7 +78,7 @@ const approveReply = replies.find(r => {
   return text.includes('approve') && r.bot_id == null;
 });
 if (!approveReply) return [];
-return [{ json: { ...ctx, approve_reply_ts: approveReply.ts } }];
+return [{ json: { ...ctx, approve_reply_ts: approveReply.ts, approve_reply_text: approveReply.text || '' } }];
 `.trim();
 
 const EXTRACT_PAYMENT_LINK_CODE = `
@@ -259,6 +260,21 @@ return [{ json: {
   strategist_text: lines.join('\\n'),
   origin_thread_ts: originThreadTs,
 }}];
+`.trim();
+
+const PARSE_CLICKUP_TASK_CODE = `
+const ctx = ($input.all()[0] || {}).json || {};
+const text = ctx.approve_reply_text || '';
+const m = text.match(/app\\.clickup\\.com\\/t\\/([a-z0-9]+)/i);
+const clickupTaskId = m ? m[1] : null;
+// Parse due date from Sheets col I into ms timestamp for ClickUp date field
+const dueDateStr = ctx['Due Date'] || '';
+let dueDateMs = null;
+if (dueDateStr) {
+  const d = new Date(dueDateStr);
+  if (!isNaN(d.getTime())) dueDateMs = d.getTime();
+}
+return [{ json: { ...ctx, clickupTaskId, dueDateMs } }];
 `.trim();
 
 // ── Workflow definition ──────────────────────────────────────────────────────
@@ -489,6 +505,107 @@ const workflow = {
         options: {},
       },
     },
+
+    // ── ClickUp sync branch (parallel from Update Tracker) ─────────────────
+    // Parses ClickUp task ID from John's approval reply text.
+    // No task ID (WhatsApp clients, new clients, deposits) → IF gates everything off.
+    {
+      id: 'n18', name: 'Parse ClickUp Task ID',
+      type: 'n8n-nodes-base.code', typeVersion: 2,
+      position: [2700, 520],
+      parameters: { mode: 'runOnceForAllItems', jsCode: PARSE_CLICKUP_TASK_CODE },
+    },
+    {
+      id: 'n19', name: 'Has ClickUp Task?',
+      type: 'n8n-nodes-base.if', typeVersion: 2.1,
+      position: [2920, 520],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+          conditions: [{ id: 'c1', leftValue: '={{ !!$json.clickupTaskId }}', rightValue: true, operator: { type: 'boolean', operation: 'equals' } }],
+          combinator: 'and',
+        },
+        options: {},
+      },
+    },
+    {
+      id: 'n20', name: 'ClickUp Set Collections',
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+      position: [3140, 520],
+      continueOnFail: true,
+      parameters: {
+        method: 'PUT',
+        url: "={{ 'https://api.clickup.com/api/v2/task/' + $json.clickupTaskId }}",
+        authentication: 'none', sendHeaders: true,
+        headerParameters: { parameters: [
+          { name: 'Authorization', value: CLICKUP_API_KEY },
+          { name: 'Content-Type', value: 'application/json' },
+        ]},
+        sendBody: true, specifyBody: 'json',
+        jsonBody: '={{ ({ status: "collections" }) }}',
+        options: {},
+      },
+    },
+    {
+      id: 'n21', name: 'ClickUp Set Invoice Sent Date',
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+      position: [3360, 520],
+      continueOnFail: true,
+      parameters: {
+        method: 'POST',
+        url: "={{ 'https://api.clickup.com/api/v2/task/' + $('Parse ClickUp Task ID').first().json.clickupTaskId + '/field/79d9a123-4903-44ba-83cd-7d07b349617f' }}",
+        authentication: 'none', sendHeaders: true,
+        headerParameters: { parameters: [
+          { name: 'Authorization', value: CLICKUP_API_KEY },
+          { name: 'Content-Type', value: 'application/json' },
+        ]},
+        sendBody: true, specifyBody: 'json',
+        jsonBody: '={{ ({ value: Date.now() }) }}',
+        options: {},
+      },
+    },
+    {
+      id: 'n22', name: 'ClickUp Set Invoice Due Date',
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+      position: [3580, 520],
+      continueOnFail: true,
+      parameters: {
+        method: 'POST',
+        url: "={{ 'https://api.clickup.com/api/v2/task/' + $('Parse ClickUp Task ID').first().json.clickupTaskId + '/field/8552675a-689e-43fa-a4d0-2f102e1d7fc5' }}",
+        authentication: 'none', sendHeaders: true,
+        headerParameters: { parameters: [
+          { name: 'Authorization', value: CLICKUP_API_KEY },
+          { name: 'Content-Type', value: 'application/json' },
+        ]},
+        sendBody: true, specifyBody: 'json',
+        jsonBody: "={{ ({ value: $('Parse ClickUp Task ID').first().json.dueDateMs || Date.now() }) }}",
+        options: {},
+      },
+    },
+    {
+      // Writes ClickUp task ID to tracker col "ClickUp Task ID".
+      // PREREQUISITE: add "ClickUp Task ID" column header to the Invoices sheet (col T or next free).
+      id: 'n23', name: 'Write ClickUp ID to Tracker',
+      type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5,
+      position: [3800, 520],
+      continueOnFail: true,
+      credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
+      parameters: {
+        resource: 'sheet', operation: 'appendOrUpdate',
+        documentId: { __rl: true, value: SHEET_ID, mode: 'id' },
+        sheetName: { __rl: true, value: 'Invoices', mode: 'name' },
+        columns: {
+          mappingMode: 'defineBelow',
+          value: {
+            'Airwallex Invoice ID': "={{ $('Parse ClickUp Task ID').first().json['Airwallex Invoice ID'] }}",
+            'Clickup Task ID': "={{ $('Parse ClickUp Task ID').first().json.clickupTaskId }}",
+          },
+          matchingColumns: ['Airwallex Invoice ID'],
+          schema: [],
+        },
+        options: {},
+      },
+    },
   ],
 
   connections: {
@@ -504,10 +621,23 @@ const workflow = {
     'Finalize Invoice':         { main: [[{ node: 'Get Invoice', type: 'main', index: 0 }]] },
     'Get Invoice':              { main: [[{ node: 'Extract Payment Link', type: 'main', index: 0 }]] },
     'Extract Payment Link':     { main: [[{ node: 'Update Tracker', type: 'main', index: 0 }]] },
-    'Update Tracker':           { main: [[{ node: 'Build John Thread Reply', type: 'main', index: 0 }]] },
+    'Update Tracker':           { main: [[
+      { node: 'Build John Thread Reply', type: 'main', index: 0 },
+      { node: 'Parse ClickUp Task ID',   type: 'main', index: 0 },
+    ]]},
     'Build John Thread Reply':  { main: [[{ node: 'Reply in John Thread', type: 'main', index: 0 }]] },
     'Reply in John Thread':     { main: [[{ node: 'Build Strategist Message', type: 'main', index: 0 }]] },
     'Build Strategist Message': { main: [[{ node: 'Notify Strategist', type: 'main', index: 0 }]] },
+
+    // ClickUp sync branch
+    'Parse ClickUp Task ID':    { main: [[{ node: 'Has ClickUp Task?', type: 'main', index: 0 }]] },
+    'Has ClickUp Task?': { main: [
+      [{ node: 'ClickUp Set Collections',       type: 'main', index: 0 }],  // true
+      [],                                                                      // false — dead end
+    ]},
+    'ClickUp Set Collections':      { main: [[{ node: 'ClickUp Set Invoice Sent Date', type: 'main', index: 0 }]] },
+    'ClickUp Set Invoice Sent Date': { main: [[{ node: 'ClickUp Set Invoice Due Date',  type: 'main', index: 0 }]] },
+    'ClickUp Set Invoice Due Date':  { main: [[{ node: 'Write ClickUp ID to Tracker',  type: 'main', index: 0 }]] },
   },
 };
 

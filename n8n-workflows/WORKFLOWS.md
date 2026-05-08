@@ -78,6 +78,7 @@
 | R | Invoice URL | Invoice Approval Polling, Invoice Reminder Cron |
 | S | Last Follow-Up Sent | Invoice Reminder Cron; latest reminder date for attribution |
 | T | Last Follow-Up Type | Invoice Reminder Cron; latest reminder tier such as `7d`, `overdue`, or `late-fee-followup` |
+| S | Clickup Task ID | Invoice Approval Polling (write when John includes ClickUp URL in approval reply); Payment Detection (read to update ClickUp status) |
 | U | Last Follow-Up Thread ID | Invoice Reminder Cron; real Gmail reminder thread key when available, otherwise blank |
 | V | Last Client Reply Date | Invoice Reminder Reply Detection; latest client reply date from John's Gmail only |
 | W | Client Reply Status | Invoice Reminder Reply Detection; `No Reply Found`, `Possible Reply`, `Replied`, `Promise to Pay`, `Question/Dispute`, or `Needs Human` |
@@ -212,6 +213,16 @@ After a match, the workflow checks if the received amount covers the full invoic
 - `remaining` = Col G (Amount) − newAmountPaid
 - **Partial** if remaining > $1.00 → Col J `Partial Payment`, Col Q updated, Slack 🔄
 - **Full** if remaining ≤ $1.00 → Col J `Payment Complete`, Col M date, Col Q = invoice amount, Slack ✅
+
+### ClickUp Sync (full payment only)
+
+Applied via surgical patch: `n8n-workflows/patch-payment-detection-clickup.js` (nodes cu1–cu3).
+
+On full payment confirmed (not partial), after `Update Invoice Status` / `Update Osome Invoice Status`:
+1. Look up Col S `Clickup Task ID` from tracker rows (matched via Invoice #)
+2. If present → PUT ClickUp task status → `payment complete`
+3. `continueOnFail: true` — payment detection flow is never blocked by ClickUp API errors
+4. If Col U is blank (invoices created before this feature) → silently skipped
 
 ### Airwallex API Poll
 
@@ -726,10 +737,11 @@ Automates the approval and finalization leg of the invoice ops flow. Polls the t
 [Extract Payment Link] — code: hosted_invoice_url → hosted_url → digital_invoice_link → payment_link → checkout_url
   ↓
 [Update Tracker] - appendOrUpdate, match Airwallex Invoice ID, refresh Invoice #, set Payment Status = "Invoice Sent", set Invoice URL
-  ↓
-[Reply in John Thread] — chat.postMessage to C0AQZGJDR38 thread
-  ↓
-[Notify Strategist] - Slack bot post to C09HN2EBPR7, using Col P Origin Thread TS when present
+  ↓ (two parallel branches)
+  ├─ [Build John Thread Reply] → [Reply in John Thread] → [Build Strategist Message] → [Notify Strategist]
+  └─ [Parse ClickUp Task ID] → [Has ClickUp Task?]
+       └─ true → [ClickUp Set Collections] → [ClickUp Set Invoice Sent Date] → [ClickUp Set Invoice Due Date] → [Write ClickUp ID to Tracker]
+       └─ false → (end — no ClickUp URL in reply)
 ```
 
 ### Approval Detection Logic
@@ -745,11 +757,24 @@ Automates the approval and finalization leg of the invoice ops flow. Polls the t
 - "approve" match is case-insensitive — "Approve", "APPROVE", "approved" all count
 - Processes all pending drafts in one execution (n8n fan-out per tracker row)
 
+### ClickUp Sync (post-finalization)
+
+John can optionally include the UGC ClickUp task URL in his approval reply:
+```
+approve https://app.clickup.com/t/86ex3jwhn
+```
+- Task ID is parsed from the URL via regex `/app\.clickup\.com\/t\/([a-z0-9]+)/i`
+- If URL present: ClickUp task status → `collections`; Invoice Sent date written; Invoice Due date written (from Col I); ClickUp Task ID stored in tracker Col S (`Clickup Task ID` — already exists in sheet)
+- If no URL (WhatsApp clients, deposits, new clients): ClickUp sync skipped silently; all other outputs still fire
+- All ClickUp HTTP nodes run with `continueOnFail: true` — invoice finalization is never blocked by ClickUp API errors
+
 ### Outputs
 
 | Scenario | Action |
 |----------|--------|
 | Pending draft found, approve reply present | Finalize in Airwallex, get link, update Col J to `Invoice Sent`, write Col R Invoice URL, reply in John's thread, notify strategist in original thread |
+| Approve reply includes ClickUp URL | Additionally: ClickUp status → `collections`, Invoice Sent + Due dates written to task, Col S `Clickup Task ID` written in tracker |
+| Approve reply has no ClickUp URL | ClickUp sync skipped; all other outputs unchanged |
 | No pending drafts in tracker | Silent exit |
 | Pending draft found but no approve reply yet | Skip that draft, check next |
 | Notification message not found in C0AQZGJDR38 | Skip that draft |
@@ -765,6 +790,7 @@ Automates the approval and finalization leg of the invoice ops flow. Polls the t
 | Slack reply or notify fails | `continueOnFail: true`; tracker update already wrote `Invoice Sent`; no re-processing on next run |
 | Email Client fails | `continueOnFail: true`; logged in n8n execution history; tracker + Slack notifications already written |
 | Google Sheets read fails | `continueOnFail: true`; no items flow downstream; silent exit |
+| ClickUp API fails (status update or date write) | `continueOnFail: true`; ClickUp branch is parallel and isolated; invoice finalization and Slack notifications are unaffected; manually update ClickUp task if needed |
 
 ---
 
