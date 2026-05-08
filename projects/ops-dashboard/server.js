@@ -1029,8 +1029,13 @@ function renderDashboard(d) {
   <div class="header-meta">
     <a class="tracker-btn" href="https://docs.google.com/spreadsheets/d/${SHEET_ID}" target="_blank" rel="noopener">📊 Open Tracker</a>
     <a class="tracker-btn" href="https://app.clickup.com/9018123501/v/l/8crb97d-378" target="_blank" rel="noopener">✅ ClickUp</a>
-    <a class="tracker-btn" href="slack://open?team=T06U38A4NV6">💬 Slack</a>
-    <a class="tracker-btn" href="https://app.slack.com/client/T06U38A4NV6" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;opacity:0.7">web</a>
+    <div style="position:relative;display:inline-block">
+      <button class="tracker-btn" id="slack-btn" type="button" onclick="document.getElementById('slack-popup').classList.toggle('slack-popup-open')">💬 Slack</button>
+      <div id="slack-popup" style="display:none;position:absolute;top:calc(100% + 8px);right:0;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:6px;min-width:180px;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,0.4)">
+        <a href="slack://open?team=T06U38A4NV6" style="display:block;padding:8px 12px;color:#f8fafc;text-decoration:none;border-radius:6px;font-size:13px" onmouseenter="this.style.background='#334155'" onmouseleave="this.style.background=''" onclick="document.getElementById('slack-popup').classList.remove('slack-popup-open')">Open Slack app</a>
+        <a href="https://app.slack.com/client/T06U38A4NV6" target="_blank" rel="noopener" style="display:block;padding:8px 12px;color:#94a3b8;text-decoration:none;border-radius:6px;font-size:13px" onmouseenter="this.style.background='#334155'" onmouseleave="this.style.background=''" onclick="document.getElementById('slack-popup').classList.remove('slack-popup-open')">Continue on web</a>
+      </div>
+    </div>
     <span class="range-toggle">${rangeToggle}</span>
     <span>${generatedTime} ICT</span>
     ${cacheNote}
@@ -1285,6 +1290,23 @@ function renderDashboard(d) {
   // Auto-refresh every 5 minutes (matches server cache TTL).
   // Preserves the current ?range= selection. Does not refresh if the user
   // has an unsaved form interaction in progress (focus inside a form element).
+  // Slack popup — toggle display, close on outside click
+  const slackPopup = document.getElementById('slack-popup');
+  if (slackPopup) {
+    slackPopup.style.display = 'block';
+    slackPopup.style.visibility = 'hidden';
+    slackPopup.classList.remove('slack-popup-open');
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('#slack-btn') && !e.target.closest('#slack-popup')) {
+        slackPopup.classList.remove('slack-popup-open');
+      }
+    });
+    const observer = new MutationObserver(function() {
+      slackPopup.style.visibility = slackPopup.classList.contains('slack-popup-open') ? 'visible' : 'hidden';
+    });
+    observer.observe(slackPopup, { attributes: true, attributeFilter: ['class'] });
+  }
+
   (function autoRefresh() {
     const INTERVAL_MS = 5 * 60 * 1000;
     setTimeout(function tick() {
