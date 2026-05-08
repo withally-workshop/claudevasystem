@@ -1148,44 +1148,50 @@ function renderDashboard(d) {
 
   ${d.clickup ? (() => {
     const cu = d.clickup;
-    const statusRows = Object.entries(cu.byStatus)
-      .sort((a, b) => b[1] - a[1])
-      .map(([s, n]) => `<tr><td style="text-transform:capitalize">${s}</td><td style="text-align:right">${n}</td></tr>`)
-      .join('');
-    const assigneeRows = Object.entries(cu.byAssignee)
-      .sort((a, b) => b[1] - a[1])
-      .map(([a, n]) => `<tr><td>${a}</td><td style="text-align:right">${n}</td></tr>`)
-      .join('');
+    const assignees = Object.entries(cu.byAssignee).sort((a, b) => b[1] - a[1]);
+    const maxCount = assignees.length ? assignees[0][1] : 1;
+    const barColors = ['#7dd3fc','#6ee7b7','#fbbf24','#f472b6','#a78bfa','#fb923c'];
+    const assigneeBars = assignees.map(([name, n], i) => {
+      const pct = Math.round((n / maxCount) * 100);
+      const color = barColors[i % barColors.length];
+      return `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="width:110px;font-size:12px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
+          <div style="flex:1;background:#1e293b;border-radius:4px;height:10px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:${color};border-radius:4px;transition:width 0.6s ease"></div>
+          </div>
+          <div style="width:20px;text-align:right;font-size:12px;font-weight:600;color:${color}">${n}</div>
+        </div>`;
+    }).join('');
     const projectRows = cu.activeProjects.map(p => `
       <tr>
         <td><a href="${p.url}" target="_blank" rel="noopener" style="color:#7dd3fc;text-decoration:none">${p.name}</a></td>
         <td style="text-transform:capitalize">${p.status}</td>
         <td>${p.assignee}</td>
         <td>${p.service}</td>
-        <td style="color:${p.creatorPaid.toLowerCase().includes('not paid') ? '#f87171' : '#4ade80'}">${p.creatorPaid}</td>
       </tr>`).join('');
     return `
   <div class="section">
     <div class="section-title">UGC Projects — ClickUp <a href="https://app.clickup.com/9018123501/v/l/8crb97d-378" target="_blank" rel="noopener" style="color:#7dd3fc;font-size:11px;margin-left:8px;text-decoration:none">↗ Open</a></div>
-    <div class="cards">
-      ${scorecard('Active Projects', cu.totalActive)}
-      ${scorecard('Creator Paid', cu.creatorPaid.paidInFull, `${cu.creatorPaid.notPaid} not paid · ${cu.creatorPaid.other} unknown`)}
-    </div>
-    <div class="stat-grid" style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:20px 24px;backdrop-filter:blur(10px);margin-bottom:20px;display:inline-flex;align-items:center;gap:16px">
+      <div style="font-size:42px;font-weight:700;color:#f8fafc;line-height:1">${cu.totalActive}</div>
       <div>
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:8px">By Status</div>
-        <table><tbody>${statusRows}</tbody></table>
-      </div>
-      <div>
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:8px">By Assignee</div>
-        <table><tbody>${assigneeRows}</tbody></table>
+        <div style="font-size:13px;font-weight:600;color:#cbd5e1">Active Projects</div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px">UGC list · live from ClickUp</div>
       </div>
     </div>
+
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:12px">By Assignee</div>
+      <div style="max-width:480px">${assigneeBars}</div>
+    </div>
+
     ${projectRows ? `
-    <div style="margin-top:14px">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:8px">Active Projects (most recent 10)</div>
+    <div>
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:12px">Active Projects — Most Recent 10</div>
       <table>
-        <thead><tr><th>Project</th><th>Status</th><th>Assignee</th><th>Service</th><th>Creator Paid</th></tr></thead>
+        <thead><tr><th>Project</th><th>Status</th><th>Assignee</th><th>Service</th></tr></thead>
         <tbody>${projectRows}</tbody>
       </table>
     </div>` : ''}
