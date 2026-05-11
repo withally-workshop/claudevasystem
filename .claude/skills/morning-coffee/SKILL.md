@@ -21,7 +21,7 @@
 | Key Slack channels | `#ad-production-internal` (`C0AGEM919QV`), `#payments-invoices-updates` (`C09HN2EBPR7`) |
 | ClickUp notification sender | `notifications@tasks.clickup.com` |
 | Noa's Slack DMs + mentions | `slack-noa` MCP (Noa's personal user token — configured in `.mcp.json`) |
-| Calendar source | Email-only (Google Calendar invites + accepted RSVPs + Calendly/Lark/PandaDoc scheduler emails landing in `noa@kravemedia.co`). Calendar MCP not in use — Noa's Google account requires 2FA. |
+| Calendar source | Google Calendar MCP (`mcp__claude_ai_Google_Calendar__list_events`) — confirmed working as of 2026-05-11. Falls back to email-based parsing if MCP fails. |
 | Cron (UTC) | `0 2 * * 1-5` = 10:00 AM PHT (UTC+8), weekdays |
 
 ---
@@ -32,32 +32,33 @@
 
 Resolve today's date in PHT (UTC+8). All "last 24h" queries anchor to `TODAY_PHT 00:00:00`. Format date headers as `[Day, Month D, YYYY]` (e.g. `Wednesday, May 6, 2026`).
 
-### Step 1 — Pull today's calendar (from email)
+### Step 1 — Pull today's calendar (Google Calendar MCP)
 
-Calendar MCP is not available (Noa's Google account requires 2FA). Instead, extract today's events from scheduling emails in Gmail.
+Use `mcp__claude_ai_Google_Calendar__list_events` with Noa's primary calendar:
 
+```
+mcp__claude_ai_Google_Calendar__list_events
+  startTime: TODAY_PHT 00:00:00+08:00
+  endTime:   TODAY_PHT 23:59:59+08:00
+  timeZone:  Asia/Singapore
+  orderBy:   startTime
+```
+
+For each event returned:
+- Extract `summary` (title), `start.dateTime`, `end.dateTime`, attendees
+- Skip events where `status == "cancelled"`
+- Format: `[HH:MM TZ] — [Event Title] with [Person]` (omit "with" if no external attendees)
+- **Flag** events between 14:30–20:00 PHT (2:30–8:00 PM SGT / 1:30–7:00 PM ICT) with `[deep work window]`
+
+**Fallback:** If the Google Calendar MCP returns an error or empty result, fall back to email-based parsing:
 ```
 mcp__gmail-noa__gmail_search_messages
   query: "(subject:\"Invitation:\" OR subject:\"Accepted:\" OR subject:\"Updated invitation:\" OR from:calendar-notification@google.com OR from:noreply@calendly.com OR from:scheduler@lark.com OR subject:\"Meeting confirmed\") newer_than:14d"
   max_results: 50
 ```
+Filter to events matching `TODAY_PHT`. Prefer `Accepted:` over `Invitation:` when duplicate.
 
-For each result, parse the subject and body for the event date/time. Common patterns:
-- `Invitation: [Title] @ [Day Mon D, YYYY] [HH:MMam-HH:MMam] (TZ)`
-- `Accepted: [Title] @ [Day Mon D, YYYY] [time]`
-- Calendly: body contains `Date & Time: [date], [time]`
-
-**Filter:** Only keep events whose date matches `TODAY_PHT`. Discard everything else.
-
-**Deduplication:** If the same event appears in both an `Invitation:` email and an `Accepted:` email, prefer the `Accepted:` version. If multiple status updates exist for one event, surface only the most recent.
-
-**Cancellations:** If an email is `Cancelled:` or `Declined:` for an event today, exclude that event from the section.
-
-**Format each event:** `[HH:MM TZ] — [Event Title] with [Person/Company]` (omit "with" if no attendees parsed).
-
-**Flag** events between 14:30–20:00 PHT (1:30–7:00 PM ICT) with `[deep work window]`.
-
-If no events today: omit section.
+If no events today from either source: omit section silently.
 
 ### Step 2 — Scan Noa's Gmail (UNREAD only, last 24h)
 
@@ -183,8 +184,8 @@ _Deep work starts at 1:30 PM — have a good one._
 
 ```
 mcp__claude_ai_Slack__slack_send_message
-  channel: U06TBGX9L93   ← Noa's user ID, opens a DM
-  text: [composed message — exact final text, nothing appended]
+  channel_id: U06TBGX9L93   ← Noa's user ID, opens a DM
+  message: [composed message — exact final text, nothing appended]
 ```
 
 **Critical formatting rules for this send:**
@@ -206,7 +207,7 @@ Do NOT post to `#airwallexdrafts` or any other channel. This is a private person
 | Read email body | `mcp__gmail-noa__gmail_get_message` |
 | Slack channel history (bot) | `mcp__slack__slack_get_channel_history` |
 | Noa's DMs + mentions | `mcp__slack_noa` tools (personal user token) |
-| Today's calendar (email-derived) | `mcp__gmail-noa__gmail_search_messages` with calendar-invite subject/from filters |
+| Today's calendar | `mcp__claude_ai_Google_Calendar__list_events` (primary); email fallback via `mcp__gmail-noa__gmail_search_messages` |
 | Send DM as John | `mcp__claude_ai_Slack__slack_send_message` |
 
 ---
@@ -215,7 +216,7 @@ Do NOT post to `#airwallexdrafts` or any other channel. This is a private person
 
 - Gmail unavailable: skip email + ClickUp sections; still send with calendar + Slack if available; append `_(email data unavailable today)_`
 - All sources fail: do not send an empty briefing; report failure for manual diagnosis
-- Calendar (email-derived): if Gmail is available but no calendar emails surface today's events, omit section silently — do NOT note absence
+- Calendar MCP error: fall back to email-based calendar parsing (see Step 1 fallback). If both fail, omit section silently — do NOT note absence
 - `slack-noa` unavailable: omit DMs sub-section silently; channel highlights can still appear
 - Never send on behalf of Noa; never draft replies from this skill
 
