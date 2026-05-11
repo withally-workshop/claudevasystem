@@ -32,7 +32,9 @@ Use `mcp__slack__slack_get_channel_history` with `channel_id: C0AQZGJDR38`, limi
 
 Split messages into three groups:
 
-**Group A — Yesterday's EOD** (bot message from yesterday containing "Today's Wrap-up")
+**Group A — Last business day's EOD** (bot message from the most recent weekday containing "Today's Wrap-up")
+- On Monday (or after any holiday gap), look back to Friday — not Sunday.
+- Scan back through channel history until you find a message containing "Today's Wrap-up". Stop at the first match. Do not use messages from today.
 - Extract `Not Completed / Needs More Work / Planned Next Steps` → **Carry-over from Yesterday**
 - Extract `Blocker / Input Needed` → carry forward only if still unresolved
 
@@ -47,12 +49,12 @@ Split messages into three groups:
 - Use for **BAU / Follow-ups (Business As Usual)**
 - Pull forward any `Review These` items as candidate blockers or follow-ups when they still need human judgment
 
-All date filtering uses **Asia/Manila timezone (PHT, UTC+8)**.
+All date filtering uses **Asia/Manila timezone (PHT, UTC+8)**. "Yesterday" means last business day — on Monday, that is Friday.
 
 ### Step 1 — Validate required inputs
 
 These sources are mandatory:
-- Yesterday's EOD containing `Today's Wrap-up`
+- Last business day's EOD containing `Today's Wrap-up` (scan back through history — do not limit to strict "yesterday")
 - John's same-day morning dump (at least one message from `U0AM5EGRVTP` today)
 
 If either required source is missing → post alert to `#airwallexdrafts` (`C0AQZGJDR38`) and stop. Do not draft or send a partial SOD report.
