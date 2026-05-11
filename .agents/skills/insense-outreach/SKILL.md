@@ -23,7 +23,7 @@ One combined pass: walk one campaign's applicants, drawer-check each against pas
 
 ## Execution
 
-For full step-by-step logic, DOM selectors (validated 2026-05-07), filter rules, drawer extraction recipe, send recipe, run JSON shape, Slack format, and failure handling, read the Claude Code skill:
+For full step-by-step logic, DOM selectors (validated 2026-05-11), filter rules, drawer extraction recipe, send recipe, run JSON shape, Slack format, and failure handling, read the Claude Code skill:
 
 `.claude/skills/insense-outreach/SKILL.md`
 
