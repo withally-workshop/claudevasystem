@@ -50,8 +50,9 @@ Summary of execution order:
 | Gmail account | `noa@kravemedia.co` |
 | Key channels | `#ad-production-internal` (`C0AGEM919QV`), `#payments-invoices-updates` (`C09HN2EBPR7`) |
 | ClickUp sender | `notifications@tasks.clickup.com` |
+| Calendar source | `mcp__claude_ai_Google_Calendar__list_events` (primary, confirmed 2026-05-11); email fallback on error |
 | Noa Slack token MCP | `slack-noa` (personal user token — configured in `.mcp.json`) |
-| Delivery method | `mcp__claude_ai_Slack__slack_send_message` (John's personal OAuth — not bot token) |
+| Delivery method | `mcp__claude_ai_Slack__slack_send_message` with `channel_id: U06TBGX9L93`, `message:` param (John's personal OAuth — not bot token) |
 | Schedule | Local Task Scheduler `KraveEA-MorningCoffee` — weekly Mon–Fri 10:00 AM Asia/Manila |
 | Claude Code skill | `.claude/skills/morning-coffee/SKILL.md` |
 
