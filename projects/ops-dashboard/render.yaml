@@ -3,9 +3,8 @@ services:
     name: krave-ops-dashboard
     runtime: node
     plan: free
-    rootDir: projects/ops-dashboard
-    buildCommand: npm install
-    startCommand: node server.js
+    buildCommand: cd projects/ops-dashboard && npm install
+    startCommand: node projects/ops-dashboard/server.js
     healthCheckPath: /auth/login
     envVars:
       - key: NODE_VERSION
