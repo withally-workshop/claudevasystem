@@ -293,6 +293,9 @@
     "https://instagram.com/shookreetravels/": { "status": "messaged", "lastCampaign": "IM8 - UGC Talking Head Scripts / TikTok Trends", "lastMessagedAt": "2026-05-08T09:06:00Z", "blockReason": "" },
     "https://instagram.com/svitlana_ugc/": { "status": "messaged", "lastCampaign": "IM8 - UGC Talking Head Scripts / TikTok Trends", "lastMessagedAt": "2026-05-08T09:07:00Z", "blockReason": "" },
     "https://instagram.com/alexfacchii/": { "status": "messaged", "lastCampaign": "IM8 - UGC Talking Head Scripts / TikTok Trends", "lastMessagedAt": "2026-05-08T09:08:00Z", "blockReason": "" },
-    "https://instagram.com/samuel.elioth/": { "status": "triaged", "lastCampaign": "IM8 - UGC Talking Head Scripts / TikTok Trends", "lastTriagedAt": "2026-05-08T09:08:00Z", "blockReason": "Failed filter (ER 0.89% below 1%)" }
+    "https://instagram.com/samuel.elioth/": { "status": "triaged", "lastCampaign": "IM8 - UGC Talking Head Scripts / TikTok Trends", "lastTriagedAt": "2026-05-08T09:08:00Z", "blockReason": "Failed filter (ER 0.89% below 1%)" },
+    "https://instagram.com/ritacreates_/": { "status": "messaged", "lastCampaign": "IM8 - UGC Talking Head Scripts / TikTok Trends", "lastMessagedAt": "2026-05-11T02:10:00Z", "blockReason": "send-unconfirmed" },
+    "https://instagram.com/sophiejaynehomes/": { "status": "messaged", "lastCampaign": "IM8 - UGC Talking Head Scripts / TikTok Trends", "lastMessagedAt": "2026-05-11T02:11:00Z", "blockReason": "send-unconfirmed" },
+    "https://instagram.com/jadesbodygoals/": { "status": "messaged", "lastCampaign": "IM8 - UGC Talking Head Scripts / TikTok Trends", "lastMessagedAt": "2026-05-11T02:12:00Z", "blockReason": "send-unconfirmed" }
   }
 }
