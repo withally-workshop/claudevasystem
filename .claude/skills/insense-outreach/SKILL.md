@@ -92,7 +92,7 @@ Plus blocklist (any one → skip):
   }
   ```
   Call `closeDrawerAndWait()` everywhere you previously called `pressEscape()` alone. Also call it at the start of each loop iteration if `document.querySelector('[role="dialog"]')` is not null.
-- **Drawer wait:** `waitFor(() => /Engagement rate/i.test(dialog.innerText) && new RegExp(username, 'i').test(dialog.innerText), 12000)` where `dialog = document.querySelector('[role="dialog"]')`. Use `Engagement rate` as the load signal — it is always present in the drawer regardless of whether the creator has finished deals. Do NOT wait for `finished deals` — creators with 0 deals never render that text.
+- **Drawer wait:** `waitFor(() => (/Engagement rate/i.test(dialog.innerText) || /finished deals/i.test(dialog.innerText)) && new RegExp(username, 'i').test(dialog.innerText), 12000)` where `dialog = document.querySelector('[role="dialog"]')`. Accept either `Engagement rate` (Instagram profiles) or `finished deals` (TikTok-only profiles — they show Avg. views instead of ER, 2026-05-11). Do NOT require only `finished deals` — creators with 0 deals never render that text.
 - **Drawer regex (validated — 2026-05-11):**
   ```js
   const dialog = document.querySelector('[role="dialog"]');
@@ -171,7 +171,7 @@ This is the function passed to `mcp__playwright-cdp__browser_evaluate`. The `tar
 
 Key changes from the 2026-05-07 version:
 - `closeDrawerAndWait()` polls for `[role="dialog"]` element to be gone (not "finished deals" text — creators with 0 deals never show that string, 2026-05-11 fix)
-- Drawer wait condition uses `Engagement rate` + username, not `finished deals` + username (same reason)
+- Drawer wait condition uses `(Engagement rate OR finished deals)` + username — TikTok-only profiles omit ER entirely (2026-05-11)
 - `extractDrawerData` reads from `[role="dialog"]` element; `finishedDeals` defaults to `0` when absent (not `null`)
 - Guard at loop start checks `document.querySelector('[role="dialog"]')` instead of `finished deals` text
 - `firstName` is always set to `targetUsername` (no display name extraction)
@@ -216,8 +216,10 @@ async () => {
     const links = Array.from(document.querySelectorAll('a[target="_blank"]'));
     for (const link of links) {
       const href = link.getAttribute('href') || '';
-      const re = new RegExp('/' + escapeRe(username) + '(/|$)', 'i');
-      if (!re.test(href)) continue;
+      // Match both /username/ (Instagram) and @username (TikTok)
+      const reSlash = new RegExp('/' + escapeRe(username) + '(/|$)', 'i');
+      const reAt = new RegExp('@' + escapeRe(username) + '(/|$)', 'i');
+      if (!reSlash.test(href) && !reAt.test(href)) continue;
       let n = link;
       for (let i = 0; i < 12 && n && n !== document.body; i++) {
         const buttons = Array.from(n.querySelectorAll('button'))
@@ -267,13 +269,14 @@ async () => {
       if (!vp) { r.status = 'card-not-found'; results.push(r); continue; }
       vp.click();
 
-      // 2. Wait for correct drawer — use "Engagement rate" as load signal (always present).
-      // Do NOT wait for "finished deals" — creators with 0 deals never render that text.
+      // 2. Wait for correct drawer.
+      // Accept "Engagement rate" (Instagram) OR "finished deals" (TikTok-only profiles don't show ER).
+      // Do NOT require "finished deals" alone — creators with 0 deals never render that line.
       let drawerOk = await waitFor(() => {
         const dlg = document.querySelector('[role="dialog"]');
         if (!dlg) return false;
         const txt = dlg.innerText;
-        return /Engagement rate/i.test(txt)
+        return (/Engagement rate/i.test(txt) || /finished deals/i.test(txt))
           && new RegExp(escapeRe(t.username) + '\\b', 'i').test(txt);
       }, 12000);
 
@@ -281,7 +284,8 @@ async () => {
       if (!drawerOk) {
         await closeDrawerAndWait();
         const link = Array.from(document.querySelectorAll('a[target="_blank"]'))
-          .find(a => new RegExp('/' + escapeRe(t.username) + '(/|$)', 'i').test(a.getAttribute('href') || ''));
+          .find(a => new RegExp('/' + escapeRe(t.username) + '(/|$)', 'i').test(a.getAttribute('href') || '')
+                  || new RegExp('@' + escapeRe(t.username) + '(/|$)', 'i').test(a.getAttribute('href') || ''));
         if (link) { link.scrollIntoView({ block: 'center' }); await sleep(600); }
         const vpR = findCardButton(t.username, 'View profile');
         if (vpR) {
@@ -290,7 +294,7 @@ async () => {
             const dlg = document.querySelector('[role="dialog"]');
             if (!dlg) return false;
             const txt = dlg.innerText;
-            return /Engagement rate/i.test(txt)
+            return (/Engagement rate/i.test(txt) || /finished deals/i.test(txt))
               && new RegExp(escapeRe(t.username) + '\\b', 'i').test(txt);
           }, 12000);
         }

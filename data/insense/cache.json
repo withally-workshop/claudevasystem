@@ -298,6 +298,8 @@
     "https://instagram.com/sophiejaynehomes/": { "status": "messaged", "lastCampaign": "IM8 - UGC Talking Head Scripts / TikTok Trends", "lastMessagedAt": "2026-05-11T02:11:00Z", "blockReason": "send-unconfirmed" },
     "https://instagram.com/jadesbodygoals/": { "status": "messaged", "lastCampaign": "IM8 - UGC Talking Head Scripts / TikTok Trends", "lastMessagedAt": "2026-05-11T02:12:00Z", "blockReason": "send-unconfirmed" },
     "https://www.tiktok.com/@atheniaanderson": { "status": "messaged", "lastCampaign": "Little Saints - US Based Creators", "lastMessagedAt": "2026-05-11T03:30:00Z", "blockReason": "send-unconfirmed" },
-    "https://www.tiktok.com/@jesscreatescontent": { "status": "messaged", "lastCampaign": "Little Saints - US Based Creators", "lastMessagedAt": "2026-05-11T03:31:00Z", "blockReason": "send-unconfirmed" }
+    "https://www.tiktok.com/@jesscreatescontent": { "status": "messaged", "lastCampaign": "Little Saints - US Based Creators", "lastMessagedAt": "2026-05-11T03:31:00Z", "blockReason": "send-unconfirmed" },
+    "https://www.tiktok.com/@lisabethblaisdell": { "status": "triaged", "lastCampaign": "Little Saints - US Based Creators", "lastTriagedAt": "2026-05-11T04:00:00Z", "blockReason": "Failed filter (TikTok — ER unavailable)" },
+    "https://www.tiktok.com/@katpenni": { "status": "triaged", "lastCampaign": "Little Saints - US Based Creators", "lastTriagedAt": "2026-05-11T04:00:00Z", "blockReason": "Failed filter (TikTok — ER unavailable)" }
   }
 }
