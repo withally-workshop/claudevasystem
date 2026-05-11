@@ -84,20 +84,25 @@ Plus blocklist (any one → skip):
   ```js
   async function closeDrawerAndWait() {
     pressEscape();
-    // Poll until "finished deals" leaves body.innerText — confirms drawer is fully gone.
-    // Without this, the next card's drawer opens into stale DOM and extractDrawerSignals
-    // returns the previous creator's data (stale-drawer contamination bug, 2026-05-08).
-    await waitFor(() => !/\d+\s+finished deals/i.test(document.body.innerText), 5000, 150);
+    // Poll until the dialog element is gone — confirms drawer is fully closed.
+    // Previously polled for "finished deals" leaving body.innerText, but creators with 0 deals
+    // never show that text, causing the poll to time out immediately (2026-05-11 fix).
+    await waitFor(() => !document.querySelector('[role="dialog"]'), 5000, 150);
     await sleep(300);
   }
   ```
-  Call `closeDrawerAndWait()` everywhere you previously called `pressEscape()` alone. Also call it at the start of each loop iteration if `finished deals` is already in DOM.
-- **Drawer wait:** `waitFor(() => /\d+\s+finished deals/i.test(body) && /@?username\b/i.test(body), 12000)` — both conditions required to confirm correct creator loaded.
-- **Drawer regex (validated):**
+  Call `closeDrawerAndWait()` everywhere you previously called `pressEscape()` alone. Also call it at the start of each loop iteration if `document.querySelector('[role="dialog"]')` is not null.
+- **Drawer wait:** `waitFor(() => /Engagement rate/i.test(dialog.innerText) && new RegExp(username, 'i').test(dialog.innerText), 12000)` where `dialog = document.querySelector('[role="dialog"]')`. Use `Engagement rate` as the load signal — it is always present in the drawer regardless of whether the creator has finished deals. Do NOT wait for `finished deals` — creators with 0 deals never render that text.
+- **Drawer regex (validated — 2026-05-11):**
   ```js
+  const dialog = document.querySelector('[role="dialog"]');
+  const text = dialog ? dialog.innerText : document.body.innerText;
   const fd = text.match(/(\d+)\s+finished deals/i);
   const er = text.match(/([\d.]+)\s*%\s*\n?\s*Engagement rate/i);
   const port = text.match(/(\d+)\s+uploads?\s+in\s+\d+\s+(?:different\s+)?categor/i);
+  // finishedDeals defaults to 0 (not null) when the section is absent — creators with no
+  // completed deals simply don't render that line. Returning null caused drawer-timeout
+  // misclassification; returning 0 correctly routes to failed-filter.
   ```
 - **firstName extraction — use username directly (validated 2026-05-08):**
   Insense does NOT render a display name adjacent to the @username anywhere in `body.innerText`. The lines before the username are always platform labels ("Instagram profile") or section headers. DOM diagnostic on batch 6 (2026-05-08) confirmed: username at line 2186, preceded by "Instagram profile", with "finished deals" at line 2191 (after, not before). No forward or backward search reliably produces a real display name.
@@ -125,7 +130,9 @@ Plus blocklist (any one → skip):
 
 ## Steps Claude Executes
 
-The performance-critical pattern is to **collapse the entire walk-and-send loop into a single `browser_evaluate` call** that runs in-page with async/await + `setTimeout` promises. This replaces ~10 MCP roundtrips per candidate with one. Validated 2026-05-07: 3 candidates (drawer + filter + chat + send + verify) in 17 seconds total. ~25× faster than per-step MCP calls.
+The performance-critical pattern is to **collapse the walk-and-send loop into `browser_evaluate` calls** that run in-page with async/await + `setTimeout` promises. This replaces ~10 MCP roundtrips per candidate with one. Validated 2026-05-07: 3 candidates (drawer + filter + chat + send + verify) in 17 seconds total. ~25× faster than per-step MCP calls.
+
+Targets are sent in **chunks of 5** (not one giant call). After each chunk, the driver checks for rate-limit signals and reloads the page if needed — see Rate Limit Recovery below.
 
 ### Driver-side (Claude / harness)
 
@@ -140,17 +147,34 @@ The performance-critical pattern is to **collapse the entire walk-and-send loop 
    - Drop cards with `previousCollaborator: true` (record as `blocked`).
    - Drop cards with card-level ER < 1% or `— ER` (record as `failed-filter`, save the drawer-walk).
 8. **Build the `targets` array** (`{ username, firstName }`) for everyone left, capped at `--limit`.
-9. **Run the in-page walker** (single `browser_evaluate`, see canonical script below). Returns `{ results, totalElapsedMs }`.
+9. **Run the in-page walker in chunks of 5** (see canonical script below). After each chunk:
+   - Collect results into the master array.
+   - Count trailing `drawer-timeout` results in this chunk.
+   - If ≥ 3 trailing timeouts → **rate limit detected**: navigate back to the campaign URL, wait for `Total applicants:` text, run Cookiebot removal, then continue with the next chunk. (See Rate Limit Recovery.)
 10. **Update cache + write run JSON** from the returned results.
 11. **Post Slack summary** to `#airwallexdrafts` with the bot token.
+
+### Rate Limit Recovery
+
+Insense throttles drawer loads on a per-session basis. When 3+ consecutive `drawer-timeout` results appear in a chunk, the session has hit the limit. Recovery:
+
+1. Call `mcp__playwright-cdp__browser_navigate` to the campaign URL (`/campaigns/<id>/received-applicants`).
+2. Wait for `Total applicants:` to appear in `document.body.innerText` (up to 10s).
+3. Run Cookiebot removal.
+4. Continue the driver loop with the next chunk — do NOT re-queue the timed-out targets from the previous chunk; they will be retried automatically because they weren't written to cache.
+
+This typically recovers full drawer-load success within 1–2 chunks after the reload. The reload resets Insense's session rate counter.
 
 ### In-page walker (canonical script — validated 2026-05-08)
 
 This is the function passed to `mcp__playwright-cdp__browser_evaluate`. The `targets` array and constants are embedded inline per run (no `__PLACEHOLDER__` substitution needed — just inline the values directly).
 
 Key changes from the 2026-05-07 version:
-- `closeDrawerAndWait()` replaces bare `pressEscape()` — polls until "finished deals" leaves DOM before proceeding
-- `firstName` extracted from drawer display name (line before `@username`), not from card ancestor
+- `closeDrawerAndWait()` polls for `[role="dialog"]` element to be gone (not "finished deals" text — creators with 0 deals never show that string, 2026-05-11 fix)
+- Drawer wait condition uses `Engagement rate` + username, not `finished deals` + username (same reason)
+- `extractDrawerData` reads from `[role="dialog"]` element; `finishedDeals` defaults to `0` when absent (not `null`)
+- Guard at loop start checks `document.querySelector('[role="dialog"]')` instead of `finished deals` text
+- `firstName` is always set to `targetUsername` (no display name extraction)
 - Send flow: `Send a message` button inside open drawer replaces row-level `Chat` button
 - `send-unconfirmed` treated as success — Typeform URL doesn't appear in new conversation context within 8s but message delivers
 
@@ -181,9 +205,10 @@ async () => {
 
   async function closeDrawerAndWait() {
     pressEscape();
-    // Wait for "finished deals" to leave DOM — confirms drawer fully closed.
-    // Skipping this causes stale-drawer contamination: next card reads previous creator's data.
-    await waitFor(() => !/\d+\s+finished deals/i.test(document.body.innerText), 5000, 150);
+    // Poll until [role="dialog"] is gone — confirms drawer fully closed.
+    // Previously polled for "finished deals" text, but creators with 0 deals never show it,
+    // causing stale-drawer contamination for those creators (2026-05-11 fix).
+    await waitFor(() => !document.querySelector('[role="dialog"]'), 5000, 150);
     await sleep(300);
   }
 
@@ -205,21 +230,21 @@ async () => {
   }
 
   function extractDrawerData(targetUsername) {
-    const t = document.body.innerText;
-    // Staleness guard
-    if (!new RegExp('@?' + escapeRe(targetUsername) + '\\b', 'i').test(t)) {
+    const dialog = document.querySelector('[role="dialog"]');
+    const t = dialog ? dialog.innerText : '';
+    // Staleness guard — confirm correct creator's drawer is open
+    if (!new RegExp(escapeRe(targetUsername) + '\\b', 'i').test(t)) {
       return { stale: true };
     }
-    // firstName: Insense does not render display name adjacent to @username in body.innerText.
-    // The preceding line is always "Instagram profile" or similar — not a real name.
-    // Use username directly. Gives "Hey wilhelminahomedecor," which is acceptable.
     const firstName = targetUsername;
     const fd = t.match(/(\d+)\s+finished deals/i);
     const er = t.match(/([\d.]+)\s*%\s*\n?\s*Engagement rate/i);
     const port = t.match(/(\d+)\s+uploads?\s+in\s+\d+\s+(?:different\s+)?categor/i);
     return {
       firstName,
-      finishedDeals: fd ? +fd[1] : null,
+      // Default 0 when absent — creators with no completed deals don't render this line.
+      // Returning null previously caused misclassification as drawer-timeout.
+      finishedDeals: fd ? +fd[1] : 0,
       engagementRate: er ? +er[1] : null,
       portfolioUploads: port ? +port[1] : null,
     };
@@ -233,7 +258,7 @@ async () => {
     const itemStart = Date.now();
     try {
       // Guard: close any leftover drawer before starting this iteration
-      if (/\d+\s+finished deals/i.test(document.body.innerText)) {
+      if (document.querySelector('[role="dialog"]')) {
         await closeDrawerAndWait();
       }
 
@@ -242,11 +267,14 @@ async () => {
       if (!vp) { r.status = 'card-not-found'; results.push(r); continue; }
       vp.click();
 
-      // 2. Wait for correct drawer
+      // 2. Wait for correct drawer — use "Engagement rate" as load signal (always present).
+      // Do NOT wait for "finished deals" — creators with 0 deals never render that text.
       let drawerOk = await waitFor(() => {
-        const txt = document.body.innerText;
-        return /\d+\s+finished deals/i.test(txt)
-          && new RegExp('@?' + escapeRe(t.username) + '\\b', 'i').test(txt);
+        const dlg = document.querySelector('[role="dialog"]');
+        if (!dlg) return false;
+        const txt = dlg.innerText;
+        return /Engagement rate/i.test(txt)
+          && new RegExp(escapeRe(t.username) + '\\b', 'i').test(txt);
       }, 12000);
 
       // Retry once on timeout
@@ -259,9 +287,11 @@ async () => {
         if (vpR) {
           vpR.click();
           drawerOk = await waitFor(() => {
-            const txt = document.body.innerText;
-            return /\d+\s+finished deals/i.test(txt)
-              && new RegExp('@?' + escapeRe(t.username) + '\\b', 'i').test(txt);
+            const dlg = document.querySelector('[role="dialog"]');
+            if (!dlg) return false;
+            const txt = dlg.innerText;
+            return /Engagement rate/i.test(txt)
+              && new RegExp(escapeRe(t.username) + '\\b', 'i').test(txt);
           }, 12000);
         }
       }
@@ -277,7 +307,7 @@ async () => {
       r.portfolioUploads = drawer.portfolioUploads;
 
       // 4. Filter
-      const passed = (r.finishedDeals != null && r.finishedDeals >= 1)
+      const passed = (r.finishedDeals >= 1)
                   && (r.engagementRate != null && r.engagementRate >= 1)
                   && (r.portfolioUploads != null && r.portfolioUploads >= 1);
       if (!passed) { r.status = 'failed-filter'; await closeDrawerAndWait(); results.push(r); continue; }
@@ -343,9 +373,7 @@ async () => {
 - **Stale-drawer guard:** verify the drawer text contains the target's username before reading values.
 - **One-shot retry on timeout:** if the drawer doesn't load in 12s, escape, scroll the card back into view, click View profile again, wait another 12s.
 
-If you're sweeping a campaign past ~150 sends, prefer batches of 10 over 25 to keep the success rate high.
-
-**Hard limit observed (Little Saints, 2026-05-07 run 10):** even with scroll-into-view + retry, drawers stop loading entirely past ~280 cards / 150 sends in a single session. The staleness guard correctly refuses to send when this happens (returns `drawer-timeout`). To keep going past the hard limit, **end the session and resume in a fresh browser tab another time** — Insense's rate counter appears to reset between sessions. Cache will skip everyone already messaged, so the next session starts fresh from the first available unmessaged creator.
+**Rate limit recovery (driver-side):** When ≥ 3 consecutive `drawer-timeout` results appear in a chunk, the driver navigates back to the campaign URL. This resets Insense's session counter. Do NOT manually open a new tab — a navigation reload on the same tab is sufficient and keeps the Playwright Extension attached. Cache is not written for timed-out creators, so they are automatically retried in the next chunk after recovery.
 
 ---
 
