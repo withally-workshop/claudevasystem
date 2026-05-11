@@ -136,26 +136,6 @@ return [{ json: { ...ctx, 'Invoice #': finalizedInvoiceNumber, payment_link: lin
 
 
 const BUILD_JOHN_THREAD_REPLY_CODE = `
-return $items('Extract Payment Link').map(item => {
-const ctx = item.json;
-const clientName = ctx['Client Name'] || '';
-const invoiceNum = ctx['Invoice #'] || '';
-const amount = ctx['Amount'] || '';
-const currency = ctx['Currency'] || '';
-const dueDate = ctx['Due Date'] || '';
-const link = ctx.payment_link || '';
-const lines = [
-  'âœ… *Invoice finalized â€” ' + clientName + '*',
-  'â€¢ Invoice #: ' + invoiceNum,
-  'â€¢ Amount: ' + amount + ' ' + currency,
-  'â€¢ Due: ' + dueDate,
-];
-if (link) lines.push('â€¢ Payment link: ' + link);
-else lines.push('âš ï¸ Payment link unavailable â€” retrieve from Airwallex dashboard.');
-lines.push('');
-lines.push('Strategist notified in #payments-invoices-updates.');
-return { json: { ...ctx, john_reply_text: lines.join('\\n') } };
-});
 const ctx = $('Extract Payment Link').item.json;
 const clientName = ctx['Client Name'] || '';
 const invoiceNum = ctx['Invoice #'] || '';
@@ -164,16 +144,19 @@ const currency = ctx['Currency'] || '';
 const dueDate = ctx['Due Date'] || '';
 const link = ctx.payment_link || '';
 const lines = [
-  '✅ *Invoice finalized — ' + clientName + '*',
-  '• Invoice #: ' + invoiceNum,
-  '• Amount: ' + amount + ' ' + currency,
-  '• Due: ' + dueDate,
+  'Invoice approved and ready to send - ' + clientName,
+  '- Invoice #: ' + invoiceNum,
+  '- Amount: ' + currency + ' ' + amount,
+  '- Due: ' + dueDate,
 ];
-if (link) lines.push('• Payment link: ' + link);
-else lines.push('⚠️ Payment link unavailable — retrieve from Airwallex dashboard.');
+if (link) lines.push('- Payment link: ' + link);
+else lines.push('Payment link unavailable - retrieve from Airwallex dashboard.');
 lines.push('');
-lines.push('Strategist notified in #payments-invoices-updates.');
-return [{ json: { ...ctx, john_reply_text: lines.join('\\n') } }];
+lines.push('@John please download the invoice from the link above and email it to the client (john@kravemedia.co) with:');
+lines.push('  - The payment link');
+lines.push('  - The downloaded invoice file as an attachment');
+lines.push('  CC: john@kravemedia.co, noa@kravemedia.co');
+return [{ json: { ...ctx, john_reply_text: lines.join('\n') } }];
 `.trim();
 
 const BUILD_STRATEGIST_MESSAGE_CODE = `

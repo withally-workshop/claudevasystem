@@ -183,8 +183,8 @@ function parseLineItem(line) {
     };
   }
 
-  // Trailing number: "April retainer 2500"
-  const trailingMatch = trimmed.match(/^(.*?)\\s+(\\d[\\d,]*(?:\\.\\d+)?)\\s*$/);
+  // Trailing number: "April retainer 2500" or with currency prefix e.g. "krave media $1"
+  const trailingMatch = trimmed.match(/^(.*?)\\s+[$€£¥]?(\\d[\\d,]*(?:\\.\\d+)?)\\s*$/);
   if (trailingMatch) {
     const unitPrice = Number(trailingMatch[2].replace(/,/g, ''));
     return {
