@@ -33,6 +33,8 @@ Key references:
 - Run audit: `data/insense/runs/<campaign-slug>-<iso>.json`
 - Spec: `docs/superpowers/specs/2026-05-07-insense-outreach-mcp.md`
 
+**Known platform difference (2026-05-11):** TikTok-only creator profiles do not render "Engagement rate" in the Insense drawer — they show Avg. views instead. The canonical walker accepts `Engagement rate` OR `finished deals` as the drawer load signal to handle both. TikTok-only creators will always `failed-filter` (ER = null).
+
 ---
 
 ## Output
