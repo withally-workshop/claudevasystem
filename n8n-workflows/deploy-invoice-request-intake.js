@@ -63,7 +63,7 @@ const JOHN_DM_CHANNEL = 'U0AM5EGRVTP';
 const JOHN_APPROVAL_CHANNEL = 'C0AQZGJDR38';
 
 const JOHN_APPROVAL_TEXT =
-  "={{ '📋 *New Invoice Draft — ' + $('Mark Draft Success').item.json.client_name + '*\\n• Amount: ' + $('Mark Draft Success').item.json.currency + ' ' + $('Mark Draft Success').item.json.subtotal + '\\n• Client email: ' + $('Mark Draft Success').item.json.client_email + '\\n• Due: ' + $('Mark Draft Success').item.json.due_date + '\\n• Invoice ID: ' + $('Mark Draft Success').item.json.airwallex_invoice_id + '\\n• Airwallex Invoice #: ' + ($('Mark Draft Success').item.json.airwallex_invoice_number || $('Mark Draft Success').item.json.airwallex_invoice_id) + '\\n• Requested by: <@' + $('Mark Draft Success').item.json.submitted_by_slack_user_id + '>\\n\\nReply *approve* in this thread to finalize and send payment link to client.' }}";
+  "={{ '📋 *New Invoice Draft — ' + $('Mark Draft Success').item.json.client_name + '*\\n• Amount: ' + $('Mark Draft Success').item.json.currency + ' ' + $('Mark Draft Success').item.json.subtotal + '\\n• Client email: ' + $('Mark Draft Success').item.json.client_email + '\\n• Due: ' + $('Mark Draft Success').item.json.due_date + '\\n• Invoice ID: ' + $('Mark Draft Success').item.json.airwallex_invoice_id + '\\n• Airwallex Invoice #: ' + ($('Mark Draft Success').item.json.airwallex_invoice_number || $('Mark Draft Success').item.json.airwallex_invoice_id) + '\\n• Requested by: <@' + $('Mark Draft Success').item.json.submitted_by_slack_user_id + '>\\n\\nReply *approve* in this thread to finalize and send payment link to client.\\nIf there\\'s a ClickUp task for this project, include the URL: `approve https://app.clickup.com/t/..`' }}";
 
 const NORMALIZE_CODE = `
 const payload = $json.body || $json;

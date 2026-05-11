@@ -185,6 +185,7 @@ Note: `linked_payment_account_id` is omitted — the API auto-assigns the accoun
 • 🔗 Request thread: https://krave.slack.com/archives/C09HN2EBPR7/p[receipt_ts with dots removed]
 
 Reply *approve* in this thread to finalize and share payment link with requester.
+If there's a ClickUp task for this project, include the URL: `approve https://app.clickup.com/t/...`
 ```
 
 The thread link encodes `receipt_ts` so Mode 2 can extract it without a separate lookup.
