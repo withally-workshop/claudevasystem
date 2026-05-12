@@ -225,8 +225,8 @@
     },
     "https://instagram.com/ekaterina.shams/": {
       "status": "messaged",
-      "lastCampaign": "Little Saints - US Based Creators",
-      "lastMessagedAt": "2026-05-07T07:45:44Z",
+      "lastCampaign": "Casetify Product Launch - Meta",
+      "lastMessagedAt": "2026-05-12T04:45:15.002Z",
       "blockReason": ""
     },
     "https://www.tiktok.com/@agent..m": {
@@ -3966,10 +3966,10 @@
       "blockReason": "failed-filter"
     },
     "https://instagram.com/kendatrend/": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Casetify Product Launch - Meta",
-      "lastMessagedAt": "2026-05-11T08:59:18.200Z",
-      "blockReason": "failed-filter"
+      "lastMessagedAt": "2026-05-12T04:45:15.002Z",
+      "blockReason": ""
     },
     "https://instagram.com/kaigkii/": {
       "status": "triaged",
@@ -4677,6 +4677,18 @@
       "status": "messaged",
       "lastCampaign": "Casetify Product Launch - Meta",
       "lastMessagedAt": "2026-05-12T04:30:06.624Z",
+      "blockReason": ""
+    },
+    "https://instagram.com/bytesize.cookie/": {
+      "status": "messaged",
+      "lastCampaign": "Casetify Product Launch - Meta",
+      "lastMessagedAt": "2026-05-12T04:45:15.002Z",
+      "blockReason": ""
+    },
+    "https://instagram.com/creativesbyheather/": {
+      "status": "messaged",
+      "lastCampaign": "Casetify Product Launch - Meta",
+      "lastMessagedAt": "2026-05-12T04:45:15.002Z",
       "blockReason": ""
     }
   }
