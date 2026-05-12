@@ -43,14 +43,14 @@ Slack summary to `#airwallexdrafts` (`C0AQZGJDR38`) using the bot token: walked 
 
 ---
 
-## After the Run
+## After the Run (automated — Step 12 in skill flow)
 
-After any `--send` run, push `cache.json` to update the ops dashboard ([krave-ops-dashboard.onrender.com](https://krave-ops-dashboard.onrender.com)):
+After any `--send` run, the skill automatically commits and pushes `cache.json`:
 
 ```bash
 git add data/insense/cache.json
-git commit -m "chore(insense): update outreach cache post-run"
+git commit -m "chore(insense): update cache — <N> sent (<Campaign>)"
 git push
 ```
 
-Render auto-deploys on push. Dashboard reflects new data within ~1 minute. Do not push raw batch files (`data/insense/batch*-raw.json`).
+Render auto-deploys in ~90s. Dashboard reflects new data automatically. Do not push raw batch files (`data/insense/batch*-raw.json`) — these are gitignored.
