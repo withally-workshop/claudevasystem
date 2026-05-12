@@ -67,16 +67,15 @@
       "blockReason": "Failed filter (ER unavailable)"
     },
     "https://www.tiktok.com/@kellyhutcheson1": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-07T07:30:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:05:29.332Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@mi_carli8": {
-      "status": "triaged",
-      "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-07T07:30:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "status": "messaged",
+      "campaign": "Little Saints - US Based Creators (test-send)",
+      "updatedAt": "2026-05-12T05:56:31.710Z"
     },
     "https://www.tiktok.com/@elevatewithdai": {
       "status": "messaged",
@@ -992,22 +991,20 @@
       "blockReason": "send-unconfirmed (verified via Chats page)"
     },
     "https://www.tiktok.com/@leidyabreu5": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:06:52.473Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@justineandlainey": {
-      "status": "triaged",
-      "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "status": "messaged",
+      "campaign": "Little Saints - US Based Creators",
+      "updatedAt": "2026-05-12T05:58:43.622Z"
     },
     "https://www.tiktok.com/@blendedinbklyn": {
-      "status": "triaged",
-      "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "status": "messaged",
+      "campaign": "Little Saints - US Based Creators",
+      "updatedAt": "2026-05-12T05:58:43.622Z"
     },
     "https://www.tiktok.com/@ariellesilv": {
       "status": "triaged",
@@ -1046,22 +1043,20 @@
       "blockReason": "Failed filter (ER 0.73% below 1%)"
     },
     "https://www.tiktok.com/@mommin_wmorgan": {
-      "status": "triaged",
-      "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "status": "messaged",
+      "campaign": "Little Saints - US Based Creators (test-send)",
+      "updatedAt": "2026-05-12T05:56:31.710Z"
     },
     "https://www.tiktok.com/@pablochris40": {
-      "status": "triaged",
-      "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "status": "messaged",
+      "campaign": "Little Saints - US Based Creators",
+      "updatedAt": "2026-05-12T05:58:43.622Z"
     },
     "https://www.tiktok.com/@janettemarruf": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:03:04.609Z",
+      "blockReason": ""
     },
     "https://instagram.com/brunoandotie/": {
       "status": "triaged",
@@ -1070,64 +1065,62 @@
       "blockReason": "Failed filter (ER unavailable)"
     },
     "https://www.tiktok.com/@wranglerthegr": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:03:04.609Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@mayalankford": {
-      "status": "triaged",
-      "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "status": "messaged",
+      "campaign": "Little Saints - US Based Creators",
+      "updatedAt": "2026-05-12T05:58:43.622Z"
     },
     "https://www.tiktok.com/@shannonfabin": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:05:29.332Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@aryyyteeze": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:05:29.332Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@rare.innergy": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:05:29.332Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@outwestwithkatie": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:05:29.332Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@thecraftybutmessymom": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:06:52.473Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@deedeeunfiltered": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:10:03.669Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@brittany09876": {
-      "status": "triaged",
-      "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "status": "messaged",
+      "campaign": "Little Saints - US Based Creators",
+      "updatedAt": "2026-05-12T05:58:43.622Z"
     },
     "https://www.tiktok.com/@kimberlybrown422": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T03:20:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:06:52.473Z",
+      "blockReason": ""
     },
     "https://instagram.com/mamayulyak/": {
       "status": "messaged",
@@ -1214,10 +1207,10 @@
       "blockReason": "Failed filter (ER 0.88% below 1%)"
     },
     "https://www.tiktok.com/@laurat.tok": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T04:10:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:06:52.473Z",
+      "blockReason": ""
     },
     "https://instagram.com/gatheredwithmicky/": {
       "status": "triaged",
@@ -1256,10 +1249,10 @@
       "blockReason": "Failed filter (ER 0.76% below 1%)"
     },
     "https://www.tiktok.com/@tfullms": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T04:10:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:10:03.669Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@arwenrising": {
       "status": "triaged",
@@ -1268,16 +1261,16 @@
       "blockReason": "Failed filter (ER 0.87% below 1%)"
     },
     "https://www.tiktok.com/@livingbrit": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T04:10:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:08:37.168Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@catlikemeooow": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T04:10:00Z",
-      "blockReason": "Failed filter (ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:10:03.669Z",
+      "blockReason": ""
     },
     "https://instagram.com/victorialazo/": {
       "status": "messaged",
@@ -1424,10 +1417,10 @@
       "blockReason": "send-unconfirmed; firstName bug — sent as 'Instagram'"
     },
     "https://instagram.com/akacalvete/": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T06:45:00Z",
-      "blockReason": "Failed filter (ER null)"
+      "lastMessagedAt": "2026-05-12T06:13:45.901Z",
+      "blockReason": ""
     },
     "https://instagram.com/tigerkingpark/": {
       "status": "triaged",
@@ -1466,10 +1459,10 @@
       "blockReason": "send-unconfirmed"
     },
     "https://instagram.com/steffi.ellein/": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-08T07:10:00Z",
-      "blockReason": "Failed filter (ER null)"
+      "lastMessagedAt": "2026-05-12T06:23:23.751Z",
+      "blockReason": ""
     },
     "https://instagram.com/laurenn_alvarez_/": {
       "status": "messaged",
@@ -1820,22 +1813,22 @@
       "blockReason": "Failed filter (TikTok — ER unavailable)"
     },
     "https://www.tiktok.com/@katpenni": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T04:00:00Z",
-      "blockReason": "Failed filter (TikTok — ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:08:37.168Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@gbemim": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T05:00:00Z",
-      "blockReason": "Failed filter (TikTok — ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:03:04.609Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@urshittsweak": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T05:00:00Z",
-      "blockReason": "Failed filter (TikTok — ER unavailable)"
+      "lastMessagedAt": "2026-05-12T06:03:04.609Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@taramillamena": {
       "status": "messaged",
@@ -2018,40 +2011,40 @@
       "blockReason": "send-unconfirmed"
     },
     "https://www.tiktok.com/@_latoyaaaaa_": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T07:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:11:16.199Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@thatssojuli": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T07:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:10:03.669Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@withluv_alisha": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T07:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:10:03.669Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@smcconnellugc": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T07:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:11:16.199Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@trailorswiftalyssa122": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T07:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:13:45.901Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@the_sub_way": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T07:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:13:45.901Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@bd.socialz": {
       "status": "messaged",
@@ -2096,46 +2089,46 @@
       "blockReason": "drawer-timeout-persistent"
     },
     "https://www.tiktok.com/@autumnkeith561": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T08:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:20:43.890Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@kiannaleria": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T08:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:20:43.890Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@millennial_disney_dad": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T08:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:16:45.559Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@mikhaeats": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T08:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:18:03.017Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@tlep21": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T08:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:16:45.559Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@brittany_giaccani": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T08:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:18:03.017Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@lindseyy54": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T08:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:18:03.017Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@alexisnicolewomack": {
       "status": "messaged",
@@ -2156,52 +2149,52 @@
       "blockReason": "send-unconfirmed"
     },
     "https://www.tiktok.com/@melissahartmannugc": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T09:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:16:45.559Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@livinwithroro": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T09:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:16:45.559Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@yourlasvegasaesthetician": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T09:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:18:03.017Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@coastalcreativeugc": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T09:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:20:43.890Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@bertieisadragon": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T09:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:23:23.751Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@intentionalincomewithash": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T09:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:30:35.470Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@janaeshaavina": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T09:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:24:51.245Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@caseyesbin": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T09:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:24:51.245Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@xoxouju": {
       "status": "triaged",
@@ -2210,22 +2203,22 @@
       "blockReason": "Failed filter (ER unavailable — TikTok)"
     },
     "https://www.tiktok.com/@thesamanthalynn": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T09:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:24:51.245Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@baileyg.13": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T09:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:24:51.245Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@morgansaleee": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T09:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:27:03.396Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@flawlessdiva46": {
       "status": "messaged",
@@ -2246,28 +2239,28 @@
       "blockReason": "send-unconfirmed"
     },
     "https://www.tiktok.com/@lifewithlasean": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T10:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:24:51.245Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@melindasue02": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T10:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:27:03.396Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@dcmenow": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T10:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:30:35.470Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@lawenwoss": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T10:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:13:45.901Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@mymotherhood": {
       "status": "triaged",
@@ -2282,16 +2275,16 @@
       "blockReason": "Failed filter (ER unavailable — TikTok)"
     },
     "https://www.tiktok.com/@zorangie__": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T10:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:35:30.423Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@versednbeauty": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T10:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:33:35.743Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@mamaof2109ugc": {
       "status": "triaged",
@@ -2312,22 +2305,22 @@
       "blockReason": "drawer-timeout-persistent"
     },
     "https://www.tiktok.com/@juliaana.albright": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T11:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:57:37.702Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@melaniealee": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T11:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T06:33:35.743Z",
+      "blockReason": ""
     },
     "https://instagram.com/realwithrachugc/": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T11:00:00Z",
-      "blockReason": "Failed filter (0 finished deals)"
+      "lastMessagedAt": "2026-05-12T06:33:35.743Z",
+      "blockReason": ""
     },
     "https://instagram.com/lorimcgeenowaski/": {
       "status": "triaged",
@@ -2410,10 +2403,10 @@
       "blockReason": "Failed filter (0 finished deals)"
     },
     "https://www.tiktok.com/@sabrinaclaudine": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T12:00:00Z",
-      "blockReason": "Failed filter (ER unavailable — TikTok)"
+      "lastMessagedAt": "2026-05-12T07:01:24.512Z",
+      "blockReason": ""
     },
     "https://instagram.com/matos.sindy/": {
       "status": "triaged",
@@ -2422,11 +2415,10 @@
       "blockReason": "Failed filter (0 finished deals)"
     },
     "https://www.tiktok.com/@comealongwithchristina": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T16:00:00Z",
-      "blockReason": "drawer-timeout-persistent",
-      "lastMessagedAt": "2026-05-11T07:47:33.264Z"
+      "lastMessagedAt": "2026-05-12T06:57:37.702Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@miaxfitt": {
       "status": "triaged",
@@ -2442,10 +2434,10 @@
       "lastMessagedAt": "2026-05-11T07:47:33.264Z"
     },
     "https://www.tiktok.com/@not_michaelbuble": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T12:00:00Z",
-      "blockReason": "drawer-timeout"
+      "lastMessagedAt": "2026-05-12T06:35:30.423Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@heykendree": {
       "status": "triaged",
@@ -2611,10 +2603,10 @@
       "blockReason": "Failed filter (0 finished deals)"
     },
     "https://www.tiktok.com/@brunoandotie": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T15:00:00Z",
-      "blockReason": "Failed filter (TikTok, no ER)"
+      "lastMessagedAt": "2026-05-12T06:03:04.609Z",
+      "blockReason": ""
     },
     "https://instagram.com/cutetrini23tv/": {
       "status": "triaged",
@@ -2623,22 +2615,22 @@
       "blockReason": "Failed filter (0.58% ER)"
     },
     "https://www.tiktok.com/@gatheredwithmicky": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T15:00:00Z",
-      "blockReason": "Failed filter (TikTok, no ER)"
+      "lastMessagedAt": "2026-05-12T06:06:52.473Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@elise.rojas": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T15:00:00Z",
-      "blockReason": "Failed filter (TikTok, no ER)"
+      "lastMessagedAt": "2026-05-12T06:08:37.168Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@breklinjohnson": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T15:00:00Z",
-      "blockReason": "Failed filter (TikTok, no ER)"
+      "lastMessagedAt": "2026-05-12T06:08:37.168Z",
+      "blockReason": ""
     },
     "https://instagram.com/only1jodi/": {
       "status": "triaged",
@@ -2659,28 +2651,28 @@
       "blockReason": ""
     },
     "https://www.tiktok.com/@hustlewithheatherx3": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastMessagedAt": "2026-05-11T07:47:33.264Z",
-      "blockReason": "drawer-timeout-persistent"
+      "lastMessagedAt": "2026-05-12T06:13:45.901Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@livingfreewithlb": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T15:30:00Z",
-      "blockReason": "Failed filter (TikTok, no ER)"
+      "lastMessagedAt": "2026-05-12T06:18:03.017Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@lisneyly_ugc": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T15:30:00Z",
-      "blockReason": "Failed filter (TikTok, no ER)"
+      "lastMessagedAt": "2026-05-12T06:23:23.751Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@madeeasywmoni": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T15:30:00Z",
-      "blockReason": "Failed filter (TikTok, no ER)"
+      "lastMessagedAt": "2026-05-12T06:35:30.423Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@lorimcgeenowaski": {
       "status": "triaged",
@@ -4689,6 +4681,24 @@
       "status": "messaged",
       "lastCampaign": "Casetify Product Launch - Meta",
       "lastMessagedAt": "2026-05-12T04:45:15.002Z",
+      "blockReason": ""
+    },
+    "https://www.tiktok.com/@theemoshita": {
+      "status": "messaged",
+      "lastCampaign": "Little Saints - US Based Creators",
+      "lastMessagedAt": "2026-05-12T06:08:37.168Z",
+      "blockReason": ""
+    },
+    "https://www.tiktok.com/@kenzieeeblair20": {
+      "status": "messaged",
+      "lastCampaign": "Little Saints - US Based Creators",
+      "lastMessagedAt": "2026-05-12T06:16:45.559Z",
+      "blockReason": ""
+    },
+    "https://www.tiktok.com/@limonspicks": {
+      "status": "messaged",
+      "lastCampaign": "Little Saints - US Based Creators",
+      "lastMessagedAt": "2026-05-12T06:57:37.702Z",
       "blockReason": ""
     }
   }

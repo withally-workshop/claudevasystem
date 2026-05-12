@@ -153,6 +153,13 @@ Targets are sent in **chunks of 5** (not one giant call). After each chunk, the 
    - If ≥ 3 trailing timeouts → **rate limit detected**: navigate back to the campaign URL, wait for `Total applicants:` text, run Cookiebot removal, then continue with the next chunk. (See Rate Limit Recovery.)
 10. **Update cache + write run JSON** from the returned results.
 11. **Post Slack summary** to `#airwallexdrafts` with the bot token.
+12. **Commit and push `cache.json`** so the ops dashboard auto-updates:
+    ```bash
+    git add data/insense/cache.json
+    git commit -m "chore(insense): update cache — <N> sent (<Campaign>)"
+    git push
+    ```
+    Run this every `--send` run. Skip on dry-run. Render deploys in ~90s after push.
 
 ### Rate Limit Recovery
 
@@ -424,23 +431,6 @@ Blocked:
 
 ---
 
-## After the Run
-
-**Always do this after any `--send` run to keep the ops dashboard current.**
-
-The ops dashboard ([krave-ops-dashboard.onrender.com](https://krave-ops-dashboard.onrender.com)) reads `data/insense/cache.json` from the deployed repo. It only updates when the file is committed and pushed.
-
-```bash
-git add data/insense/cache.json
-git commit -m "chore(insense): update outreach cache post-run"
-git push
-```
-
-Render auto-deploys on push. Dashboard reflects new data within ~1 minute.
-
-**Do not push raw batch files** (`data/insense/batch*-raw.json`) — these are gitignored and local-only.
-
----
 
 ## Failure Modes
 
