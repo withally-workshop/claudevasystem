@@ -181,17 +181,17 @@ const requesterTag = colK.match(/^U[A-Z0-9]{8,}$/)
   ? '<@' + colK + '>'
   : (mappedSlackId ? '<@' + mappedSlackId + '>' : (colK || 'unknown'));
 const requesterWarning = colK && !mappedSlackId && !colK.match(/^U[A-Z0-9]{8,}$/)
-  ? '\\nâ€¢ âš ï¸ Unknown requester "' + colK + '" on tracker - update strategist map if this should tag someone.'
+  ? '\\n• ⚠️ Unknown requester "' + colK + '" on tracker - update strategist map if this should tag someone.'
   : '';
 const colC = (ctx['Email Address'] || '').trim();
 const originThreadTs = (ctx['Origin Thread TS'] || '').trim();
 
 const lines = [
-  'âœ… *Invoice approved and ready to send â€” ' + clientName + '*',
-  'â€¢ Invoice #: ' + invoiceNum,
-  'â€¢ Amount: ' + amount + ' ' + currency,
-  'â€¢ Due: ' + dueDate,
-  'â€¢ Payment link: ' + (link || 'âš ï¸ retrieve from Airwallex dashboard'),
+  '✅ *Invoice approved and ready to send — ' + clientName + '*',
+  '• Invoice #: ' + invoiceNum,
+  '• Amount: ' + amount + ' ' + currency,
+  '• Due: ' + dueDate,
+  '• Payment link: ' + (link || '⚠️ retrieve from Airwallex dashboard'),
   '',
   requesterTag + ' please download the invoice from the link above and email it to the client' + (colC ? ' (' + colC + ')' : '') + ' with:',
   '  - The payment link',

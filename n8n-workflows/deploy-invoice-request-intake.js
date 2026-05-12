@@ -139,8 +139,8 @@ function parsePayout(rawValue, invoiceDateIso, todayIso) {
   const raw = String(rawValue || '').trim();
   const normalized = (raw || '7 day payout').toLowerCase().replace(/\s+/g, ' ');
 
-  // Handles: "7", "30", "7 days", "30 days", "7 day payout", "30 day payout"
-  const daysMatch = normalized.match(/^(\\d+)(\\s+days?(\\s+payout)?)?$/);
+  // Handles: "7", "30", "7days", "30days", "7 days", "30 days", "7 day payout", "30 day payout", "30day payout"
+  const daysMatch = normalized.match(/^(\\d+)\\s*(days?(\\s+payout)?)?$/);
   if (daysMatch) {
     const days = parseInt(daysMatch[1], 10);
     return { ok: true, payout_raw: days + ' day payout', due_date: addDays(invoiceDateIso, days) };
@@ -179,6 +179,8 @@ const missing = [];
 if (!payload.client_name && !payload.client_name_or_company_name) missing.push('client_name_or_company_name');
 if (!payload.currency) missing.push('currency');
 if (!lineItems.length) missing.push('line_items');
+const nullPriceItems = lineItems.filter(i => i.unit_price === null || i.unit_price === undefined);
+if (nullPriceItems.length) missing.push('unit_price for: ' + nullPriceItems.map(i => i.description || 'unnamed').join(', '));
 
 const resolvedClientName = payload.client_name_or_company_name || payload.client_name || payload.company_name || '';
 
