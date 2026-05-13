@@ -2391,16 +2391,16 @@
       "blockReason": "send-unconfirmed"
     },
     "https://instagram.com/its.me.hetie/": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T12:00:00Z",
-      "blockReason": "Failed filter (0 finished deals)"
+      "lastMessagedAt": "2026-05-13T03:48:37.393Z",
+      "blockReason": ""
     },
     "https://instagram.com/hannahkrystene1121/": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T12:00:00Z",
-      "blockReason": "Failed filter (0 finished deals)"
+      "lastMessagedAt": "2026-05-13T03:48:37.393Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@sabrinaclaudine": {
       "status": "messaged",
@@ -2577,10 +2577,10 @@
       "blockReason": "Failed filter (0 finished deals)"
     },
     "https://instagram.com/zaliaboo/": {
-      "status": "triaged",
-      "lastCampaign": "Casetify Product Launch - Meta",
-      "lastMessagedAt": "2026-05-11T08:52:15.021Z",
-      "blockReason": "failed-filter"
+      "status": "messaged",
+      "lastCampaign": "Little Saints - US Based Creators",
+      "lastMessagedAt": "2026-05-13T03:48:37.393Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@fran_ugc_": {
       "status": "triaged",
@@ -2675,16 +2675,16 @@
       "blockReason": ""
     },
     "https://www.tiktok.com/@lorimcgeenowaski": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T15:30:00Z",
-      "blockReason": "Failed filter (0 finished deals)"
+      "lastMessagedAt": "2026-05-13T03:48:37.393Z",
+      "blockReason": ""
     },
     "https://instagram.com/nonoaceugc/": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T15:30:00Z",
-      "blockReason": "Failed filter (0 finished deals)"
+      "lastMessagedAt": "2026-05-13T03:48:37.393Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@ruchika.in.usa": {
       "status": "triaged",
@@ -2714,10 +2714,10 @@
       "lastMessagedAt": "2026-05-11T07:47:33.264Z"
     },
     "https://instagram.com/biancaleslieann/": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T16:00:00Z",
-      "blockReason": "Failed filter (0 finished deals)"
+      "lastMessagedAt": "2026-05-13T03:48:37.393Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@soygenesissssss": {
       "status": "triaged",
@@ -2851,10 +2851,10 @@
       "blockReason": "Failed filter (0 finished deals)"
     },
     "https://instagram.com/_withjaylyn/": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T17:00:00Z",
-      "blockReason": "Failed filter (0 finished deals)"
+      "lastMessagedAt": "2026-05-13T03:48:37.393Z",
+      "blockReason": ""
     },
     "https://www.tiktok.com/@karlaalvarezh": {
       "status": "triaged",
@@ -2882,10 +2882,10 @@
       "blockReason": "Failed filter (0 finished deals)"
     },
     "https://instagram.com/kayjaponte/": {
-      "status": "triaged",
+      "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
-      "lastTriagedAt": "2026-05-11T17:00:00Z",
-      "blockReason": "Failed filter (0 finished deals)"
+      "lastMessagedAt": "2026-05-13T03:48:37.393Z",
+      "blockReason": ""
     },
     "https://instagram.com/thatmomeron/": {
       "status": "triaged",
@@ -4699,6 +4699,12 @@
       "status": "messaged",
       "lastCampaign": "Little Saints - US Based Creators",
       "lastMessagedAt": "2026-05-12T06:57:37.702Z",
+      "blockReason": ""
+    },
+    "https://instagram.com/withkassidy/": {
+      "status": "messaged",
+      "lastCampaign": "Little Saints - US Based Creators",
+      "lastMessagedAt": "2026-05-13T03:48:37.393Z",
       "blockReason": ""
     }
   }
