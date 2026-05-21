@@ -231,6 +231,7 @@ function computeTrackerStats(rows) {
     partialPayment: 0,
     paymentComplete: 0,
     overdue: 0,
+    dueToday: 0,
     collections: 0,
     missingEmail: 0,
     missingInvoiceUrl: 0,
@@ -282,10 +283,14 @@ function computeTrackerStats(rows) {
       if (amount > 0) {
         stats.totalAR[currency] = (stats.totalAR[currency] || 0) + amount;
       }
-      // Check overdue
+      // Check overdue / due today
       if (dueStr) {
         const due = new Date(dueStr);
-        if (!isNaN(due) && due < today) stats.overdue++;
+        due.setHours(0, 0, 0, 0);
+        if (!isNaN(due)) {
+          if (due < today) stats.overdue++;
+          else if (due.getTime() === today.getTime()) stats.dueToday++;
+        }
       }
     }
 
@@ -986,6 +991,20 @@ function renderDashboard(d) {
   .tracker-btn { background: linear-gradient(135deg, #16a34a, #0d9488); color: #fff; padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; border: none; transition: transform 120ms ease, box-shadow 120ms ease; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25); }
   .tracker-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(22, 163, 74, 0.4); text-decoration: none; }
 
+  /* Forecast Strip */
+  .forecast-strip { display: flex; gap: 12px; padding: 14px 32px; max-width: 1400px; margin: 0 auto; border-bottom: 1px solid #2a3348; flex-wrap: wrap; }
+  .forecast-tile { display: flex; align-items: center; gap: 12px; background: #161e2e; border: 1px solid #2a3348; border-radius: 10px; padding: 12px 20px; min-width: 180px; flex: 1; }
+  .forecast-tile.alert { border-color: #dc2626; background: rgba(220,38,38,0.08); }
+  .forecast-tile.warn { border-color: #d97706; background: rgba(217,119,6,0.08); }
+  .forecast-tile.ok { border-color: #16a34a; background: rgba(22,163,74,0.08); }
+  .forecast-tile-icon { font-size: 22px; flex-shrink: 0; }
+  .forecast-tile-body { display: flex; flex-direction: column; }
+  .forecast-tile-value { font-size: 24px; font-weight: 700; color: #f1f5f9; line-height: 1; }
+  .forecast-tile-label { font-size: 11px; color: #64748b; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .forecast-tile.alert .forecast-tile-value { color: #f87171; }
+  .forecast-tile.warn .forecast-tile-value { color: #fbbf24; }
+  .forecast-tile.ok .forecast-tile-value { color: #4ade80; }
+
   /* Tools Hub */
   .tools-hub { padding: 16px 32px; max-width: 1400px; margin: 0 auto; border-bottom: 1px solid #2a3348; }
   .tools-hub-grid { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -1094,6 +1113,50 @@ function renderDashboard(d) {
 <div class="scope-line">
   <strong>Snapshot:</strong> invoice state at ${generatedTime} ICT &nbsp;·&nbsp;
   <strong>Range:</strong> workflow stats and reminder activity over the ${rangeLabel}
+</div>
+
+<div class="forecast-strip">
+  ${(() => {
+    const dueToday = ts ? ts.dueToday : null;
+    const overdue = ts ? ts.overdue : null;
+    const drafts = ts ? ts.draftPendingJohn : null;
+    const n8nFailed = d.n8nStats ? d.n8nStats.failed : null;
+    const fmt = (v) => v === null ? '—' : v;
+    const dueTodayClass = dueToday > 0 ? 'warn' : 'ok';
+    const overdueClass = overdue > 0 ? 'alert' : 'ok';
+    const draftsClass = drafts > 0 ? 'warn' : 'ok';
+    const n8nClass = n8nFailed > 0 ? 'alert' : 'ok';
+    return `
+      <div class="forecast-tile ${dueTodayClass}">
+        <div class="forecast-tile-icon">📅</div>
+        <div class="forecast-tile-body">
+          <div class="forecast-tile-value">${fmt(dueToday)}</div>
+          <div class="forecast-tile-label">Due Today</div>
+        </div>
+      </div>
+      <div class="forecast-tile ${overdueClass}">
+        <div class="forecast-tile-icon">🔴</div>
+        <div class="forecast-tile-body">
+          <div class="forecast-tile-value">${fmt(overdue)}</div>
+          <div class="forecast-tile-label">Overdue</div>
+        </div>
+      </div>
+      <div class="forecast-tile ${draftsClass}">
+        <div class="forecast-tile-icon">✏️</div>
+        <div class="forecast-tile-body">
+          <div class="forecast-tile-value">${fmt(drafts)}</div>
+          <div class="forecast-tile-label">Drafts Pending</div>
+        </div>
+      </div>
+      <div class="forecast-tile ${n8nClass}">
+        <div class="forecast-tile-icon">⚡</div>
+        <div class="forecast-tile-body">
+          <div class="forecast-tile-value">${fmt(n8nFailed)}</div>
+          <div class="forecast-tile-label">n8n Failures (${rangeLabel})</div>
+        </div>
+      </div>
+    `;
+  })()}
 </div>
 
 <main>
