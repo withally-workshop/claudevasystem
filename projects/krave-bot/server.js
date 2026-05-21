@@ -113,10 +113,32 @@ const app = new App({
   receiver,
 });
 
+const DRAFTS_CHANNEL = 'C0AQZGJDR38';
+const N8N_APPROVAL_WEBHOOK = 'https://noatakhel.app.n8n.cloud/webhook/krave-approval-reply-trigger';
+
+function forwardToN8n(payload) {
+  const buf = Buffer.from(JSON.stringify(payload));
+  const req = require('https').request({
+    hostname: 'noatakhel.app.n8n.cloud',
+    path: '/webhook/krave-approval-reply-trigger',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': buf.length },
+  }, (res) => { res.resume(); });
+  req.on('error', (e) => console.error('n8n forward error:', e.message));
+  req.write(buf);
+  req.end();
+}
+
 // DMs
 app.event('message', async ({ event, say }) => {
-  // ignore bot messages, edits, deletes
   if (event.bot_id || event.subtype) return;
+
+  // Forward drafts channel messages to n8n approval polling workflow
+  if (event.channel === DRAFTS_CHANNEL) {
+    forwardToN8n(event);
+    return;
+  }
+
   if (event.channel_type !== 'im') return;
 
   const convKey = getConvKey(event.channel, null);
