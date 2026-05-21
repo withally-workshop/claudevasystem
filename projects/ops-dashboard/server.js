@@ -1088,10 +1088,6 @@ function renderDashboard(d) {
       <span class="tool-icon">🎬</span>
       <span class="tool-name">Insense</span>
     </a>
-    <a class="tool-card" href="https://notion.so" target="_blank" rel="noopener" style="text-decoration:none">
-      <span class="tool-icon">📝</span>
-      <span class="tool-name">Notion</span>
-    </a>
   </div>
 </div>
 
