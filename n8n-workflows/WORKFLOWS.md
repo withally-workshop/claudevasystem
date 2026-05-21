@@ -1153,6 +1153,89 @@ Kit Subscriber Webhook → Resource Claimed? → Build Slack Message → Post to
 
 ---
 
+## Workflow 13 — LinkedIn Post Consistency Check
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/220OeHs02nwJleCT`
+**Deploy script:** `n8n-workflows/deploy-linkedin-post-consistency-check.js`
+
+### Purpose
+Runs every weekday at 10AM PHT and checks if any LinkedIn post was marked `posted` in ClickUp that day. If no post is found, sends a Slack alert to `#noa-linkedin-posts` so Noa knows she hasn't posted yet. Enforces daily posting consistency without manual tracking.
+
+### Triggers
+| Type | Details |
+|------|---------|
+| Schedule | `0 10 * * 1-5` — 10:00 AM PHT Mon–Fri |
+
+### Node Flow
+```
+Schedule → Fetch ClickUp Tasks (posted today) → Any posted today? → [end]
+                                                              ↓ (none found)
+                                              Post Slack Alert → #noa-linkedin-posts
+```
+
+### Detection Logic
+| Check | Value |
+|-------|-------|
+| ClickUp list | LinkedIn Post list (same as Workflow 11) |
+| Filter | Stage field = `posted` AND date updated = today PHT |
+| Credential | ClickUp Header Auth (same as Workflow 11) |
+
+### Outputs
+| Scenario | Action |
+|----------|--------|
+| At least one post marked posted today | No alert — all clear |
+| No post marked posted today by 10AM | Slack alert to `#noa-linkedin-posts`: no post detected today |
+
+### Error Handling
+| Failure | Behaviour |
+|---------|-----------|
+| ClickUp credential missing/invalid | Execution fails at fetch node |
+| Slack credential invalid | Execution fails at alert node |
+
+---
+
+## Workflow 14 — Weekly Resource Conversion Report
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/G39y9GgsrhnvC91C`
+**Deploy script:** `n8n-workflows/deploy-weekly-resource-conversion-report.js`
+
+### Purpose
+Runs every Monday at 9AM PHT and fetches the last 7 days of Kit subscribers who were tagged `resource-claimed`. Groups them by resource title and posts a breakdown to `#noa-linkedin-posts` so John and Noa can see which LinkedIn resource posts drove the most conversions that week.
+
+### Triggers
+| Type | Details |
+|------|---------|
+| Schedule | `0 9 * * 1` — 9:00 AM PHT Mondays |
+
+### Node Flow
+```
+Schedule → Fetch Kit Subscribers (last 7d, resource-claimed) → Group by Resource → Build Report → Post to #noa-linkedin-posts
+```
+
+### Key Logic
+- Fetches subscribers via Kit API filtered by `resource-claimed` tag and `created_after` = 7 days ago
+- Groups by `resource_title` custom field
+- Posts ranked list: resource name → subscriber count
+
+### Outputs
+| Scenario | Action |
+|----------|--------|
+| Subscribers found | Slack post: ranked resource breakdown with counts |
+| No subscribers in last 7d | Slack post noting zero conversions this week |
+
+### Error Handling
+| Failure | Behaviour |
+|---------|-----------|
+| Kit API credential missing | Execution fails at fetch node |
+| Slack credential invalid | Execution fails at post node |
+
+### Kit API Credential Setup (one-time)
+1. Go to `https://app.kit.com` → Settings → Developer → API Secret
+2. In n8n → Credentials → New → Header Auth
+3. Name: `Kit API`, Header Name: `Authorization`, Header Value: `Bearer {api_secret}`
+
+---
+
 ## Handover Checklist
 
 - [ ] Access to `noatakhel.app.n8n.cloud`

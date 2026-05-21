@@ -318,3 +318,37 @@ Kit → Settings → Webhooks → New Webhook → Event: `subscriber.tag_add` �
 
 **Credentials required in n8n:**
 - `Slack API` — bot token (`Bn2U6Cwe1wdiCXzD`)
+
+---
+
+## LinkedIn Post Consistency Check
+
+Runs every weekday at 10AM PHT and checks ClickUp for any post marked `posted` that day. If none found, sends a Slack alert to `#noa-linkedin-posts` to flag the missed post.
+
+**Workflow ID:** `220OeHs02nwJleCT`
+
+**Deploy / activate:**
+```bash
+node n8n-workflows/deploy-linkedin-post-consistency-check.js
+```
+
+**Credentials required in n8n:**
+- `ClickUp Header Auth` — Header Auth credential (same as LinkedIn Resource Post Alert)
+- `Slack API` — bot token (`Bn2U6Cwe1wdiCXzD`)
+
+---
+
+## Weekly Resource Conversion Report
+
+Runs every Monday at 9AM PHT. Fetches last 7 days of Kit subscribers tagged `resource-claimed`, groups by resource title, and posts a ranked breakdown to `#noa-linkedin-posts`.
+
+**Workflow ID:** `G39y9GgsrhnvC91C`
+
+**Deploy / activate:**
+```bash
+node n8n-workflows/deploy-weekly-resource-conversion-report.js
+```
+
+**Credentials required in n8n:**
+- `Kit API` — Header Auth: `Authorization: Bearer {kit_api_secret}` (from app.kit.com → Settings → Developer)
+- `Slack API` — bot token (`Bn2U6Cwe1wdiCXzD`)
