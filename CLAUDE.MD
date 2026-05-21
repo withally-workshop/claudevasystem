@@ -72,7 +72,6 @@ Current skills on disk:
 - `creator-invoice-processing`
 - `eod-triage-summary`
 - `inbox-triage`
-- `insense-outreach`
 - `invoice-approval-polling`
 - `invoice-reminder-cron`
 - `invoice-reminder-trigger`
