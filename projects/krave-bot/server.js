@@ -17,33 +17,23 @@ const { App, ExpressReceiver } = require('@slack/bolt');
 const Anthropic = require('@anthropic-ai/sdk');
 const { buildSystemPrompt } = require('./system-prompt');
 
-const slackTools = require('./tools/slack');
-const n8nTools = require('./tools/n8n');
-const sheetsTools = require('./tools/sheets');
-const clickupTools = require('./tools/clickup');
-const airwallexTools = require('./tools/airwallex');
-
 const PORT = process.env.PORT || 3001;
 
 // ---------------------------------------------------------------------------
-// Tool registry
+// Tool registry — auto-discovers all files in ./tools/
+// Drop a new tools/xyz.js and it's live on next deploy, no changes needed here
 // ---------------------------------------------------------------------------
 
-const ALL_TOOLS = [
-  ...slackTools.definitions,
-  ...n8nTools.definitions,
-  ...sheetsTools.definitions,
-  ...clickupTools.definitions,
-  ...airwallexTools.definitions,
-];
-
-const HANDLERS = {
-  ...slackTools.handlers,
-  ...n8nTools.handlers,
-  ...sheetsTools.handlers,
-  ...clickupTools.handlers,
-  ...airwallexTools.handlers,
-};
+const ALL_TOOLS = [];
+const HANDLERS = {};
+fs.readdirSync(path.join(__dirname, 'tools'))
+  .filter((f) => f.endsWith('.js'))
+  .forEach((f) => {
+    const mod = require(`./tools/${f}`);
+    if (Array.isArray(mod.definitions)) ALL_TOOLS.push(...mod.definitions);
+    if (mod.handlers && typeof mod.handlers === 'object') Object.assign(HANDLERS, mod.handlers);
+    console.log(`Loaded tool: ${f} (${(mod.definitions || []).length} tools)`);
+  });
 
 // ---------------------------------------------------------------------------
 // Anthropic client
