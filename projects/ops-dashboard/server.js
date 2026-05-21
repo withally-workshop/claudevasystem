@@ -1051,6 +1051,32 @@ function renderDashboard(d) {
   .card-value strong { display: inline-block; animation: countIn 500ms ease both; animation-delay: 200ms; }
 
   @media (max-width: 700px) { main { padding: 16px; } .cards { grid-template-columns: 1fr 1fr; } .health-row { flex-direction: column; } .stat-grid { grid-template-columns: 1fr; } .chart-row { grid-template-columns: 1fr; } }
+
+  /* AI Assistant panel */
+  #ai-fab { position: fixed; bottom: 28px; right: 28px; width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #6366f1); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(99,102,241,0.5); z-index: 1000; transition: transform 160ms ease, box-shadow 160ms ease; }
+  #ai-fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px rgba(99,102,241,0.65); }
+  #ai-fab.hidden { display: none; }
+  #ai-panel { position: fixed; bottom: 28px; right: 28px; width: 380px; height: 520px; background: #0f1626; border: 1px solid #2a3348; border-radius: 16px; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.6); z-index: 1000; transform: scale(0.92) translateY(20px); opacity: 0; pointer-events: none; transition: transform 220ms cubic-bezier(0.34,1.56,0.64,1), opacity 180ms ease; }
+  #ai-panel.open { transform: scale(1) translateY(0); opacity: 1; pointer-events: all; }
+  #ai-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #2a3348; font-size: 14px; font-weight: 600; color: #f1f5f9; flex-shrink: 0; }
+  #ai-panel-header span::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-right: 8px; }
+  #ai-close-btn { background: none; border: none; color: #64748b; cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px; }
+  #ai-close-btn:hover { color: #f1f5f9; background: #1e293b; }
+  #ai-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  #ai-messages::-webkit-scrollbar { width: 4px; }
+  #ai-messages::-webkit-scrollbar-track { background: transparent; }
+  #ai-messages::-webkit-scrollbar-thumb { background: #2a3348; border-radius: 2px; }
+  .ai-msg { max-width: 88%; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .ai-msg-user { background: linear-gradient(135deg, #3b82f6, #6366f1); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .ai-msg-assistant { background: #1e293b; color: #cbd5e1; align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid #2a3348; }
+  #ai-input-row { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid #2a3348; flex-shrink: 0; }
+  #ai-input { flex: 1; background: #1e293b; border: 1px solid #2a3348; border-radius: 8px; color: #f1f5f9; font-size: 13px; padding: 9px 12px; outline: none; transition: border-color 160ms ease; }
+  #ai-input:focus { border-color: #3b82f6; }
+  #ai-input::placeholder { color: #475569; }
+  #ai-send-btn { background: linear-gradient(135deg, #3b82f6, #6366f1); color: #fff; border: none; border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 160ms ease; }
+  #ai-send-btn:hover { opacity: 0.88; }
+  #ai-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  @media (max-width: 700px) { #ai-panel { width: calc(100vw - 32px); right: 16px; bottom: 16px; } #ai-fab { right: 16px; bottom: 16px; } }
 </style>
 </head>
 <body>
@@ -1358,6 +1384,22 @@ function renderDashboard(d) {
   </div>
 </main>
 
+<!-- AI Assistant floating panel -->
+<div id="ai-fab" onclick="toggleAiPanel()" title="Ask AI">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+</div>
+
+<div id="ai-panel">
+  <div id="ai-panel-header">
+    <span>John AI</span>
+    <button onclick="toggleAiPanel()" id="ai-close-btn">✕</button>
+  </div>
+  <div id="ai-messages"></div>
+  <div id="ai-input-row">
+    <input id="ai-input" type="text" placeholder="Ask anything..." autocomplete="off" />
+    <button id="ai-send-btn" onclick="aiSend()">Send</button>
+  </div>
+</div>
 
 <script>
 (function () {
@@ -1419,11 +1461,75 @@ function renderDashboard(d) {
         setTimeout(tick, 30000);
         return;
       }
+      if (document.getElementById('ai-panel') && document.getElementById('ai-panel').classList.contains('open')) {
+        setTimeout(tick, 30000);
+        return;
+      }
       const url = new URL(window.location.href);
       url.searchParams.delete('refresh');
       window.location.replace(url.toString());
     }, INTERVAL_MS);
   })();
+
+  // AI Assistant panel
+  const AI_ENDPOINT = 'https://krave-ai.onrender.com/api/chat';
+  const aiSessionKey = 'dash-' + Math.random().toString(36).slice(2, 9);
+  let aiOpen = false;
+
+  window.toggleAiPanel = function() {
+    aiOpen = !aiOpen;
+    const panel = document.getElementById('ai-panel');
+    const fab = document.getElementById('ai-fab');
+    panel.classList.toggle('open', aiOpen);
+    fab.classList.toggle('hidden', aiOpen);
+    if (aiOpen) {
+      document.getElementById('ai-input').focus();
+      if (document.getElementById('ai-messages').children.length === 0) {
+        appendMsg('assistant', "Hey John — what do you need?");
+      }
+    }
+  };
+
+  window.aiSend = async function() {
+    const input = document.getElementById('ai-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+    appendMsg('user', msg);
+    const thinking = appendMsg('assistant', '…');
+    const sendBtn = document.getElementById('ai-send-btn');
+    sendBtn.disabled = true;
+    input.disabled = true;
+    try {
+      const res = await fetch(AI_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg, session_key: aiSessionKey }),
+      });
+      const data = await res.json();
+      thinking.textContent = data.reply || data.error || '(no response)';
+    } catch (e) {
+      thinking.textContent = 'Error: could not reach AI.';
+    } finally {
+      sendBtn.disabled = false;
+      input.disabled = false;
+      input.focus();
+    }
+  };
+
+  document.getElementById('ai-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.aiSend(); }
+  });
+
+  function appendMsg(role, text) {
+    const msgs = document.getElementById('ai-messages');
+    const el = document.createElement('div');
+    el.className = 'ai-msg ai-msg-' + role;
+    el.textContent = text;
+    msgs.appendChild(el);
+    msgs.scrollTop = msgs.scrollHeight;
+    return el;
+  }
 
 })();
 </script>

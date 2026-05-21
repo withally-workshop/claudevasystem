@@ -181,6 +181,14 @@ app.event('app_mention', async ({ event, say }) => {
 
 receiver.router.use(require('express').json());
 
+receiver.router.use('/api/chat', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 receiver.router.post('/api/chat', async (req, res) => {
   const { message, session_key } = req.body || {};
   if (!message) return res.status(400).json({ error: 'message required' });
