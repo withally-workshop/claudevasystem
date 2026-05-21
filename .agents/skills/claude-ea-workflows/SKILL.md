@@ -36,6 +36,7 @@ This repo is a Claude Code executive-assistant workspace. Treat `.claude/skills/
 | `/weekly-invoice-summary`, "weekly invoice summary", "who to chase this week", "weekly payment status", "what invoices are overdue" | `.claude/skills/weekly-invoice-summary/SKILL.md` and `.agents/skills/weekly-invoice-summary/SKILL.md` | Fire the n8n weekly summary workflow — posts a full open-invoice portfolio snapshot to #payments-invoices-updates. |
 | `/client-invoice-creation`, "client invoice creation", "process invoice requests" | `.claude/skills/client-invoice-creation/SKILL.md` | Process Slack invoice request receipts and approval replies. |
 | "Osome reconciliation" | `.claude/skills/osome-reconciliation/SKILL.md` | Triage Osome documents-needed transactions and locate PDFs. |
+| `/halo-report`, "halo intelligence report", "halo weekly intel" | `.claude/skills/halo-intelligence-report/SKILL.md` and `.agents/skills/halo-intelligence-report/SKILL.md` | Run or explain the Halo Weekly Intelligence Report — scrapes TikTok + Instagram, scores by engagement × ICP relevance, Claude analysis of top 10 per platform, delivers to Slack + Sheet + email. |
 | `/morning-coffee`, "morning coffee", "run morning coffee", "Noa's morning briefing", "send morning briefing", "what's on for Noa today" | `.claude/skills/morning-coffee/SKILL.md` and `.agents/skills/morning-coffee/SKILL.md` | Personal daily morning briefing DM to Noa — calendar, email attention items, ClickUp project pulse, Slack DMs and channel highlights. Sends as John's personal Slack account. |
 | `/clickup-invoice-sync`, "sync clickup", "update clickup status", "why didn't clickup update" | `.claude/skills/clickup-invoice-sync/SKILL.md` and `.agents/skills/clickup-invoice-sync/SKILL.md` | Explain and troubleshoot ClickUp ↔ invoice lifecycle sync: status moves to collections on finalization, payment complete on payment confirmed. |
 
@@ -58,6 +59,7 @@ Use `n8n-workflows/WORKFLOWS.md` for current IDs, status, webhook paths, deploym
 | Krave - Ops Report | `ops-report` | Live-read reporting skill only; reads n8n execution history, the Client Invoice Tracker, and Slack context without triggering workflows. |
 | Morning Coffee — Noa's Daily Briefing | `morning-coffee` | Local Windows Task Scheduler task `KraveEA-MorningCoffee`, Mon–Fri 10:00 AM Asia/Manila. Not an n8n workflow, not a remote CCR — runs locally because it depends on local-only MCP servers (`gmail-noa`, `slack-noa`, `slack` bot). |
 | ClickUp Invoice Sync | `clickup-invoice-sync` | No standalone n8n workflow. Logic embedded in Approval Polling (nodes n18–n23) and Payment Detection (patch cu1–cu3). John includes ClickUp task URL in approval reply to activate. |
+| Halo - Weekly Intelligence Report | `halo-intelligence-report` | Scheduled Monday 7:00 AM Asia/Manila. Apify TikTok + Instagram scrape → score + rank → Claude analysis → Slack + Google Sheet + email delivery. |
 
 ## Operating Rules
 

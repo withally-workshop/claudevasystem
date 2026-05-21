@@ -15,6 +15,34 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Invoice Request Intake | Active | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
 | Invoice Approval Polling | Active | Every 2 hrs Mon-Fri 9am-5pm PHT + manual webhook | [deploy-invoice-approval-polling.js](deploy-invoice-approval-polling.js) |
 | Client Invoice Creation | Inactive legacy | Do not use for approval finalization | [deploy-client-invoice-creation.js](deploy-client-invoice-creation.js) |
+| LinkedIn Resource Post Alert | Active | Every 30min 8AM–1PM PHT Sun–Fri | [deploy-linkedin-resource-post-alert.js](deploy-linkedin-resource-post-alert.js) |
+| Kit Subscriber Alert | Active | Kit webhook (subscriber.tag_add) | [deploy-kit-subscriber-alert.js](deploy-kit-subscriber-alert.js) |
+| LinkedIn Post Consistency Check | Active | 10AM PHT Mon–Fri | [deploy-linkedin-post-consistency-check.js](deploy-linkedin-post-consistency-check.js) |
+| Weekly Resource Conversion Report | Active | 9AM PHT Mondays | [deploy-weekly-resource-conversion-report.js](deploy-weekly-resource-conversion-report.js) |
+| Halo Weekly Intelligence Report | Active | 7AM ICT Mondays | [deploy-halo-intelligence-report.js](deploy-halo-intelligence-report.js) |
+
+---
+
+## Halo Weekly Intelligence Report
+
+Weekly social intelligence pipeline for Halo Home's US market entry. Scrapes TikTok and Instagram for top-performing content in Halo's niche hashtag clusters (sensitive skin, hair loss, hard water, clean beauty), scores and ranks posts by engagement × ICP relevance, analyzes with Claude, and delivers a structured report.
+
+**Workflow ID:** TBD (update after first deploy)
+**Schedule:** Every Monday 7:00 AM ICT (Asia/Manila)
+
+**Deploy:**
+```bash
+node n8n-workflows/deploy-halo-intelligence-report.js
+```
+
+**Credentials required:**
+- `Google Sheets account` — `83MQOm78gYDvziTO` — writes to Halo Intelligence Report sheet
+- `Krave Slack Bot` — `Bn2U6Cwe1wdiCXzD` — posts to `C0A22NPLV38`
+- `Gmail account (john)` — `vsDW3WpKXqS9HUs3` — sends email report
+- `APIFY_API_KEY` — set in n8n environment variables
+- `ANTHROPIC_API_KEY` — set in n8n environment variables
+
+**Google Sheet:** `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4` — create `Posts` tab with columns: Week | Platform | Creator | URL | Likes | Views | Saves | Shares | Engagement Rate (%) | ICP Group | Content Pillar | Score | Hook | Why It Performed | ICP Match Detail | Halo Angle
 
 ---
 
@@ -251,3 +279,42 @@ node n8n-workflows/deploy-slack-invoice-handler.js
 2. Export JSON: `curl -s https://noatakhel.app.n8n.cloud/api/v1/workflows/{id} -H "X-N8N-API-KEY: ..." > n8n-workflows/name.workflow.json`
 3. Add a deploy script if needed
 4. Add a row to the table above
+
+## LinkedIn Resource Post Alert
+
+Polls ClickUp every 30 minutes (8AM–1PM PHT, Sun–Fri) for resource-promo posts that Noa has just marked as `posted`. Sends a Slack alert to `#noa-linkedin-posts` with the trigger word, Kit sign-up link, and a pre-filled DM message for John to send manually.
+
+**Workflow ID:** `Rw2VZ6sAzAhJteyJ`
+
+**Deploy / activate:**
+```bash
+node n8n-workflows/deploy-linkedin-resource-post-alert.js
+```
+
+**Credentials required in n8n:**
+- `Slack API` — bot token (`Bn2U6Cwe1wdiCXzD`)
+- `ClickUp Header Auth` — Header Auth credential (Header Name: `Authorization`, Header Value: ClickUp API token). **Must be created manually before activating.**
+
+---
+
+## Kit Subscriber Alert
+
+Receives a Kit `subscriber.tag_add` webhook, filters for the `resource-claimed` tag, and posts a Slack alert to `#noa-linkedin-posts` with the subscriber's name, email, and which Krave resource they signed up for.
+
+**Workflow ID:** `dtrTee7qEgLdR9hQ`
+
+**Webhook URL:**
+```text
+POST https://noatakhel.app.n8n.cloud/webhook/krave-kit-subscriber
+```
+
+**Deploy / activate:**
+```bash
+node n8n-workflows/deploy-kit-subscriber-alert.js
+```
+
+**Kit webhook setup (one-time manual step):**
+Kit → Settings → Webhooks → New Webhook → Event: `subscriber.tag_add` → URL: `https://noatakhel.app.n8n.cloud/webhook/krave-kit-subscriber`
+
+**Credentials required in n8n:**
+- `Slack API` — bot token (`Bn2U6Cwe1wdiCXzD`)

@@ -36,6 +36,11 @@
 | 8 | Krave - Invoice Approval Polling | `uCS9lzHtVKWlqYlk` | Active | Every 2 hrs Mon-Fri 9am-5pm PHT + `POST /webhook/krave-invoice-approval-polling` | Poll tracker for pending drafts, detect John's "approve" replies, finalize in Airwallex, write tracker link, and reply in the original strategist thread |
 | 9 | Krave - Client Invoice Creation | `9eqWz6oJI5dqBesa` | Inactive legacy | Do not trigger | Deprecated finalization path; approval polling is canonical |
 | 10 | Krave - Weekly Invoice Summary | WX1hHek0cNTyZXkS | Active | 9am ICT Mondays | Post full portfolio snapshot to Slack — overdue, late fee, needs chase, due this week, upcoming |
+| 11 | LinkedIn Resource Post Alert | `Rw2VZ6sAzAhJteyJ` | Active | Every 30min 8AM–1PM PHT Sun–Fri | Poll ClickUp for resource-promo posts just marked posted, alert John in #noa-linkedin-posts with trigger word + pre-filled DM |
+| 12 | Kit Subscriber Alert | `dtrTee7qEgLdR9hQ` | Active | Kit webhook (subscriber.tag_add) | Receive Kit webhook on new resource-claimed subscribers, post Slack alert to #noa-linkedin-posts with name, email, and resource |
+| 13 | LinkedIn Post Consistency Check | `220OeHs02nwJleCT` | Active | 10AM PHT Mon–Fri | Check if any post was marked posted in ClickUp today; alert #noa-linkedin-posts if none found |
+| 14 | Weekly Resource Conversion Report | `G39y9GgsrhnvC91C` | Active | 9AM PHT Mondays | Fetch last 7 days of resource-claimed Kit subscribers, group by resource, post breakdown to #noa-linkedin-posts |
+| 15 | Halo - Weekly Intelligence Report | 5ZqTSaUEtxnAndiY | Active | 7AM ICT Mondays | Scrape TikTok + Instagram by hashtag cluster, score by engagement × ICP relevance, Claude analysis of top 10 per platform, deliver to Slack + Google Sheet + email |
 
 ---
 
@@ -663,6 +668,103 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 
 ---
 
+## Workflow 15 — Halo Weekly Intelligence Report
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/5ZqTSaUEtxnAndiY`
+**Deploy script:** `n8n-workflows/deploy-halo-intelligence-report.js`
+
+### Purpose
+
+Weekly social intelligence pipeline for Halo Home's US market entry. Replaces manual monitoring of competitor/niche content. Scrapes TikTok and Instagram for top-performing posts in Halo's four hashtag clusters, scores by weighted engagement formula × ICP relevance multiplier, selects Top 10 per platform with diversity rules, runs Claude analysis on each post, and delivers a structured report to Slack, Google Sheets, and email every Monday.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Schedule | `0 7 * * 1` (Asia/Manila) — 7:00 AM ICT every Monday |
+
+### Node Flow
+
+```text
+[Schedule Trigger — Mon 7AM ICT]
+        |
+[Fetch Social Data]
+  Promise.all: Apify TikTok Scraper + Apify Instagram Scraper
+  Hashtag clusters: skin, hair, shower/water, wellness/clean beauty
+        |
+[Score and Rank Posts]
+  Filter: video only, min 5K likes, last 14 days
+  Score: Engagement Rate (40%) + Saves/Shares (35%) + Views Normalized (25%) × ICP multiplier
+  Select Top 10 per platform: max 2 per creator, min 3 niche categories
+        |
+[Claude Analysis]
+  Per post: hook, why it performed, ICP match, content pillar, Halo angle
+  Plus: 2-paragraph trend synthesis
+        |
+[Format Report]
+  Slack text, email HTML, sheet rows
+        |
+[Post to Slack] → C0A22NPLV38
+        |
+[Send Email] → shin@kravemedia.co, noa@kravemedia.co, john@kravemedia.co, alleahvargas@gmail.com
+        |
+[Prepare Sheet Rows] — splits into 20 items (one per post)
+        |
+[Append Sheet Row] — fires 20× → Google Sheet Posts tab
+```
+
+### ICP Relevance Multiplier
+
+| Group | Sub-ICPs | Emotional Driver |
+|-------|----------|-----------------|
+| Skin Conditions | Eczema · Rosacea · Psoriasis · Acne-Prone · Sensitive Skin | Pain, exhaustion, desperation — has tried everything |
+| Hair & Scalp Conditions | Hair Loss · Dandruff · Dry/Frizzy Hair · Color-Treated Hair | Frustration, embarrassment, wasted money, identity threat |
+| Context & Mindset | Hard Water Refugee · Wellness-Burned · Prevention-Focused | Attribution, skepticism, proactive protection |
+
+Each matched group adds +0.1 to the multiplier (1.0 base → max 1.3).
+
+### Hashtag Clusters Scraped
+
+| Cluster | Hashtags |
+|---------|---------|
+| Skin | sensitiveskin, skintok, skinbarrier, eczema, rosacea, acneskin |
+| Hair | hairloss, scalptok, dryhair, dandruff, colortreatedhair |
+| Shower/Water | showertok, hardwater, showerskincare |
+| Wellness | cleanbeauty, wellnesstok, skinconsciousliving, nontoxicbeauty, rituals |
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| Top posts scored + analyzed | Slack digest to `C0A22NPLV38`, HTML email to 4 recipients, 20 rows appended to Posts sheet |
+| Apify actor fails | Returns empty array; scoring continues with whatever is available; no hard failure |
+| Claude parse error | Fallback to empty analysis fields; report still delivers |
+| Slack/email send fails | `continueOnFail: true`; Sheet append still runs |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| APIFY_API_KEY not set | Code node throws — n8n execution marked failed |
+| ANTHROPIC_API_KEY not set | Code node throws — n8n execution marked failed |
+| Actor timeout (>300s) | $helpers.httpRequest errors; actor returns []; report delivers with fewer posts |
+| Google Sheets append fails per row | `continueOnFail: true`; remaining rows still process |
+
+### Google Sheet Setup (manual, one-time)
+
+Sheet ID: `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4`
+Tab name: `Posts`
+Columns (in order): Week | Platform | Creator | URL | Likes | Views | Saves | Shares | Engagement Rate (%) | ICP Group | Content Pillar | Score | Hook | Why It Performed | ICP Match Detail | Halo Angle
+
+### Apify Actor Verification (before first deploy)
+
+Verify actor IDs at https://apify.com/store:
+- TikTok: search "tiktok hashtag scraper" — confirm `clockworks~tiktok-scraper` is the active actor
+- Instagram: search "instagram hashtag scraper" — confirm `apify~instagram-hashtag-scraper` is correct
+Update `TIKTOK_ACTOR_ID` and `INSTAGRAM_ACTOR_ID` in the deploy script if different.
+
+---
+
 ## Credential Reference
 
 | Credential Name | Type | ID | Used By | Account |
@@ -672,6 +774,8 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 | Google Sheets account | Google Sheets OAuth2 | `83MQOm78gYDvziTO` | Payment Detection, Invoice Reminder Cron, Invoice Request Intake | `noa@kravemedia.co` |
 | Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | Slack-facing workflow posts, modal handling, and SOD local/manual runs | Krave Slack workspace |
 | OpenAI account | OpenAI API | `UIREXIYn59JOH1zU` | Inbox Triage Daily | OpenAI API |
+| APIFY_API_KEY | Environment variable (n8n) | — | Halo Intelligence Report | Apify account (apify.com) |
+| ANTHROPIC_API_KEY | Environment variable (n8n) | — | Halo Intelligence Report | Anthropic API |
 
 ### Airwallex
 
@@ -925,6 +1029,13 @@ The email still sends, but strategist CC is skipped and Slack includes a warning
 
 The workflow retries once. If the retry also fails, it posts the formatted summary to `#airwallexdrafts` for manual sending.
 
+### Run Halo intelligence report manually
+
+Execute the workflow in n8n UI, or redeploy:
+```bash
+node n8n-workflows/deploy-halo-intelligence-report.js
+```
+
 ### Redeploy workflows from scratch
 
 ```bash
@@ -933,9 +1044,112 @@ node n8n-workflows/deploy-invoice-reminder-cron.js
 node n8n-workflows/deploy-weekly-invoice-summary.js
 node n8n-workflows/deploy-invoice-request-intake.js
 node n8n-workflows/deploy-invoice-approval-polling.js
+node n8n-workflows/deploy-linkedin-resource-post-alert.js
+node n8n-workflows/deploy-halo-intelligence-report.js
 ```
 
 Most current deploy scripts update the matching live workflow in place and then reactivate it. Older archived copies may still exist in n8n, so confirm the non-archived workflow ID before assuming a stale link is current.
+
+---
+
+## Workflow 11 — LinkedIn Resource Post Alert
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/Rw2VZ6sAzAhJteyJ`
+**Deploy script:** `n8n-workflows/deploy-linkedin-resource-post-alert.js`
+
+### Purpose
+Polls ClickUp every 30 minutes during posting hours for resource-promo posts that Noa has just marked as `posted`. When one is detected, it sends a Slack alert to `#noa-linkedin-posts` with the trigger word to watch for in comments, the correct Kit sign-up link, and a pre-filled DM message ready to copy-paste. Replaces the need for John to manually check the LinkedIn post schedule.
+
+### Triggers
+| Type | Details |
+|------|---------|
+| Schedule | `0 0,30 8-13 * * 0-5` — every 30 min, 8AM–1PM PHT, Sun–Fri (no Saturday; mirrors Noa's posting schedule) |
+
+### Node Flow
+```
+Every 30min 8AM-1PM PHT
+  → Fetch Resource-Promo Tasks (ClickUp API GET /list/901818102123/task)
+    → Filter Posted Resource Posts (Code: Stage=posted + map resource→trigger word)
+      → Alert in #noa-linkedin-posts (Slack message)
+```
+
+### Detection Logic
+- Queries ClickUp list `901818102123` (LinkedIn Post > Posts) for tasks with Post Type = `resource-promo` updated in the last 32 minutes
+- Filters client-side for Stage custom field value = `3` (posted)
+- Maps the Resource custom field orderindex to trigger word + Kit link:
+
+| Resource orderindex | Trigger word | Kit link |
+|---------------------|-------------|---------|
+| 1 (hooks) | HOOKS | https://newsletter.kravemedia.co/r/hooks |
+| 2 (persona) | PERSONA | https://newsletter.kravemedia.co/r/persona |
+| 3 (automation) | AUTO | https://newsletter.kravemedia.co/r/automation |
+| 4 (forensics) | AUDIT | https://newsletter.kravemedia.co/r/forensics |
+| 5 (copy) | COPY | https://newsletter.kravemedia.co/r/copy |
+| 6 (frameworks) | FRAMEWORKS | https://newsletter.kravemedia.co/r/frameworks |
+| 7 (editing) | EDIT | https://newsletter.kravemedia.co/r/editing |
+
+### Outputs
+| Scenario | Action |
+|----------|--------|
+| Resource-promo post just marked `posted` | Slack alert to `#noa-linkedin-posts` with trigger word, Kit link, and pre-filled DM message |
+| No new resource posts in the 32-min window | Workflow exits silently — no message sent |
+| Post Type = `resource-promo` but Resource = `none` | Skipped — no alert |
+
+### Error Handling
+| Failure | Behaviour |
+|---------|-----------|
+| ClickUp API 401 | HTTP Request node fails — check ClickUp Header Auth credential is configured |
+| ClickUp API returns empty tasks array | Code node returns 0 items — workflow exits silently |
+| Slack send fails | n8n marks execution as error — check Slack bot token credential |
+
+---
+
+## Workflow 12 — Kit Subscriber Alert
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/dtrTee7qEgLdR9hQ`
+**Deploy script:** `n8n-workflows/deploy-kit-subscriber-alert.js`
+
+### Purpose
+Receives a Kit (ConvertKit) webhook each time the `resource-claimed` tag is added to a new subscriber. Extracts the subscriber's name, email, and resource title, and posts a Slack alert to `#noa-linkedin-posts` so John knows who converted from a LinkedIn resource post.
+
+### Triggers
+| Type | Details |
+|------|---------|
+| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-kit-subscriber` |
+
+### Node Flow
+```
+Kit Subscriber Webhook → Resource Claimed? → Build Slack Message → Post to Slack
+                                         ↓ (false)
+                                        [end]
+```
+
+### Detection Logic
+| Check | Value |
+|-------|-------|
+| Filter field | `body.event.tag.name` |
+| Filter value | `resource-claimed` |
+| Resource name source | `body.subscriber.fields.resource_title` |
+| Name source | `body.subscriber.first_name` |
+| Email source | `body.subscriber.email_address` |
+
+### Outputs
+| Scenario | Action |
+|----------|--------|
+| New subscriber with `resource-claimed` tag | Slack alert: `*New Kit subscriber* — [name] ([email]) just signed up for *[resource]*` |
+| Tag add event for any other tag | If node short-circuits — no Slack message |
+
+### Error Handling
+| Failure | Behaviour |
+|---------|-----------|
+| Slack credential invalid | Execution fails at Post to Slack node |
+| Kit sends malformed payload | Code node falls back to `Someone`, `(no email)`, `Unknown resource` defaults |
+
+### Kit Webhook Setup (manual, one-time)
+1. Go to `https://app.kit.com` → Settings → Webhooks → New Webhook
+2. Event: `subscriber.tag_add`
+3. Target URL: `https://noatakhel.app.n8n.cloud/webhook/krave-kit-subscriber`
+4. Save — no tag-specific filtering needed, workflow handles it internally
 
 ---
 
@@ -950,4 +1164,10 @@ Most current deploy scripts update the matching live workflow in place and then 
 - [ ] Ensure the Slack bot retains access to all required channels, Noa DM delivery, and John DM testing alerts
 - [ ] Add or confirm an `OpenAI account` credential in n8n before deploying EOD or SOD workflows
 - [ ] Treat repo deploy scripts as the source of truth
+- [ ] Create a `Header Auth` credential in n8n named `ClickUp Header Auth` (Header Name: `Authorization`, Header Value: ClickUp API token from app.clickup.com/settings/account) before the LinkedIn Resource Post Alert workflow will run correctly
+- [ ] Configure the Kit webhook (Kit → Settings → Webhooks → `subscriber.tag_add` → URL: `https://noatakhel.app.n8n.cloud/webhook/krave-kit-subscriber`) before the Kit Subscriber Alert workflow will receive events
+- [ ] Set `APIFY_API_KEY` in n8n Settings → Environment Variables before the Halo Intelligence Report workflow will run
+- [ ] Set `ANTHROPIC_API_KEY` in n8n Settings → Environment Variables before the Halo Intelligence Report workflow will run
+- [ ] Create the `Posts` tab in the Halo Intelligence Report Google Sheet (`1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4`) with the required columns before the first run
+- [ ] Verify Apify actor IDs (`clockworks~tiktok-scraper`, `apify~instagram-hashtag-scraper`) at apify.com/store before first deploy
 - [ ] Test by webhook after any workflow change
