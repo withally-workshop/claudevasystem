@@ -986,6 +986,19 @@ function renderDashboard(d) {
   .tracker-btn { background: linear-gradient(135deg, #16a34a, #0d9488); color: #fff; padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; border: none; transition: transform 120ms ease, box-shadow 120ms ease; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25); }
   .tracker-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(22, 163, 74, 0.4); text-decoration: none; }
 
+  /* Tools Hub */
+  .tools-hub { padding: 16px 32px; max-width: 1400px; margin: 0 auto; border-bottom: 1px solid #2a3348; }
+  .tools-hub-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+  .tool-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 16px; background: #161e2e; border: 1px solid #2a3348; border-radius: 10px; cursor: pointer; min-width: 90px; transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease; user-select: none; }
+  .tool-card:hover { border-color: #475569; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+  .tool-card .tool-icon { font-size: 22px; line-height: 1; }
+  .tool-card .tool-name { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; }
+  .tool-popup { display: none; position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 6px; min-width: 170px; z-index: 99; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  .tool-popup.open { display: block; }
+  .tool-popup a { display: block; padding: 8px 12px; color: #f8fafc; text-decoration: none; border-radius: 6px; font-size: 13px; }
+  .tool-popup a:hover { background: #334155; }
+  .tool-popup a.secondary { color: #94a3b8; }
+
   /* invoice link inside tables */
   td a.invoice-link { color: #93c5fd; font-weight: 500; }
   td a.invoice-link:hover { color: #60a5fa; }
@@ -1027,21 +1040,6 @@ function renderDashboard(d) {
 <div class="header">
   <h1>Krave Ops Dashboard</h1>
   <div class="header-meta">
-    <a class="tracker-btn" href="https://docs.google.com/spreadsheets/d/${SHEET_ID}" target="_blank" rel="noopener">📊 Open Tracker</a>
-    <div style="position:relative;display:inline-block">
-      <button class="tracker-btn" id="clickup-btn" type="button" onclick="document.getElementById('clickup-popup').classList.toggle('clickup-popup-open')">✅ ClickUp</button>
-      <div id="clickup-popup" style="display:none;position:absolute;top:calc(100% + 8px);right:0;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:6px;min-width:180px;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,0.4)">
-        <a href="clickup://open?team=9018123501" style="display:block;padding:8px 12px;color:#f8fafc;text-decoration:none;border-radius:6px;font-size:13px" onmouseenter="this.style.background='#334155'" onmouseleave="this.style.background=''" onclick="document.getElementById('clickup-popup').classList.remove('clickup-popup-open')">Open ClickUp app</a>
-        <a href="https://app.clickup.com/9018123501/v/l/8crb97d-378" target="_blank" rel="noopener" style="display:block;padding:8px 12px;color:#94a3b8;text-decoration:none;border-radius:6px;font-size:13px" onmouseenter="this.style.background='#334155'" onmouseleave="this.style.background=''" onclick="document.getElementById('clickup-popup').classList.remove('clickup-popup-open')">Continue on web</a>
-      </div>
-    </div>
-    <div style="position:relative;display:inline-block">
-      <button class="tracker-btn" id="slack-btn" type="button" onclick="document.getElementById('slack-popup').classList.toggle('slack-popup-open')">💬 Slack</button>
-      <div id="slack-popup" style="display:none;position:absolute;top:calc(100% + 8px);right:0;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:6px;min-width:180px;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,0.4)">
-        <a href="slack://open?team=T06U38A4NV6" style="display:block;padding:8px 12px;color:#f8fafc;text-decoration:none;border-radius:6px;font-size:13px" onmouseenter="this.style.background='#334155'" onmouseleave="this.style.background=''" onclick="document.getElementById('slack-popup').classList.remove('slack-popup-open')">Open Slack app</a>
-        <a href="https://app.slack.com/client/T06U38A4NV6" target="_blank" rel="noopener" style="display:block;padding:8px 12px;color:#94a3b8;text-decoration:none;border-radius:6px;font-size:13px" onmouseenter="this.style.background='#334155'" onmouseleave="this.style.background=''" onclick="document.getElementById('slack-popup').classList.remove('slack-popup-open')">Continue on web</a>
-      </div>
-    </div>
     <span class="range-toggle">${rangeToggle}</span>
     <span>${generatedTime} ICT</span>
     ${cacheNote}
@@ -1049,6 +1047,51 @@ function renderDashboard(d) {
       <input type="hidden" name="range" value="${range}">
       <button class="btn" name="refresh" value="1" type="submit">↻ Refresh</button>
     </form>
+  </div>
+</div>
+
+<div class="tools-hub">
+  <div class="tools-hub-grid">
+    <div class="tool-card" onclick="toggleToolPopup('slack-popup')">
+      <span class="tool-icon">💬</span>
+      <span class="tool-name">Slack</span>
+      <div class="tool-popup" id="slack-popup">
+        <a href="slack://open?team=T06U38A4NV6">Open app</a>
+        <a href="https://app.slack.com/client/T06U38A4NV6" target="_blank" rel="noopener" class="secondary">Open web</a>
+      </div>
+    </div>
+    <div class="tool-card" onclick="toggleToolPopup('clickup-popup')">
+      <span class="tool-icon">✅</span>
+      <span class="tool-name">ClickUp</span>
+      <div class="tool-popup" id="clickup-popup">
+        <a href="clickup://open?team=9018123501">Open app</a>
+        <a href="https://app.clickup.com/9018123501/v/l/8crb97d-378" target="_blank" rel="noopener" class="secondary">Open web</a>
+      </div>
+    </div>
+    <a class="tool-card" href="https://docs.google.com/spreadsheets/d/${SHEET_ID}" target="_blank" rel="noopener" style="text-decoration:none">
+      <span class="tool-icon">📊</span>
+      <span class="tool-name">Tracker</span>
+    </a>
+    <a class="tool-card" href="https://noatakhel.app.n8n.cloud" target="_blank" rel="noopener" style="text-decoration:none">
+      <span class="tool-icon">⚙️</span>
+      <span class="tool-name">n8n</span>
+    </a>
+    <a class="tool-card" href="https://www.airwallex.com" target="_blank" rel="noopener" style="text-decoration:none">
+      <span class="tool-icon">💳</span>
+      <span class="tool-name">Airwallex</span>
+    </a>
+    <a class="tool-card" href="https://mail.google.com" target="_blank" rel="noopener" style="text-decoration:none">
+      <span class="tool-icon">📧</span>
+      <span class="tool-name">Gmail</span>
+    </a>
+    <a class="tool-card" href="https://app.insense.pro/dashboard" target="_blank" rel="noopener" style="text-decoration:none">
+      <span class="tool-icon">🎬</span>
+      <span class="tool-name">Insense</span>
+    </a>
+    <a class="tool-card" href="https://notion.so" target="_blank" rel="noopener" style="text-decoration:none">
+      <span class="tool-icon">📝</span>
+      <span class="tool-name">Notion</span>
+    </a>
   </div>
 </div>
 
@@ -1259,6 +1302,20 @@ function renderDashboard(d) {
 
 <script>
 (function () {
+  // Tools Hub popup toggle
+  window.toggleToolPopup = function(id) {
+    const popup = document.getElementById(id);
+    if (!popup) return;
+    const isOpen = popup.classList.contains('open');
+    document.querySelectorAll('.tool-popup.open').forEach(p => p.classList.remove('open'));
+    if (!isOpen) popup.classList.add('open');
+  };
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.tool-card')) {
+      document.querySelectorAll('.tool-popup.open').forEach(p => p.classList.remove('open'));
+    }
+  });
+
   // Parallax dive: scale the background image as you scroll deeper, and
   // darken the overlay so it feels like entering further into the room.
   const bg = document.getElementById('bg-layer');
@@ -1296,24 +1353,6 @@ function renderDashboard(d) {
   // Auto-refresh every 5 minutes (matches server cache TTL).
   // Preserves the current ?range= selection. Does not refresh if the user
   // has an unsaved form interaction in progress (focus inside a form element).
-  // App launcher popups (Slack + ClickUp) — show/hide on button click, close on outside click
-  [['slack-btn', 'slack-popup'], ['clickup-btn', 'clickup-popup']].forEach(function(pair) {
-    const popup = document.getElementById(pair[1]);
-    if (!popup) return;
-    popup.style.display = 'block';
-    popup.style.visibility = 'hidden';
-    document.addEventListener('click', function(e) {
-      if (!e.target.closest('#' + pair[0]) && !e.target.closest('#' + pair[1])) {
-        popup.classList.remove(pair[1] + '-open');
-        popup.style.visibility = 'hidden';
-      }
-    });
-    const observer = new MutationObserver(function() {
-      popup.style.visibility = popup.classList.contains(pair[1] + '-open') ? 'visible' : 'hidden';
-    });
-    observer.observe(popup, { attributes: true, attributeFilter: ['class'] });
-  });
-
   (function autoRefresh() {
     const INTERVAL_MS = 5 * 60 * 1000;
     setTimeout(function tick() {
