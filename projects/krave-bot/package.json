@@ -1,0 +1,17 @@
+{
+  "name": "krave-bot",
+  "version": "1.0.0",
+  "description": "Krave EA AI assistant — Slack bot + dashboard chat API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@slack/bolt": "^3.22.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

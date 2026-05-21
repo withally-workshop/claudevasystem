@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: krave-bot
+    runtime: node
+    rootDir: projects/krave-bot
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: SLACK_SIGNING_SECRET
+        sync: false
+      - key: N8N_API_KEY
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_KEY_JSON
+        sync: false
+      - key: CLICKUP_API_KEY
+        sync: false
+      - key: CLICKUP_LIST_ID
+        sync: false
+      - key: AIRWALLEX_CLIENT_ID
+        sync: false
+      - key: AIRWALLEX_API_KEY
+        sync: false
