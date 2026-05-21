@@ -23,3 +23,13 @@ n8n-workflows/snapshots/
 
 # Claude Code scheduled task lock
 .claude/scheduled_tasks.lock
+
+# Temp/scratch files
+logs/
+*.png
+cw_*.js
+cw_*.pdf
+extract_nodes.js
+pdf_extract.js
+workflow.json
+clickup-*.json

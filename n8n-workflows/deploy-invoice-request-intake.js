@@ -169,7 +169,22 @@ const payoutResult = invoiceDateResult.ok
   : { ok: false, payout_raw: payload.payout_raw || '7 day payout', reason: 'unparseable invoice_date' };
 const computedDueDate = invoiceDateResult.ok && payoutResult.ok ? payoutResult.due_date : '';
 const daysUntilDue = computedDueDate ? diffDays(invoiceDateResult.value, computedDueDate) : 0;
-const subtotal = lineItems.reduce((sum, item) => {
+// If all items have null prices but a total is available in the payload, consolidate into one line item.
+const nullPriceItems = lineItems.filter(i => i.unit_price === null || i.unit_price === undefined);
+let resolvedLineItems = lineItems;
+if (nullPriceItems.length === lineItems.length && lineItems.length > 0) {
+  const payloadTotal = Number(payload.amount || payload.total || payload.subtotal_amount || 0);
+  if (payloadTotal > 0) {
+    resolvedLineItems = [{
+      description: lineItems.map(i => i.raw_text || i.description || '').filter(Boolean).join(' — '),
+      quantity: 1,
+      unit_price: payloadTotal,
+      raw_text: lineItems.map(i => i.raw_text || i.description || '').join('; '),
+    }];
+  }
+}
+
+const subtotal = resolvedLineItems.reduce((sum, item) => {
   const quantity = Number(item.quantity || 1);
   const unitPrice = Number(item.unit_price || 0);
   return sum + (quantity * unitPrice);
@@ -178,9 +193,9 @@ const subtotal = lineItems.reduce((sum, item) => {
 const missing = [];
 if (!payload.client_name && !payload.client_name_or_company_name) missing.push('client_name_or_company_name');
 if (!payload.currency) missing.push('currency');
-if (!lineItems.length) missing.push('line_items');
-const nullPriceItems = lineItems.filter(i => i.unit_price === null || i.unit_price === undefined);
-if (nullPriceItems.length) missing.push('unit_price for: ' + nullPriceItems.map(i => i.description || 'unnamed').join(', '));
+if (!resolvedLineItems.length) missing.push('line_items');
+const stillNullPriceItems = resolvedLineItems.filter(i => i.unit_price === null || i.unit_price === undefined);
+if (stillNullPriceItems.length) missing.push('unit_price for: ' + stillNullPriceItems.map(i => i.description || 'unnamed').join(', '));
 
 const resolvedClientName = payload.client_name_or_company_name || payload.client_name || payload.company_name || '';
 
@@ -204,7 +219,7 @@ const baseRequest = {
   due_date: computedDueDate,
   days_until_due: daysUntilDue,
   memo: payload.memo || '',
-  line_items: lineItems,
+  line_items: resolvedLineItems,
   subtotal,
 };
 
@@ -323,16 +338,23 @@ const headers = {
   'x-api-version': '2025-06-16',
 };
 
-async function listCustomers(query) {
-  const resp = await $helpers.httpRequest({
-    method: 'GET',
-    url: 'https://api.airwallex.com/api/v1/billing_customers' + query,
-    headers,
-  });
-  if (Array.isArray(resp.items)) return resp.items;
-  if (Array.isArray(resp.data)) return resp.data;
-  if (Array.isArray(resp)) return resp;
-  return [];
+async function listCustomers(baseQuery) {
+  let allItems = [];
+  let pageNum = 0;
+  let hasMore = true;
+  while (hasMore) {
+    const sep = baseQuery.includes('?') ? '&' : '?';
+    const resp = await $helpers.httpRequest({
+      method: 'GET',
+      url: 'https://api.airwallex.com/api/v1/billing_customers' + baseQuery + sep + 'page_num=' + pageNum + '&page_size=50',
+      headers,
+    });
+    const items = Array.isArray(resp.items) ? resp.items : Array.isArray(resp.data) ? resp.data : Array.isArray(resp) ? resp : [];
+    allItems = allItems.concat(items);
+    hasMore = resp.has_more === true && items.length > 0;
+    pageNum++;
+  }
+  return allItems;
 }
 
 // email-first: reuse an existing billing customer by exact email before trying name.

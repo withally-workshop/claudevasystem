@@ -168,6 +168,9 @@ Note: `linked_payment_account_id` is omitted — the API auto-assigns the accoun
 | K | requester username |
 | L | (blank) |
 | M | (blank) |
+| N | (skip — formula column, never write) |
+| O | (blank) |
+| P | `'[receipt_ts]` (prepend apostrophe to prevent date formatting) |
 
 ### Step 6 — Notify John
 
@@ -248,7 +251,7 @@ Please download the file and send to the client along with the digital invoice l
 
 `mcp__google-sheets__sheets_find_row(spreadsheet_id: 1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50, sheet_name: Invoices, column: F, value: invoice_id)`
 → `mcp__google-sheets__sheets_update_row(...)`:
-- Col J (Payment Status) → `Sent — Awaiting Payment`
+- Col J (Payment Status) → `Invoice Sent`
 - Col R (Invoice URL) → `hosted_invoice_url`
 
 ---

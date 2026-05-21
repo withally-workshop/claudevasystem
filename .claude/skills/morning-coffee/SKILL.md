@@ -4,7 +4,7 @@
 
 **Automated:** Runs **Monday–Friday at 10:00 AM PHT (UTC+8)** via local Windows Task Scheduler task `KraveEA-MorningCoffee`. Invokes `claude -p "/morning-coffee" --dangerously-skip-permissions` from the repo root. Sends directly to Noa's DM (`U06TBGX9L93`). No confirmation step.
 
-**Scope rule:** Only process **unread** Gmail and **new since last run** Slack activity. Do not re-summarize already-read mail or already-seen messages. See Step 2 and Step 5 for the exact filters. Sends directly to Noa's DM (`U06TBGX9L93`). No confirmation step.
+**Scope rule:** Scan Gmail for **last 24h** regardless of read status — rely on content classification (not read status) to filter what matters. Do not surface newsletters, automated tool digests, or already-actioned threads. See Step 2 for the exact filters. Sends directly to Noa's DM (`U06TBGX9L93`). No confirmation step.
 
 **Manual invoke:** "morning coffee", "run morning coffee", "/morning-coffee", or off-schedule testing.
 
@@ -21,6 +21,7 @@
 | Key Slack channels | `#ad-production-internal` (`C0AGEM919QV`), `#payments-invoices-updates` (`C09HN2EBPR7`) |
 | ClickUp notification sender | `notifications@tasks.clickup.com` |
 | Noa's Slack DMs + mentions | `slack-noa` MCP (Noa's personal user token — configured in `.mcp.json`) |
+| John–Noa DM channel | `D0AN35JHL80` (confirmed 2026-05-19 — accessible via John's OAuth) |
 | Calendar source | Google Calendar MCP (`mcp__claude_ai_Google_Calendar__list_events`) — confirmed working as of 2026-05-11. Falls back to email-based parsing if MCP fails. |
 | Cron (UTC) | `0 2 * * 1-5` = 10:00 AM PHT (UTC+8), weekdays |
 
@@ -60,15 +61,15 @@ Filter to events matching `TODAY_PHT`. Prefer `Accepted:` over `Invitation:` whe
 
 If no events today from either source: omit section silently.
 
-### Step 2 — Scan Noa's Gmail (UNREAD only, last 24h)
+### Step 2 — Scan Noa's Gmail (last 24h, all mail)
 
 ```
 mcp__gmail-noa__gmail_search_messages
-  query: "in:inbox is:unread newer_than:1d"
+  query: "in:inbox newer_than:1d"
   max_results: 50
 ```
 
-The `is:unread` filter ensures we only surface emails Noa hasn't opened yet. Already-read mail (handled, archived, or skimmed) is excluded automatically.
+Do NOT use `is:unread` — emails Noa has opened but not acted on are still relevant and must be surfaced. Rely on content classification (below) to filter noise, not read status.
 
 For each result, read sender, subject, and snippet via `mcp__gmail-noa__gmail_get_message`.
 
@@ -121,6 +122,39 @@ Call `mcp__slack__slack_get_channel_history` for each channel, limit 30. Filter 
 
 Limit to 3 bullets per channel. If 0 relevant in a channel: omit it. If both empty: omit entire sub-section.
 
+### Step 5b — Extract tasks from Noa–John DM (last 24h)
+
+Read the John–Noa DM channel directly using John's OAuth:
+
+```
+mcp__claude_ai_Slack__slack_read_channel
+  channel_id: D0AN35JHL80
+  oldest: [TODAY_PHT_00:00 as Unix timestamp]
+  limit: 50
+```
+
+Filter to messages where `user == "U06TBGX9L93"` (Noa). Ignore all other senders (John, bots, morning coffee digests).
+
+From Noa's messages, extract **tasks** — things she says she needs to complete, is working on, or mentions as action items. Apply these rules:
+
+**Include:**
+- Explicit task statements: "I need to X", "I have to X", "working on X", "need to finish X", "review X", "complete X"
+- Implied work items she mentions as things on her plate (e.g. "mostly just worked on the ad world prime presentation" → extract as a task)
+- Items she lists (comma-separated or multi-sentence) count as separate tasks
+
+**Exclude:**
+- Conversational filler ("how was your weekend", "I am glad")
+- Status updates she's already reporting as done ("I finished X")
+- Questions or requests directed at John (not her own tasks)
+
+De-duplicate: if the same task appears across multiple messages (e.g. mentioned yesterday and today), keep one instance — the most recent phrasing.
+
+**Format each task:** strip filler, normalize to action form. E.g. "mostly just worked on the ad world prime presentation over the weekend" → `Complete ad world prime presentation`
+
+Cap at 7 tasks. If zero tasks found: omit section silently.
+
+---
+
 ### Step 5 — Pull Noa's Slack channel mentions (last 24h)
 
 Use the `slack-noa` MCP (Noa's personal user token). The MCP currently exposes: `slack_list_channels`, `slack_get_channel_history`, `slack_get_thread_replies`, `slack_get_user_profile`, `slack_get_users`. **Not available:** DM listing (`conversations.list types=im`), message search (`search.messages`). Personal DMs cannot be surfaced with the current tool surface.
@@ -147,7 +181,7 @@ If `slack-noa` MCP is unavailable, returns errors, or yields zero relevant items
 
 ### Step 6 — Compose the briefing
 
-Apply this template. Omit any section with zero data — no placeholder text, no "nothing to report."
+Apply this template. Omit any section with zero data — no placeholder text, no "nothing to report." Run Steps 1–5b in parallel, then compose once all data is collected.
 
 ```
 Good morning Noa ☀️
@@ -168,6 +202,9 @@ Here's your Morning Coffee for [Day, Date]:
 *💬 Slack — Open Threads*
 - [Person] DM'd you about [topic]
 - @Noa mentioned in #[channel]: [1-line context]
+
+*✅ Tasks*
+- [Task extracted from DM]
 
 _Deep work starts at 1:30 PM — have a good one._
 ```
@@ -208,6 +245,7 @@ Do NOT post to `#airwallexdrafts` or any other channel. This is a private person
 | Slack channel history (bot) | `mcp__slack__slack_get_channel_history` |
 | Noa's DMs + mentions | `mcp__slack_noa` tools (personal user token) |
 | Today's calendar | `mcp__claude_ai_Google_Calendar__list_events` (primary); email fallback via `mcp__gmail-noa__gmail_search_messages` |
+| Noa–John DM task read | `mcp__claude_ai_Slack__slack_read_channel` channel `D0AN35JHL80` (John's OAuth) |
 | Send DM as John | `mcp__claude_ai_Slack__slack_send_message` |
 
 ---

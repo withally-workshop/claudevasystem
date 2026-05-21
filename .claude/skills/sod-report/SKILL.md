@@ -21,6 +21,7 @@ Post your focus goals and context for the day to `#airwallexdrafts` before 10 AM
 | `#airwallexdrafts` — yesterday's EOD bot message | Carry-over from Yesterday + unresolved Blockers | **Mandatory** |
 | `#airwallexdrafts` — John's posts from today | Focus Goals + new Blockers | **Mandatory** |
 | `#airwallexdrafts` — today's `Morning Triage` bot message | BAU / Follow-ups from Inbox Triage Daily, plus inbox items that stayed `EA/Unsure` | Optional |
+| Client Invoice Tracker (Google Sheets) | Verify blocker invoices are still open before flagging | **Mandatory for invoice blockers** |
 
 ---
 
@@ -36,7 +37,7 @@ Split messages into three groups:
 - On Monday (or after any holiday gap), look back to Friday — not Sunday.
 - Scan back through channel history until you find a message containing "Today's Wrap-up". Stop at the first match. Do not use messages from today.
 - Extract `Not Completed / Needs More Work / Planned Next Steps` → **Carry-over from Yesterday**
-- Extract `Blocker / Input Needed` → carry forward only if still unresolved
+- Extract `Blocker / Input Needed` → carry forward only if still unresolved (verify invoice blockers against the Client Invoice Tracker — see Step 0a)
 
 **Group B — John's morning dump** (messages from `U0AM5EGRVTP` posted today before the run)
 - Use for **Focus Goals** and any additional **Blocker / Input Needed**
@@ -50,6 +51,24 @@ Split messages into three groups:
 - Pull forward any `Review These` items as candidate blockers or follow-ups when they still need human judgment
 
 All date filtering uses **Asia/Manila timezone (PHT, UTC+8)**. "Yesterday" means last business day — on Monday, that is Friday.
+
+### Step 0a — Verify invoice blockers against Client Invoice Tracker
+
+Before carrying any invoice blocker forward from the EOD, check its current status in the tracker.
+
+```
+mcp__google-sheets__sheets_get_rows
+  spreadsheet_id: 1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50
+  sheet_name: Invoices
+  range: A:R
+```
+
+For each invoice mentioned in the EOD's `Blocker / Input Needed` section:
+- Match by invoice ID (Col F) or client name (Col B)
+- Check the status column — if the invoice is marked `Paid`, `Finalized`, `Sent`, or otherwise resolved → **drop it from the SOD blockers**
+- Only carry forward invoices that are still in an open/pending/overdue state
+
+If the tracker is unavailable, carry forward all EOD blockers as-is and note `_(invoice status unverified)_` inline.
 
 ### Step 1 — Validate required inputs
 
