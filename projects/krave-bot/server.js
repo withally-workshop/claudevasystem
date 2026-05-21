@@ -50,51 +50,62 @@ function getConvKey(channel, thread_ts) {
 }
 
 async function runAgent(userText, convKey) {
+  // reset command clears corrupt/stale history
+  if (userText.trim().toLowerCase() === 'reset') {
+    conversations.delete(convKey);
+    return 'Conversation reset. Start fresh.';
+  }
+
   const history = conversations.get(convKey) || [];
   history.push({ role: 'user', content: userText });
 
   const messages = [...history];
   let finalText = '';
 
-  // agentic loop — keep calling until no more tool_use
-  while (true) {
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      tools: ALL_TOOLS,
-      messages,
-    });
+  try {
+    // agentic loop — keep calling until no more tool_use
+    while (true) {
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        system: SYSTEM_PROMPT,
+        tools: ALL_TOOLS,
+        messages,
+      });
 
-    messages.push({ role: 'assistant', content: response.content });
+      messages.push({ role: 'assistant', content: response.content });
 
-    if (response.stop_reason === 'end_turn') {
-      finalText = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+      if (response.stop_reason === 'end_turn') {
+        finalText = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+        break;
+      }
+
+      if (response.stop_reason === 'tool_use') {
+        const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
+        const toolResults = await Promise.all(toolUseBlocks.map(async (block) => {
+          const handler = HANDLERS[block.name];
+          let result;
+          try {
+            result = handler ? await handler(block.input) : { error: `Unknown tool: ${block.name}` };
+          } catch (e) {
+            result = { error: e.message };
+          }
+          return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) };
+        }));
+        messages.push({ role: 'user', content: toolResults });
+        continue;
+      }
+
       break;
     }
 
-    if (response.stop_reason === 'tool_use') {
-      const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
-      const toolResults = await Promise.all(toolUseBlocks.map(async (block) => {
-        const handler = HANDLERS[block.name];
-        let result;
-        try {
-          result = handler ? await handler(block.input) : { error: `Unknown tool: ${block.name}` };
-        } catch (e) {
-          result = { error: e.message };
-        }
-        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) };
-      }));
-      messages.push({ role: 'user', content: toolResults });
-      continue;
-    }
-
-    break;
+    // persist last 20 turns to keep context manageable
+    conversations.set(convKey, messages.slice(-20));
+  } catch (e) {
+    // clear corrupt history so next message starts clean
+    conversations.delete(convKey);
+    throw e;
   }
-
-  // persist last 20 turns to keep context manageable
-  const updated = messages.slice(-20);
-  conversations.set(convKey, updated);
 
   return finalText || '(no response)';
 }
