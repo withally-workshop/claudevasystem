@@ -70,7 +70,7 @@ async function runAgent(userText, convKey) {
         try {
           response = await anthropic.messages.create({
             model: 'claude-sonnet-4-6',
-            max_tokens: 1024,
+            max_tokens: 2048,
             system: SYSTEM_PROMPT,
             tools: ALL_TOOLS,
             messages,
@@ -93,7 +93,7 @@ async function runAgent(userText, convKey) {
 
       messages.push({ role: 'assistant', content: response.content });
 
-      if (response.stop_reason === 'end_turn') {
+      if (response.stop_reason === 'end_turn' || response.stop_reason === 'max_tokens') {
         finalText = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
         break;
       }
