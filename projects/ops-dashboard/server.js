@@ -1309,7 +1309,11 @@ function renderDashboard(d) {
     </div>
     <a class="tool-card" href="https://docs.google.com/spreadsheets/d/${SHEET_ID}" target="_blank" rel="noopener" style="text-decoration:none">
       <span class="tool-icon">📊</span>
-      <span class="tool-name">Tracker</span>
+      <span class="tool-name">Invoices</span>
+    </a>
+    <a class="tool-card" href="https://docs.google.com/spreadsheets/d/${CRAVE_SHEET_ID}" target="_blank" rel="noopener" style="text-decoration:none">
+      <span class="tool-icon">🎯</span>
+      <span class="tool-name">Outreach</span>
     </a>
     <a class="tool-card" href="https://noatakhel.app.n8n.cloud" target="_blank" rel="noopener" style="text-decoration:none">
       <span class="tool-icon">⚙️</span>
@@ -1624,12 +1628,12 @@ function renderDashboard(d) {
   // Theme toggle
   const THEME_KEY = 'krave-dash-theme';
   function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
+    document.body.setAttribute('data-theme', theme);
     const btn = document.getElementById('theme-toggle-btn');
     if (btn) btn.textContent = theme === 'dark' ? '☀' : '◗';
   }
   window.toggleTheme = function() {
-    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    const current = document.body.getAttribute('data-theme') || 'dark';
     const next = current === 'dark' ? 'light' : 'dark';
     localStorage.setItem(THEME_KEY, next);
     applyTheme(next);
