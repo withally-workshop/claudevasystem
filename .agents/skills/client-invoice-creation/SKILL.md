@@ -46,6 +46,22 @@ Process Slack invoice request receipts into Airwallex drafts (Mode 1) and finali
 5. Replies in John's thread + tags strategist in original #payments-invoices-updates thread
 6. If John's reply includes a ClickUp task URL → activates ClickUp sync (see `.agents/skills/clickup-invoice-sync/SKILL.md`)
 
+## Standard Invoice Memo
+
+Always set this as the `memo` on every Airwallex invoice created. If the receipt includes a project-specific memo, append it after a blank line.
+
+```
+Kindly make payment by the due date to
+Bank Name: DBS Bank Ltd
+Bank Address: DBS Asia Central, Marina Bay Financial Centre Tower 3, 12 Marina Boulevard, Singapore 018982
+Account Name: Eclipse Ventures Pte Ltd
+Account Number: 8853795725
+BIC/SWIFT: DBSSSGSG
+or by paying via the invoice link directly.
+
+Please note that a US$200 per month late fee applies to invoices not paid on time.
+```
+
 ## Codex Invocation Notes
 
 - Dedup signal: ✅ (`white_check_mark`) reaction = already actioned — never reprocess

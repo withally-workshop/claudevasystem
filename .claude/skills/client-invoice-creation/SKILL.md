@@ -139,7 +139,21 @@ Retain `{price_id, quantity}` for each item.
 - `currency`: from receipt
 - `days_until_due`: from receipt (default 7)
 - `collection_method`: `CHARGE_ON_CHECKOUT`
-- `memo`: from receipt (omit if "-")
+- `memo`: Always include the standard bank memo below. If the receipt has a project memo, append it after a blank line.
+
+Standard memo (always included):
+```
+Kindly make payment by the due date to
+Bank Name: DBS Bank Ltd
+Bank Address: DBS Asia Central, Marina Bay Financial Centre Tower 3, 12 Marina Boulevard, Singapore 018982
+Account Name: Eclipse Ventures Pte Ltd
+Account Number: 8853795725
+BIC/SWIFT: DBSSSGSG
+or by paying via the invoice link directly.
+
+Please note that a US$200 per month late fee applies to invoices not paid on time.
+```
+
 → `invoice_id`
 
 Note: `linked_payment_account_id` is omitted — the API auto-assigns the account's default payment account.
