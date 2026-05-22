@@ -140,8 +140,23 @@ function forwardToN8n(payload) {
   req.end();
 }
 
+async function resolveDisplayName(client, userId) {
+  try {
+    const res = await client.users.info({ user: userId });
+    return res.user && (res.user.profile.display_name || res.user.real_name || res.user.name) || userId;
+  } catch {
+    return userId;
+  }
+}
+
+function withContext(text, displayName, threadTs) {
+  const parts = [`[Requester: ${displayName}]`];
+  if (threadTs) parts.push(`[Slack Thread TS: ${threadTs}]`);
+  return `${parts.join(' ')}\n${text}`;
+}
+
 // DMs
-app.event('message', async ({ event, say }) => {
+app.event('message', async ({ event, say, client }) => {
   if (event.bot_id || event.subtype) return;
 
   // Forward drafts channel messages to n8n approval polling workflow
@@ -154,7 +169,9 @@ app.event('message', async ({ event, say }) => {
 
   const convKey = getConvKey(event.channel, null);
   try {
-    const reply = await runAgent(event.text || '', convKey);
+    const displayName = await resolveDisplayName(client, event.user);
+    const text = withContext(event.text || '', displayName, event.ts);
+    const reply = await runAgent(text, convKey);
     await say({ text: reply, thread_ts: event.ts });
   } catch (e) {
     console.error('DM handler error:', e);
@@ -163,11 +180,13 @@ app.event('message', async ({ event, say }) => {
 });
 
 // @mentions in channels
-app.event('app_mention', async ({ event, say }) => {
+app.event('app_mention', async ({ event, say, client }) => {
   const text = (event.text || '').replace(/<@[A-Z0-9]+>/g, '').trim();
   const convKey = getConvKey(event.channel, event.thread_ts || event.ts);
   try {
-    const reply = await runAgent(text, convKey);
+    const displayName = await resolveDisplayName(client, event.user);
+    const contextText = withContext(text, displayName, event.thread_ts || event.ts);
+    const reply = await runAgent(contextText, convKey);
     await say({ text: reply, thread_ts: event.thread_ts || event.ts });
   } catch (e) {
     console.error('Mention handler error:', e);

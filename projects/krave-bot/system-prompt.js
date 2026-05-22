@@ -50,7 +50,7 @@ When creating an Airwallex invoice:
    H: Currency (e.g. USD)
    I: Due Date (YYYY-MM-DD)
    J: Payment Status ("Invoice Sent")
-   K: Requested By ("John")
+   K: Requested By (the name of whoever requested the invoice — use the Slack display name of the person you are speaking with, not hardcoded "John")
    L: "" (Reminders Sent — leave blank)
    M: "" (Payment Confirmed Date — leave blank)
    N: "" (Status — formula-driven, never write)
