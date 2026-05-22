@@ -20,6 +20,8 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | LinkedIn Post Consistency Check | Active | 10AM PHT Mon–Fri | [deploy-linkedin-post-consistency-check.js](deploy-linkedin-post-consistency-check.js) |
 | Weekly Resource Conversion Report | Active | 9AM PHT Mondays | [deploy-weekly-resource-conversion-report.js](deploy-weekly-resource-conversion-report.js) |
 | Halo Weekly Intelligence Report | Active | 7AM ICT Mondays | [deploy-halo-intelligence-report.js](deploy-halo-intelligence-report.js) |
+| Crave - Daily Lead Push | Inactive (warm-up) | 9AM PHT daily | [deploy-crave-lead-push.js](deploy-crave-lead-push.js) |
+| Crave - Status Sync | Inactive (warm-up) | 9AM PHT daily | [deploy-crave-status-sync.js](deploy-crave-status-sync.js) |
 
 ---
 
@@ -43,6 +45,46 @@ node n8n-workflows/deploy-halo-intelligence-report.js
 - `ANTHROPIC_API_KEY` — set in n8n environment variables
 
 **Google Sheet:** `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4` — create `Posts` tab with columns: Week | Platform | Creator | URL | Likes | Views | Saves | Shares | Engagement Rate (%) | ICP Group | Content Pillar | Score | Hook | Why It Performed | ICP Match Detail | Halo Angle
+
+---
+
+## Crave - Daily Lead Push
+
+Reads the Crave Creator Outreach Sheet for rows where `status=approved` and `outreach_sent_at` is blank. Pushes them to Smartlead campaign 3375376. Marks pushed rows as `outreach_queued` + writes `outreach_sent_at`.
+
+**Workflow ID:** `ke52OLrSUXk8mPVw`
+**Schedule:** 9AM PHT daily
+**Status:** Inactive — activate after warm-up completes (~2026-06-12)
+
+**Deploy:**
+```bash
+node n8n-workflows/deploy-crave-lead-push.js
+```
+
+**Credentials required:**
+- `Google Sheets account` — `83MQOm78gYDvziTO` — Crave Creator Outreach sheet
+- `SMARTLEAD_API_KEY` — baked in at deploy time from local `.env`
+
+**Sheet:** `1eLQrDP3IX9ec9dtFN0UyRdlTplzkLfRG9Asyqj1gLrI`
+
+---
+
+## Crave - Status Sync
+
+Pulls all leads from Smartlead campaign 3375376. Matches to Sheet rows by email. Writes back status, timestamps for opens/replies/bounces. Skips rows already at terminal status (replied, bounced).
+
+**Workflow ID:** `uUGxA3GW1W0vq6el`
+**Schedule:** 9AM PHT daily
+**Status:** Inactive — activate after warm-up completes (~2026-06-12)
+
+**Deploy:**
+```bash
+node n8n-workflows/deploy-crave-status-sync.js
+```
+
+**Credentials required:**
+- `Google Sheets account` — `83MQOm78gYDvziTO` — Crave Creator Outreach sheet
+- `SMARTLEAD_API_KEY` — baked in at deploy time from local `.env`
 
 ---
 

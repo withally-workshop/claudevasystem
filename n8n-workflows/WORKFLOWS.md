@@ -41,6 +41,8 @@
 | 13 | LinkedIn Post Consistency Check | `220OeHs02nwJleCT` | Active | 10AM PHT Mon–Fri | Check if any post was marked posted in ClickUp today; alert #noa-linkedin-posts if none found |
 | 14 | Weekly Resource Conversion Report | `G39y9GgsrhnvC91C` | Active | 9AM PHT Mondays | Fetch last 7 days of resource-claimed Kit subscribers, group by resource, post breakdown to #noa-linkedin-posts |
 | 15 | Halo - Weekly Intelligence Report | 5ZqTSaUEtxnAndiY | Active | 7AM ICT Mondays | Scrape TikTok + Instagram by hashtag cluster, score by engagement × ICP relevance, Claude analysis of top 10 per platform, deliver to Slack + Google Sheet + email |
+| 16 | Crave - Daily Lead Push | `ke52OLrSUXk8mPVw` | Inactive (warm-up) | 9AM PHT daily | Read approved Sheet rows, push to Smartlead campaign 3375376, mark outreach_queued |
+| 17 | Crave - Status Sync | `uUGxA3GW1W0vq6el` | Inactive (warm-up) | 9AM PHT daily | Pull Smartlead lead statuses, sync opens/replies/bounces back to Sheet |
 
 ---
 
@@ -1236,6 +1238,102 @@ Schedule → Fetch Kit Subscribers (last 7d, resource-claimed) → Group by Reso
 
 ---
 
+## Workflow 16 — Crave - Daily Lead Push
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/ke52OLrSUXk8mPVw`
+**Deploy script:** `n8n-workflows/deploy-crave-lead-push.js`
+
+### Purpose
+Reads the Crave Creator Outreach Sheet every morning for rows where `status=approved` and `outreach_sent_at` is blank. Pushes them to Smartlead campaign 3375376 as leads. Marks each pushed row `outreach_queued` and writes `outreach_sent_at`. Replaces the need to run `python src/smartlead.py --push-leads` manually each day.
+
+### Triggers
+| Type | Details |
+|------|---------|
+| Schedule | `0 9 * * *` — 9:00 AM PHT daily |
+
+### Node Flow
+```
+Schedule Trigger
+  → Get Sheet Rows (Google Sheets — all rows)
+  → Filter and Build (Code — filter approved+blank outreach_sent_at, build leads array + rowNumbers)
+  → Push to Smartlead (HTTP POST /campaigns/3375376/leads)
+  → Expand Row Updates (Code — explode rowNumbers back into per-row items)
+  → Mark Outreach Queued (Google Sheets update — col O=outreach_queued, col Q=timestamp)
+```
+
+### Key Logic
+- Code node filters `status=approved` AND `outreach_sent_at` blank AND `email` present
+- If 0 approved leads: `Filter and Build` returns empty — downstream nodes do not execute
+- Smartlead payload: `{lead_list, settings: {ignore_global_block_list: false, ignore_unsubscribe_list: true}}`
+- Row updates match by `row_number` (n8n Google Sheets auto-field)
+- `continueOnFail: true` on Smartlead HTTP node — Sheet update runs even if Smartlead returns partial error
+
+### Outputs
+| Scenario | Action |
+|----------|--------|
+| Approved leads found | Pushed to Smartlead; Sheet rows set to outreach_queued + outreach_sent_at timestamp |
+| No approved leads | Workflow exits silently after Filter and Build (no items) |
+
+### Error Handling
+| Failure | Behaviour |
+|---------|-----------|
+| Smartlead API error | `continueOnFail` — Sheet still updated with outreach_queued status |
+| Google Sheets credential expired | Execution fails at Get Sheet Rows |
+| SMARTLEAD_API_KEY rotated | Redeploy script with updated key in local `.env` |
+
+### Activation Note
+Workflow is deployed **inactive**. Activate in the n8n UI on ~2026-06-12 when warm-up completes.
+
+---
+
+## Workflow 17 — Crave - Status Sync
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/uUGxA3GW1W0vq6el`
+**Deploy script:** `n8n-workflows/deploy-crave-status-sync.js`
+
+### Purpose
+Pulls all leads from Smartlead campaign 3375376 every morning. Matches them to Sheet rows by email. Updates status, replied_at, bounced, and opened_at for leads whose status has changed in Smartlead. Skips rows already at terminal status (replied, bounced). Replaces the need to run `python src/smartlead.py --sync-status` manually.
+
+### Triggers
+| Type | Details |
+|------|---------|
+| Schedule | `0 9 * * *` — 9:00 AM PHT daily |
+
+### Node Flow
+```
+Schedule Trigger
+  → Get Smartlead Leads (HTTP GET /campaigns/3375376/leads?limit=500)
+  → Aggregate Statuses (Code — collapse N lead items into 1 item: {statusMap: {email: lead_status}})
+  → Get Sheet Rows (Google Sheets — all rows)
+  → Build Updates (Code — join statusMap + sheet rows, emit one item per row needing update)
+  → Update Sheet Row (Google Sheets update — status, replied_at, bounced, opened_at)
+```
+
+### Key Logic
+- Smartlead returns array → n8n splits into N items (one per lead) → Aggregate collapses to 1 item
+- `Build Updates` references `Aggregate Statuses` node via `$('Aggregate Statuses').first().json.statusMap`
+- Status mapping: `REPLIED` → replied + replied_at; `BOUNCED/HARD_BOUNCED` → bounced + bounced=TRUE; `OPENED/CLICKED` → opened + opened_at (only if opened_at blank)
+- Terminal check: rows already at `replied` or `bounced` are skipped
+- If 0 rows need updating: `Build Updates` returns empty — Update Sheet Row does not execute
+
+### Outputs
+| Scenario | Action |
+|----------|--------|
+| Status changes found | Sheet rows updated with new status + timestamps |
+| No changes | Workflow exits silently after Build Updates (no items) |
+
+### Error Handling
+| Failure | Behaviour |
+|---------|-----------|
+| Smartlead API unreachable | `continueOnFail` — Aggregate receives empty; Build Updates exits with no items |
+| Google Sheets credential expired | Execution fails at Get Sheet Rows |
+| SMARTLEAD_API_KEY rotated | Redeploy script with updated key in local `.env` |
+
+### Activation Note
+Workflow is deployed **inactive**. Activate in the n8n UI on ~2026-06-12 when warm-up completes.
+
+---
+
 ## Handover Checklist
 
 - [ ] Access to `noatakhel.app.n8n.cloud`
@@ -1253,4 +1351,6 @@ Schedule → Fetch Kit Subscribers (last 7d, resource-claimed) → Group by Reso
 - [ ] Set `ANTHROPIC_API_KEY` in n8n Settings → Environment Variables before the Halo Intelligence Report workflow will run
 - [ ] Create the `Posts` tab in the Halo Intelligence Report Google Sheet (`1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4`) with the required columns before the first run
 - [ ] Verify Apify actor IDs (`clockworks~tiktok-scraper`, `apify~instagram-hashtag-scraper`) at apify.com/store before first deploy
+- [ ] Activate Crave - Daily Lead Push (workflow 16) and Crave - Status Sync (workflow 17) in n8n UI after warm-up completes (~2026-06-12) — both are deployed inactive
+- [ ] After deploying crave workflows, set the returned WORKFLOW_ID in `deploy-crave-lead-push.js` and `deploy-crave-status-sync.js` for future redeploys
 - [ ] Test by webhook after any workflow change
