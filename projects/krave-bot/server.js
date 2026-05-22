@@ -78,8 +78,13 @@ async function runAgent(userText, convKey) {
           break;
         } catch (e) {
           const isOverloaded = e.status === 529 || (e.message && e.message.includes('overloaded'));
+          const isRateLimit = e.status === 429;
           if (isOverloaded && attempt < 3) {
             await new Promise((r) => setTimeout(r, (attempt + 1) * 8000));
+            continue;
+          }
+          if (isRateLimit && attempt < 2) {
+            await new Promise((r) => setTimeout(r, 65000));
             continue;
           }
           throw e;
