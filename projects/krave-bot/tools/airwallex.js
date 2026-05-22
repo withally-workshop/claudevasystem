@@ -66,7 +66,20 @@ async function getInvoice({ invoice_id }) {
 }
 
 async function getBillingInvoice({ invoice_id }) {
-  return aw('GET', `/api/v1/invoices/${invoice_id}`);
+  const data = await aw('GET', `/api/v1/invoices/${invoice_id}`);
+  return {
+    id: data.id,
+    invoice_number: data.invoice_number,
+    status: data.status,
+    amount: data.amount,
+    currency: data.currency,
+    due_date: data.due_date,
+    hosted_invoice_url: data.hosted_invoice_url,
+    pdf_download_url: data.pdf_download_url || data.invoice_pdf || data.pdf_url || null,
+    _all_url_fields: Object.fromEntries(
+      Object.entries(data).filter(([k]) => k.includes('url') || k.includes('pdf') || k.includes('link'))
+    ),
+  };
 }
 
 async function createInvoice({ billing_customer_id, currency, days_until_due = 7, collection_method = 'CHARGE_ON_CHECKOUT', linked_payment_account_id, legal_entity_id, memo }) {
