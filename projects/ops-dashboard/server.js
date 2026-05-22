@@ -627,6 +627,53 @@ function computeClickUpStats(tasks) {
   };
 }
 
+const CRAVE_SHEET_ID = '1eLQrDP3IX9ec9dtFN0UyRdlTplzkLfRG9Asyqj1gLrI';
+const SMARTLEAD_CAMPAIGN_ID = 3375376;
+
+async function fetchSmartleadStats() {
+  const apiKey = process.env.SMARTLEAD_API_KEY;
+  if (!apiKey) return { ok: false, reason: 'SMARTLEAD_API_KEY not set' };
+  try {
+    const res = await get(`https://server.smartlead.ai/api/v1/campaigns/${SMARTLEAD_CAMPAIGN_ID}/analytics?api_key=${apiKey}`);
+    if (!res.ok) return { ok: false, reason: `Smartlead ${res.status}` };
+    const d = res.body;
+    const sent = d.sent_count || 0;
+    const opened = d.open_count || d.unique_open_count || 0;
+    const replied = d.reply_count || 0;
+    const bounced = d.bounce_count || 0;
+    return {
+      ok: true,
+      sent, opened, replied, bounced,
+      openRate: sent ? `${(opened / sent * 100).toFixed(1)}%` : '—',
+      replyRate: sent ? `${(replied / sent * 100).toFixed(1)}%` : '—',
+      bounceRate: sent ? `${(bounced / sent * 100).toFixed(1)}%` : '—',
+      warn: sent > 0 && (opened / sent) < 0.2,
+    };
+  } catch (e) { return { ok: false, reason: e.message }; }
+}
+
+async function fetchCreatorSheet() {
+  if (!hasServiceAccount()) return { ok: false, reason: 'No service account' };
+  try {
+    const token = await getServiceAccountToken();
+    const range = encodeURIComponent('Sheet1!A:P');
+    const res = await get(`https://sheets.googleapis.com/v4/spreadsheets/${CRAVE_SHEET_ID}/values/${range}`, { Authorization: `Bearer ${token}` });
+    if (!res.ok) return { ok: false, reason: `Sheets ${res.status}` };
+    const [, ...rows] = res.body.values || [];
+    const counts = { total: rows.length, new: 0, approved: 0, queued: 0, opened: 0, replied: 0, bounced: 0 };
+    rows.forEach((r) => {
+      const status = (r[14] || '').trim().toLowerCase();
+      if (status === 'new') counts.new++;
+      else if (status === 'approved') counts.approved++;
+      else if (status === 'outreach_queued') counts.queued++;
+      else if (status === 'opened') counts.opened++;
+      else if (status === 'replied') counts.replied++;
+      else if (status === 'bounced') counts.bounced++;
+    });
+    return { ok: true, ...counts };
+  } catch (e) { return { ok: false, reason: e.message }; }
+}
+
 async function gatherData(range = '7d', forceRefresh = false) {
   const days = RANGE_DAYS[range] || 7;
   const cached = cache[range];
@@ -635,12 +682,14 @@ async function gatherData(range = '7d', forceRefresh = false) {
   }
 
   const rangeMs = days * 86400000;
-  const [n8nRaw, sheetsRaw, paymentsRaw, draftsRaw, clickupRaw] = await Promise.all([
+  const [n8nRaw, sheetsRaw, paymentsRaw, draftsRaw, clickupRaw, smartleadRaw, creatorSheetRaw] = await Promise.all([
     fetchN8n(),
     fetchSheets(),
     fetchSlack(PAYMENTS_CHANNEL),
     fetchSlack(DRAFTS_CHANNEL),
     fetchClickUp(),
+    fetchSmartleadStats(),
+    fetchCreatorSheet(),
   ]);
 
   const trackerStats = sheetsRaw.ok ? computeTrackerStats(sheetsRaw.rows) : null;
@@ -671,6 +720,8 @@ async function gatherData(range = '7d', forceRefresh = false) {
     sparklines,
     insense,
     clickup,
+    smartlead: smartleadRaw.ok ? smartleadRaw : null,
+    creatorSheet: creatorSheetRaw.ok ? creatorSheetRaw : null,
     invoicesGid: sheetsRaw.gid || 0,
     slackPaymentsCount: paymentsRaw.ok ? paymentsRaw.messages.length : null,
     slackDraftsCount: draftsRaw.ok ? draftsRaw.messages.length : null,
@@ -1279,6 +1330,30 @@ function renderDashboard(d) {
       </table>
     </div>` : ''}
     ${d.insense.lastMessagedAt ? `<div class="card-sub" style="margin-top:8px">Last invite sent: ${new Date(d.insense.lastMessagedAt).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', hour12: false })} ICT</div>` : ''}
+  </div>` : ''}
+
+  ${(d.smartlead || d.creatorSheet) ? `
+  <div class="section">
+    <div class="section-title">TikTok UGC Outreach — Crave</div>
+    <div class="cards">
+      ${d.creatorSheet ? scorecard('Total Scraped', d.creatorSheet.total) : ''}
+      ${d.creatorSheet ? scorecard('Approved', d.creatorSheet.approved, 'Pending push') : ''}
+      ${d.creatorSheet ? scorecard('Queued', d.creatorSheet.queued, 'Sent to Smartlead') : ''}
+      ${d.creatorSheet ? scorecard('Replied', d.creatorSheet.replied) : ''}
+      ${d.creatorSheet ? scorecard('Bounced', d.creatorSheet.bounced) : ''}
+    </div>
+    ${d.smartlead ? `
+    <div class="cards" style="margin-top:12px">
+      ${scorecard('Emails Sent', d.smartlead.sent)}
+      ${scorecard('Open Rate', d.smartlead.openRate, d.smartlead.warn ? '⚠ Below 20%' : 'Healthy')}
+      ${scorecard('Reply Rate', d.smartlead.replyRate)}
+      ${scorecard('Bounce Rate', d.smartlead.bounceRate)}
+    </div>` : ''}
+    <div class="card-sub" style="margin-top:8px">
+      <a href="https://docs.google.com/spreadsheets/d/${CRAVE_SHEET_ID}" target="_blank" rel="noopener">Creator Sheet</a>
+      &nbsp;·&nbsp;
+      <a href="https://app.smartlead.ai/app/email-campaigns/${SMARTLEAD_CAMPAIGN_ID}" target="_blank" rel="noopener">Smartlead Campaign</a>
+    </div>
   </div>` : ''}
 
   ${d.clickup ? (() => {
