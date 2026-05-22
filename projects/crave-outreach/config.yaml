@@ -13,6 +13,25 @@ apify:
   target_region: "US"
   max_results_per_run: 500
 
+regions:
+  US:
+    proxy_country: "US"
+    search_terms:
+      - "UGC creator"
+      - "content creator"
+      - "UGC"
+    min_followers: 1000
+    max_followers: 500000
+  NL:
+    proxy_country: "NL"
+    search_terms:
+      - "UGC creator"
+      - "content creator"
+      - "ugc nederland"
+      - "ugc maker"
+    min_followers: 500
+    max_followers: 500000
+
 enrichment:
   model: "claude-haiku-4-5-20251001"
   cache_path: "data/cache/enrichment_cache.json"

@@ -37,6 +37,19 @@ US_SIGNALS = {
     "new orleans", "cleveland", "tampa", "pittsburgh", "cincinnati",
 }
 
+NL_SIGNALS = {
+    "netherlands", "nederland", "holland", "nl",
+    # provinces
+    "noord-holland", "zuid-holland", "utrecht", "gelderland", "overijssel",
+    "friesland", "groningen", "drenthe", "zeeland", "limburg", "flevoland",
+    "noord-brabant",
+    # major cities
+    "amsterdam", "rotterdam", "den haag", "the hague", "eindhoven",
+    "groningen", "tilburg", "almere", "breda", "nijmegen", "enschede",
+    "haarlem", "arnhem", "zaanstad", "amersfoort", "apeldoorn",
+    "s-hertogenbosch", "maastricht", "leiden", "dordrecht", "zoetermeer",
+}
+
 # Pattern: "City, ST" — two uppercase letters after a comma (US city/state format)
 US_STATE_ABBR_RE = re.compile(r",\s*[A-Z]{2}\b")
 
@@ -67,7 +80,7 @@ def _extract_link_in_bio(bio: str) -> str | None:
 
 
 def _region_signal(profile: dict) -> str | None:
-    """Best-effort US detection from location fields + bio text."""
+    """Best-effort region detection (US or NL) from location fields + bio text."""
     location = (profile.get("location") or profile.get("region") or "").lower()
     bio = (profile.get("signature") or profile.get("bio") or "").lower()
     combined = f"{location} {bio}"
@@ -77,6 +90,9 @@ def _region_signal(profile: dict) -> str | None:
     # Catch "City, ST" abbreviation pattern (e.g. "Denver, CO", "Austin, TX")
     if US_STATE_ABBR_RE.search(profile.get("signature") or profile.get("bio") or ""):
         return "US"
+    for sig in NL_SIGNALS:
+        if sig in combined:
+            return "NL"
     return None
 
 
@@ -138,10 +154,8 @@ def _normalise_profile(raw: dict, actor_id: str) -> dict:
     }
 
 
-def _build_run_input(actor_id: str, search_term: str, max_results: int, cfg: dict) -> dict:
+def _build_run_input(actor_id: str, search_term: str, max_results: int, cfg: dict, proxy_country: str = "US") -> dict:
     """Build actor-specific run input. Adapt as schemas differ."""
-    apify_cfg = cfg.get("apify", {})
-
     if "clockworks" in actor_id:
         return {
             "searchQueries": [search_term],
@@ -150,14 +164,14 @@ def _build_run_input(actor_id: str, search_term: str, max_results: int, cfg: dic
             "shouldDownloadVideos": False,
             "shouldDownloadCovers": False,
             "shouldDownloadAvatars": False,
-            "proxyCountryCode": "US",            # US residential proxy for US creator results
+            "proxyCountryCode": proxy_country,
             "videoSearchSorting": "MOST_RELEVANT",
         }
     elif "apidojo" in actor_id:
         return {
             "keywords": [search_term],
             "maxItems": max_results,
-            "proxyCountryCode": "US",
+            "proxyCountryCode": proxy_country,
         }
     else:
         return {
@@ -226,13 +240,14 @@ def run_actor(
     max_results: int,
     cfg: dict,
     token: str | None = None,
+    proxy_country: str = "US",
 ) -> list[dict]:
     """
     Run an Apify actor via REST API and return a list of normalised profile dicts.
     Uses requests directly to avoid apify-client SDK versioning issues.
     """
     token = token or os.environ["APIFY_TOKEN"]
-    run_input = _build_run_input(actor_id, search_term, max_results, cfg)
+    run_input = _build_run_input(actor_id, search_term, max_results, cfg, proxy_country=proxy_country)
 
     actor_slug = actor_id.replace("/", "~")
     print(f"[scrape] Starting actor {actor_id!r} | search={search_term!r} | max={max_results}")

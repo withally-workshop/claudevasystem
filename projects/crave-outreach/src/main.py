@@ -40,6 +40,12 @@ def parse_args():
         help="Skip scrape/enrich; only send outreach to approved Sheet rows",
     )
     p.add_argument("--max-sends", type=int, default=100, help="Max emails to send per run (outreach mode)")
+    p.add_argument(
+        "--region",
+        default="US",
+        choices=["US", "NL"],
+        help="Target region — sets proxy country and follower floor (default: US)",
+    )
     return p.parse_args()
 
 
@@ -67,15 +73,25 @@ def main():
         )
         sys.exit(1)
 
+    region = args.region.upper()
+    region_cfg = cfg.get("regions", {}).get(region, {})
+    proxy_country = region_cfg.get("proxy_country", region)
+    # Override follower bounds from region config if present
+    if region_cfg.get("min_followers"):
+        cfg.setdefault("apify", {})["min_followers"] = region_cfg["min_followers"]
+    if region_cfg.get("max_followers"):
+        cfg.setdefault("apify", {})["max_followers"] = region_cfg["max_followers"]
+
     print(f"\n[main] === Crave Outreach Pipeline ===")
     print(f"[main] search_term  = {args.search_term!r}")
     print(f"[main] max_results  = {args.max_results}")
     print(f"[main] actor_id     = {actor_id}")
+    print(f"[main] region       = {region} (proxy: {proxy_country})")
     print(f"[main] dry_run      = {args.dry_run}")
     print()
 
     # Step 1: Scrape
-    raw_profiles = run_actor(actor_id, args.search_term, args.max_results, cfg)
+    raw_profiles = run_actor(actor_id, args.search_term, args.max_results, cfg, proxy_country=proxy_country)
     if not raw_profiles:
         print("[main] No profiles returned. Exiting.")
         sys.exit(0)

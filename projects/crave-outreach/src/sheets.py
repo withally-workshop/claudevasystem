@@ -32,6 +32,7 @@ COLUMNS = [
     "outreach_sent_at",
     "replied_at",
     "bounced",
+    "opened_at",
 ]
 
 
@@ -73,6 +74,7 @@ def _profile_to_row(profile: dict, status_default: str = "new") -> list:
         "",  # outreach_sent_at
         "",  # replied_at
         "",  # bounced
+        "",  # opened_at
     ]
 
 
