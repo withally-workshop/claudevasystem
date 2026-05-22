@@ -66,6 +66,28 @@ async function getRows({ sheet = 'Invoices', range = 'A:Z' }) {
   return { rows: rows.map((r) => Object.fromEntries((headers || []).map((h, i) => [h, r[i] || '']))) };
 }
 
+async function appendRow({ sheet = 'Invoices', values }) {
+  const token = await getToken();
+  const r = encodeURIComponent(`${sheet}!A:A`);
+  const buf = Buffer.from(JSON.stringify({ values: [values], majorDimension: 'ROWS' }));
+  const res = await new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'sheets.googleapis.com',
+      path: `/v4/spreadsheets/${SHEET_ID}/values/${r}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'Content-Length': buf.length },
+    }, (res) => {
+      let body = '';
+      res.on('data', (c) => { body += c; });
+      res.on('end', () => { try { resolve({ ok: res.statusCode < 400, body: JSON.parse(body) }); } catch { resolve({ ok: false }); } });
+    });
+    req.on('error', reject);
+    req.write(buf);
+    req.end();
+  });
+  return res.ok ? { ok: true, updated: res.body.updates } : { error: 'Failed to append row' };
+}
+
 async function updateRow({ sheet = 'Invoices', range, values }) {
   const token = await getToken();
   const r = encodeURIComponent(`${sheet}!${range}`);
@@ -100,6 +122,18 @@ module.exports = {
       },
     },
     {
+      name: 'sheets_append_row',
+      description: 'Append a new row to the Krave invoice tracker. Use after creating an Airwallex invoice to log it in the tracker.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          sheet: { type: 'string', description: 'Sheet tab name (default: Invoices)' },
+          values: { type: 'array', description: 'Ordered array of cell values matching tracker columns: [Date Created, Client Name, Email Address, Project Description, Invoice #, Amount, Currency, Due Date, Payment Status, Invoice URL, Requested By]', items: { type: 'string' } },
+        },
+        required: ['values'],
+      },
+    },
+    {
       name: 'sheets_update_row',
       description: 'Update a cell range in the Krave invoice tracker Google Sheet.',
       input_schema: {
@@ -113,5 +147,5 @@ module.exports = {
       },
     },
   ],
-  handlers: { sheets_get_rows: getRows, sheets_update_row: updateRow },
+  handlers: { sheets_get_rows: getRows, sheets_append_row: appendRow, sheets_update_row: updateRow },
 };

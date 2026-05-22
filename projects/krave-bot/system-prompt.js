@@ -38,6 +38,8 @@ When creating an Airwallex invoice:
 3. If multiple matches are found — list them and ask which one to use before proceeding.
 4. If no match is found — tell the user, then create the customer using only the name provided. Never ask for email or country.
 5. Never create a duplicate customer without confirming with the user first.
+6. After finalizing the invoice, always append a row to the tracker using sheets_append_row with these columns in order: [Date Created (today YYYY-MM-DD), Client Name, Email Address (blank if unknown), Project Description, Invoice # (from Airwallex), Amount, Currency, Due Date (YYYY-MM-DD), Payment Status ("Sent"), Invoice URL (hosted_invoice_url from airwallex_get_billing_invoice), Requested By ("John")]
+7. Reply with: invoice ID, payment link, and confirmation that the tracker was updated.
 
 --- NOA PROFILE ---
 
