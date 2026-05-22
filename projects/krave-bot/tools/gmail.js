@@ -155,11 +155,61 @@ async function getMessage({ account = 'noa', message_id }) {
   };
 }
 
-async function sendEmail({ account = 'noa', to, subject, body, thread_id }) {
+function downloadUrl(url) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const mod = parsed.protocol === 'https:' ? https : require('http');
+    const req = mod.get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return downloadUrl(res.headers.location).then(resolve).catch(reject);
+      }
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ data: Buffer.concat(chunks), contentType: res.headers['content-type'] || 'application/octet-stream' }));
+    });
+    req.on('error', reject);
+    req.setTimeout(20000, () => req.destroy(new Error('timeout')));
+  });
+}
+
+async function sendEmail({ account = 'noa', to, cc, subject, body, thread_id, attachment_url, attachment_filename }) {
   const email = account === 'john' ? 'john@kravemedia.co' : 'noa@kravemedia.co';
   const token = await getToken(email);
-  const mime = [`From: ${email}`, `To: ${to}`, `Subject: ${subject}`, 'Content-Type: text/plain; charset=UTF-8', '', body].join('\r\n');
-  const raw = Buffer.from(mime).toString('base64url');
+
+  let raw;
+  if (attachment_url) {
+    const { data, contentType } = await downloadUrl(attachment_url);
+    const boundary = `boundary_${Date.now()}`;
+    const parts = [
+      `From: ${email}`,
+      `To: ${to}`,
+      ...(cc ? [`Cc: ${cc}`] : []),
+      `Subject: ${subject}`,
+      'MIME-Version: 1.0',
+      `Content-Type: multipart/mixed; boundary="${boundary}"`,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/plain; charset=UTF-8',
+      '',
+      body,
+      '',
+      `--${boundary}`,
+      `Content-Type: ${contentType}`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${attachment_filename || 'invoice.pdf'}"`,
+      '',
+      data.toString('base64'),
+      '',
+      `--${boundary}--`,
+    ];
+    raw = Buffer.from(parts.join('\r\n')).toString('base64url');
+  } else {
+    const headers = [`From: ${email}`, `To: ${to}`];
+    if (cc) headers.push(`Cc: ${cc}`);
+    headers.push(`Subject: ${subject}`, 'Content-Type: text/plain; charset=UTF-8', '', body);
+    raw = Buffer.from(headers.join('\r\n')).toString('base64url');
+  }
+
   const requestBody = { raw };
   if (thread_id) requestBody.threadId = thread_id;
   const res = await gmailPost(
@@ -203,15 +253,18 @@ module.exports = {
     },
     {
       name: 'gmail_send',
-      description: 'Send an email from Noa or John\'s Gmail account.',
+      description: 'Send an email from Noa or John\'s Gmail account. Supports CC and PDF attachments via URL.',
       input_schema: {
         type: 'object',
         properties: {
           account: { type: 'string', description: '"noa" or "john" (default: noa)' },
-          to: { type: 'string', description: 'Recipient email address' },
+          to: { type: 'string', description: 'Recipient email address(es), comma-separated' },
+          cc: { type: 'string', description: 'CC email address(es), comma-separated (optional)' },
           subject: { type: 'string', description: 'Email subject' },
           body: { type: 'string', description: 'Plain text email body' },
           thread_id: { type: 'string', description: 'Thread ID to reply into (optional)' },
+          attachment_url: { type: 'string', description: 'URL to download and attach as a file (e.g. Airwallex PDF URL)' },
+          attachment_filename: { type: 'string', description: 'Filename for the attachment (e.g. INV-00012.pdf)' },
         },
         required: ['to', 'subject', 'body'],
       },
