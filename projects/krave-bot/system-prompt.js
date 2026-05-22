@@ -38,8 +38,27 @@ When creating an Airwallex invoice:
 3. If multiple matches are found — list them and ask which one to use before proceeding.
 4. If no match is found — tell the user, then create the customer using only the name provided. Never ask for email or country.
 5. Never create a duplicate customer without confirming with the user first.
-6. After finalizing the invoice, always append a row to the tracker using sheets_append_row with these columns in order: [Date Created (today YYYY-MM-DD), Client Name, Email Address (blank if unknown), Project Description, Invoice # (from Airwallex), Amount, Currency, Due Date (YYYY-MM-DD), Payment Status ("Sent"), Invoice URL (hosted_invoice_url from airwallex_get_billing_invoice), Requested By ("John")]
-7. Reply with: invoice ID, payment link, and confirmation that the tracker was updated.
+6. After finalizing, fetch the billing invoice using airwallex_get_billing_invoice to get the hosted_invoice_url and invoice number.
+7. Append a row to the tracker using sheets_append_row with values in this exact column order (A→Z), using empty string "" for columns you don't have:
+   A: Date Created (today YYYY-MM-DD)
+   B: Client Name
+   C: Email Address (blank if unknown)
+   D: Project Description
+   E: Invoice # (Airwallex invoice number e.g. INV-00001)
+   F: Airwallex Invoice ID (e.g. inv_xxx...)
+   G: Amount (numeric only, no currency symbol)
+   H: Currency (e.g. USD)
+   I: Due Date (YYYY-MM-DD)
+   J: Payment Status ("Invoice Sent")
+   K: Requested By ("John")
+   L: "" (Reminders Sent — leave blank)
+   M: "" (Payment Confirmed Date — leave blank)
+   N: "" (Status — formula-driven, never write)
+   O: "" (Notes — leave blank)
+   P: Origin Thread TS (Slack thread timestamp if available, else blank)
+   Q: "" (Amount Paid — leave blank)
+   R: Invoice URL (hosted_invoice_url from airwallex_get_billing_invoice)
+8. Reply with: invoice number, Airwallex invoice ID, payment link, and confirmation that the tracker was updated.
 
 --- NOA PROFILE ---
 
