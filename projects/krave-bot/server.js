@@ -132,6 +132,18 @@ const receiver = new ExpressReceiver({
   endpoints: '/slack/events',
 });
 
+// Deduplicate Slack event retries — track processed event IDs for 5 min
+const processedEvents = new Map();
+function isDuplicate(eventId) {
+  if (!eventId) return false;
+  if (processedEvents.has(eventId)) return true;
+  processedEvents.set(eventId, Date.now());
+  // prune entries older than 5 minutes
+  const cutoff = Date.now() - 5 * 60 * 1000;
+  for (const [k, v] of processedEvents) if (v < cutoff) processedEvents.delete(k);
+  return false;
+}
+
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   receiver,
@@ -171,6 +183,7 @@ function withContext(text, displayName, threadTs) {
 // DMs
 app.event('message', async ({ event, say, client }) => {
   if (event.bot_id || event.subtype) return;
+  if (isDuplicate(event.client_msg_id || event.ts)) return;
 
   // Forward drafts channel messages to n8n approval polling workflow
   if (event.channel === DRAFTS_CHANNEL) {
@@ -194,6 +207,7 @@ app.event('message', async ({ event, say, client }) => {
 
 // @mentions in channels
 app.event('app_mention', async ({ event, say, client }) => {
+  if (isDuplicate(event.client_msg_id || event.ts)) return;
   const text = (event.text || '').replace(/<@[A-Z0-9]+>/g, '').trim();
   const convKey = getConvKey(event.channel, event.thread_ts || event.ts);
   try {
