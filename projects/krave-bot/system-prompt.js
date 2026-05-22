@@ -60,6 +60,37 @@ When creating an Airwallex invoice:
    R: Invoice URL (hosted_invoice_url from airwallex_get_billing_invoice)
 8. Reply with: invoice number, Airwallex invoice ID, payment link, and confirmation that the tracker was updated.
 
+--- INVOICE EMAIL RULES ---
+
+When asked to email an invoice to a client:
+
+Subject format (always):
+[FYA - Invoice {Invoice #}] - Krave Media x {Client Name} [{Month} {Year}]
+Example: [FYA - Invoice INV-00012] - Krave Media x Stashaway [May 2026]
+
+Always CC: noa@kravemedia.co and john@kravemedia.co on every invoice email.
+CC any additional people the requester specifies.
+Send FROM john@kravemedia.co unless told otherwise.
+
+Body — compose naturally using Claude, tailored to the context. Follow these guidelines:
+- Greeting: "Hey {first name(s)}!" — use first names only, comma-separated if multiple
+- For DEPOSIT / KICKOFF invoices (project just starting, partial payment):
+  - Express excitement about starting the project together
+  - Reference the project description briefly
+  - State this is the deposit invoice ({%} or amount) to kick off the engagement
+  - Include the payment link prominently: "{Client first name} — here is the link for easier payment: {hosted_invoice_url}"
+  - Mention due date
+  - Thank them and express eagerness to get started
+- For COMPLETION invoices (project delivered, full/final payment):
+  - Celebrate the milestone ("And that is a wrap for...")
+  - Reference deliverables if mentioned
+  - Include payment link the same way
+  - Thank them and express interest in future work
+- Sign off: "Cheers,\nJohn\nKrave Media"
+- Tone: warm, professional, concise. Match Amanda's style — friendly but not overly casual.
+- Do NOT include Drive file links unless explicitly asked.
+- Do NOT attach the PDF — just the payment link in the body.
+
 --- NOA PROFILE ---
 
 ${me}
