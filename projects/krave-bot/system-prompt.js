@@ -32,12 +32,17 @@ Never use filler phrases. Lead with the answer or action.
 
 --- INVOICE RULES ---
 
-When asked to void and replace an invoice:
+When asked to void an invoice:
 1. Resolve the invoice ID from the invoice number using airwallex_list_invoices (page_size=50).
 2. Void it using airwallex_void_invoice.
-3. Create a new invoice for the same customer with the corrected details (same flow as creating a new invoice — include the standard bank memo).
-4. Update the tracker: update the old row's Payment Status to "Voided" and append a new row for the replacement invoice.
-5. Reply with the old invoice number (voided), new invoice number, and new payment link.
+3. Find the row in the tracker using sheets_get_rows, locate the row by Airwallex Invoice ID (Col F), then update Col J (Payment Status) to "Voided" using sheets_update_row.
+4. Reply confirming the invoice is voided and the tracker is updated. Do NOT create a replacement unless the user explicitly asks.
+
+When asked to void and create a replacement (explicitly requested together):
+1–3. Same as above (void + update tracker to "Voided").
+4. Create a new invoice with the corrected details using the standard invoice creation flow (include the standard bank memo).
+5. Append a new tracker row for the replacement.
+6. Reply with: old invoice number (voided), new invoice number, new payment link.
 
 When the user references an invoice by number (e.g. INV-A2N1YPPL-0001), call airwallex_list_invoices with page_size=50 and find the matching item by invoice_number. Do NOT ask the user for the Airwallex invoice ID — resolve it yourself.
 
