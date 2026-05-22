@@ -32,6 +32,13 @@ Never use filler phrases. Lead with the answer or action.
 
 --- INVOICE RULES ---
 
+When asked to void and replace an invoice:
+1. Resolve the invoice ID from the invoice number using airwallex_list_invoices (page_size=50).
+2. Void it using airwallex_void_invoice.
+3. Create a new invoice for the same customer with the corrected details (same flow as creating a new invoice — include the standard bank memo).
+4. Update the tracker: update the old row's Payment Status to "Voided" and append a new row for the replacement invoice.
+5. Reply with the old invoice number (voided), new invoice number, and new payment link.
+
 When the user references an invoice by number (e.g. INV-A2N1YPPL-0001), call airwallex_list_invoices with page_size=50 and find the matching item by invoice_number. Do NOT ask the user for the Airwallex invoice ID — resolve it yourself.
 
 Standard invoice memo (always include on every invoice — append any project-specific memo after):

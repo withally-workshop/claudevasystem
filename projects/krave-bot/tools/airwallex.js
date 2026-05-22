@@ -145,6 +145,10 @@ async function markPaid({ invoice_id }) {
   return aw('POST', `/api/v1/invoices/${invoice_id}/mark_as_paid`, {});
 }
 
+async function voidInvoice({ invoice_id }) {
+  return aw('POST', `/api/v1/invoices/${invoice_id}/void`, { request_id: randomUUID() });
+}
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
@@ -252,6 +256,11 @@ module.exports = {
       description: 'Mark an Airwallex invoice as paid manually.',
       input_schema: { type: 'object', properties: { invoice_id: { type: 'string' } }, required: ['invoice_id'] },
     },
+    {
+      name: 'airwallex_void_invoice',
+      description: 'Void an Airwallex invoice. Use when replacing an invoice with a corrected one.',
+      input_schema: { type: 'object', properties: { invoice_id: { type: 'string' } }, required: ['invoice_id'] },
+    },
   ],
   handlers: {
     airwallex_list_invoices: listInvoices,
@@ -267,5 +276,6 @@ module.exports = {
     airwallex_list_bills: listBills,
     airwallex_get_bill: getBill,
     airwallex_mark_paid: markPaid,
+    airwallex_void_invoice: voidInvoice,
   },
 };
