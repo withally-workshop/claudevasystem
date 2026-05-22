@@ -65,13 +65,26 @@ async function runAgent(userText, convKey) {
   try {
     // agentic loop — keep calling until no more tool_use
     while (true) {
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
-        system: SYSTEM_PROMPT,
-        tools: ALL_TOOLS,
-        messages,
-      });
+      let response;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          response = await anthropic.messages.create({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 4096,
+            system: SYSTEM_PROMPT,
+            tools: ALL_TOOLS,
+            messages,
+          });
+          break;
+        } catch (e) {
+          const isOverloaded = e.status === 529 || (e.message && e.message.includes('overloaded'));
+          if (isOverloaded && attempt < 3) {
+            await new Promise((r) => setTimeout(r, (attempt + 1) * 8000));
+            continue;
+          }
+          throw e;
+        }
+      }
 
       messages.push({ role: 'assistant', content: response.content });
 
