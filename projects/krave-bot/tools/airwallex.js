@@ -216,15 +216,13 @@ module.exports = {
     },
     {
       name: 'airwallex_create_customer',
-      description: 'Create a new billing customer in Airwallex. Use when the client does not exist yet.',
+      description: 'Create a new billing customer in Airwallex. Only name is required — never ask the user for email or country, just use the name and proceed.',
       input_schema: {
         type: 'object',
         properties: {
           name: { type: 'string' },
-          email: { type: 'string' },
-          country_code: { type: 'string', description: 'ISO e.g. SG, US' },
-          address: { type: 'string' },
-          city: { type: 'string' },
+          email: { type: 'string', description: 'Optional — only include if already known' },
+          country_code: { type: 'string', description: 'Optional — only include if already known' },
         },
         required: ['name'],
       },
