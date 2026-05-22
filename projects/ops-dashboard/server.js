@@ -278,13 +278,16 @@ function computeTrackerStats(rows) {
       stats.partialPayment++;
     } else if (payStatus.startsWith('Draft')) {
       stats.draftPendingJohn++;
-    } else if (payStatus === 'Sent' || payStatus === 'Awaiting Payment' || payStatus === 'Invoice Sent') {
+    } else if (payStatus === 'Sent' || payStatus === 'Awaiting Payment' || payStatus === 'Invoice Sent'
+        || payStatus === 'Overdue' || payStatus.startsWith('Late Fee Applied')) {
       stats.sentAwaiting++;
       if (amount > 0) {
         stats.totalAR[currency] = (stats.totalAR[currency] || 0) + amount;
       }
-      // Check overdue / due today
-      if (dueStr) {
+      // Statuses the n8n automation explicitly marks as overdue
+      if (payStatus === 'Overdue' || payStatus.startsWith('Late Fee Applied')) {
+        stats.overdue++;
+      } else if (dueStr) {
         const due = new Date(dueStr);
         due.setHours(0, 0, 0, 0);
         if (!isNaN(due)) {
@@ -417,7 +420,7 @@ function computeAgingBuckets(rows) {
   ];
   for (const row of rows) {
     const payStatus = (row['Payment Status'] || '').trim();
-    if (!['Sent', 'Awaiting Payment', 'Invoice Sent', 'Partial Payment'].includes(payStatus)) continue;
+    if (!['Sent', 'Awaiting Payment', 'Invoice Sent', 'Partial Payment', 'Overdue'].includes(payStatus) && !payStatus.startsWith('Late Fee Applied')) continue;
     const amount = parseFloat((row['Amount'] || '0').replace(/[^0-9.]/g, '')) || 0;
     const paid = parseFloat((row['Amount Paid'] || '0').replace(/[^0-9.]/g, '')) || 0;
     const remaining = Math.max(0, amount - paid);
@@ -450,6 +453,7 @@ function computeStatusDonut(rows) {
     else if (payStatus === 'Partial Payment') counts.Partial++;
     else if (payStatus.startsWith('Draft')) counts.Draft++;
     else if (payStatus === 'Payment Complete' || payStatus === 'Paid') counts.Paid++;
+    else if (payStatus === 'Overdue' || payStatus.startsWith('Late Fee Applied')) counts.Overdue++;
     else if (['Sent', 'Awaiting Payment', 'Invoice Sent'].includes(payStatus)) {
       const dueStr = (row['Due Date'] || '').trim();
       const due = dueStr ? new Date(dueStr) : null;
@@ -1285,7 +1289,6 @@ function renderDashboard(d) {
       <input type="hidden" name="range" value="${range}">
       <button class="btn-ghost" name="refresh" value="1" type="submit">↻</button>
     </form>
-    <a class="tracker-btn" href="${trackerUrl}" target="_blank" rel="noopener">Tracker</a>
   </div>
 </div>
 
