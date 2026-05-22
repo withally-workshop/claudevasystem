@@ -402,10 +402,24 @@ const collectedPrices = allPriceResults.map((item, i) => ({
 return [{ json: { ...ctx, airwallex_customer_id: customerId, collected_prices: collectedPrices } }];
 `.trim();
 
+const STANDARD_MEMO = `Kindly make payment by the due date to
+Bank Name: DBS Bank Ltd
+Bank Address: DBS Asia Central, Marina Bay Financial Centre Tower 3, 12 Marina Boulevard, Singapore 018982
+Account Name: Eclipse Ventures Pte Ltd
+Account Number: 8853795725
+BIC/SWIFT: DBSSSGSG
+or by paying via the invoice link directly.
+
+Please note that a US$200 per month late fee applies to invoices not paid on time.`;
+
 const PREPARE_INVOICE_CODE = `
 const ctx = $('Merge Auth Token').item.json;
 const customerId = $json.airwallex_customer_id || ctx.airwallex_customer_id || '';
 const collectedPrices = $json.collected_prices || [];
+
+const STANDARD_MEMO = ${JSON.stringify(STANDARD_MEMO)};
+const projectMemo = (ctx.memo || '').trim();
+const fullMemo = projectMemo ? STANDARD_MEMO + '\\n\\n' + projectMemo : STANDARD_MEMO;
 
 return {
   json: {
@@ -418,7 +432,7 @@ return {
       collection_method: 'CHARGE_ON_CHECKOUT',
       linked_payment_account_id: 'acct_dcI6a3RSMbeCKZy9X-v7Mg',
       days_until_due: ctx.days_until_due,
-      memo: ctx.memo || '',
+      memo: fullMemo,
       request_id: ctx.request_id,
     }
   }
