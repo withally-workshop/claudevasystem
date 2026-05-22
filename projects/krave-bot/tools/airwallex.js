@@ -76,9 +76,6 @@ async function getBillingInvoice({ invoice_id }) {
     due_date: data.due_date,
     hosted_invoice_url: data.hosted_invoice_url,
     pdf_download_url: data.pdf_download_url || data.invoice_pdf || data.pdf_url || null,
-    _all_url_fields: Object.fromEntries(
-      Object.entries(data).filter(([k]) => k.includes('url') || k.includes('pdf') || k.includes('link'))
-    ),
   };
 }
 
