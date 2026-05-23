@@ -52,7 +52,7 @@ const INSTAGRAM_APIFY_BODY = JSON.stringify({
 // Reads raw posts from the two upstream HTTP Request nodes (Fetch TikTok,
 // Fetch Instagram). No HTTP calls here — pure scoring logic.
 const SCORE_AND_RANK_CODE = `
-const MIN_LIKES = 5000;
+const MIN_LIKES = 500;
 const TOP_N = 10;
 const MAX_PER_CREATOR = 2;
 
@@ -110,9 +110,6 @@ const CATEGORY_HASHTAGS = {
   wellness: ['cleanbeauty', 'wellnesstok', 'skinconsciousliving', 'nontoxicbeauty', 'rituals'],
 };
 
-const cutoffDate = new Date();
-cutoffDate.setDate(cutoffDate.getDate() - 14);
-
 // Handle both n8n array-as-single-item and array-split-into-items behaviours
 function extractPosts(nodeItems) {
   if (!nodeItems || nodeItems.length === 0) return [];
@@ -143,13 +140,14 @@ function normalizePost(raw, platform) {
     text: raw.text || raw.caption || '',
     hashtags,
     fullText,
-    views: raw.playCount || raw.videoPlayCount || raw.video_view_count || raw.viewCount || 0,
+    views: raw.playCount || raw.videoPlayCount || raw.video_view_count || raw.videoViewCount || raw.viewCount || 0,
     likes: raw.diggCount || raw.likesCount || raw.edge_media_preview_like?.count || raw.likes || 0,
-    comments: raw.commentCount || raw.commentsCount || raw.edge_media_to_comment?.count || raw.comments || 0,
+    comments: raw.commentCount || raw.commentsCount || raw.edge_media_to_comment?.count || raw.commentsCount || raw.comments || 0,
     saves: raw.collectCount || raw.savedCount || raw.bookmarkCount || 0,
     shares: raw.shareCount || raw.shares || 0,
     isVideo: platform === 'tiktok' ? true :
-      !!(raw.is_video || raw.mediaType === 'VIDEO' || raw.__typename === 'GraphVideo'),
+      !!(raw.is_video || raw.mediaType === 'VIDEO' || raw.__typename === 'GraphVideo' ||
+         raw.type === 'Video' || raw.type === 'Reel' || raw.productType === 'clips'),
   };
 }
 
@@ -199,12 +197,7 @@ function scorePost(post, maxViews) {
 function filterAndRank(rawPosts, platform) {
   const normalized = rawPosts.map(p => normalizePost(p, platform));
   const filtered = normalized.filter(post => {
-    if (!post.isVideo && platform === 'instagram') return false;
-    if (post.likes < 5000) return false;
-    if (post.createdAt) {
-      const ts = typeof post.createdAt === 'number' ? post.createdAt * 1000 : Date.parse(post.createdAt);
-      if (!isNaN(ts) && new Date(ts) < cutoffDate) return false;
-    }
+    if (post.likes < MIN_LIKES && post.comments < 50) return false;
     return true;
   });
   const maxViews = Math.max(...filtered.map(p => p.views), 1);
@@ -460,7 +453,7 @@ const workflow = {
       continueOnFail: true,
       parameters: {
         method: 'POST',
-        url: `https://api.apify.com/v2/acts/${TIKTOK_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_KEY}&timeout=300&memory=1024`,
+        url: `https://api.apify.com/v2/acts/${TIKTOK_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_KEY}&timeout=300&memory=1024&limit=50`,
         sendBody: true,
         specifyBody: 'json',
         jsonBody: TIKTOK_APIFY_BODY,
@@ -478,7 +471,7 @@ const workflow = {
       continueOnFail: true,
       parameters: {
         method: 'POST',
-        url: `https://api.apify.com/v2/acts/${INSTAGRAM_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_KEY}&timeout=300&memory=512`,
+        url: `https://api.apify.com/v2/acts/${INSTAGRAM_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_KEY}&timeout=300&memory=512&limit=50`,
         sendBody: true,
         specifyBody: 'json',
         jsonBody: INSTAGRAM_APIFY_BODY,
