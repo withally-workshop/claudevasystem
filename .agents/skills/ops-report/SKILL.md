@@ -1,4 +1,4 @@
----
+﻿---
 name: ops-report
 description: Use when Codex needs to generate a live Krave operations report or dashboard from n8n executions, the Client Invoice Tracker, and Slack context. Triggers include "hey report", "ops report", "daily report", "weekly report", "dashboard report", "what ran today", "how many invoices", "how many reminders", "payment sent", "payments received", "execution report", or requests for the current master tracker state.
 metadata:
@@ -116,7 +116,7 @@ Use Slack for narrative context and audit signals, not as the only metric source
 Read:
 
 - `#payments-invoices-updates` (`C09HN2EBPR7`): invoice requests, draft/finalization notices, payment confirmations, overdue alerts.
-- `#airwallexdrafts` (`C0AQZGJDR38`): EOD, SOD, inbox triage, John approvals, workflow failure alerts.
+- `#ops-command` (`C0AQZGJDR38`): EOD, SOD, inbox triage, John approvals, workflow failure alerts.
 
 Filter messages to the requested date range. Include relevant thread context when an action item depends on replies.
 

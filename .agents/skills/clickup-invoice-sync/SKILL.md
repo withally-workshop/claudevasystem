@@ -1,4 +1,4 @@
----
+﻿---
 name: clickup-invoice-sync
 description: Use when asked about ClickUp invoice status sync, why a UGC task didn't move to collections or payment complete, how to set up or troubleshoot the ClickUp sync, or when John needs to know how to include the ClickUp URL in his approval reply.
 metadata:
@@ -11,7 +11,7 @@ Keeps UGC project tasks in ClickUp (Agency Execution → Projects → UGC) in sy
 
 ## Trigger
 
-John's approval reply in `#airwallex-drafts`:
+John's approval reply in `#ops-command`:
 
 ```
 approve https://app.clickup.com/t/86ex3jwhn

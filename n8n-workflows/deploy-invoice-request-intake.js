@@ -65,6 +65,8 @@ const JOHN_APPROVAL_CHANNEL = 'C0AQZGJDR38';
 const JOHN_APPROVAL_TEXT =
   "={{ '📋 *New Invoice Draft — ' + $('Mark Draft Success').item.json.client_name + '*\\n• Amount: ' + $('Mark Draft Success').item.json.currency + ' ' + $('Mark Draft Success').item.json.subtotal + '\\n• Client email: ' + $('Mark Draft Success').item.json.client_email + '\\n• Due: ' + $('Mark Draft Success').item.json.due_date + '\\n• Invoice ID: ' + $('Mark Draft Success').item.json.airwallex_invoice_id + '\\n• Airwallex Invoice #: ' + ($('Mark Draft Success').item.json.airwallex_invoice_number || $('Mark Draft Success').item.json.airwallex_invoice_id) + '\\n• Requested by: <@' + $('Mark Draft Success').item.json.submitted_by_slack_user_id + '>\\n\\nReply *approve* in this thread to finalize and send payment link to client.\\nIf there\\'s a ClickUp task for this project, include the URL: `approve https://app.clickup.com/t/..`' }}";
 
+const PROMPT_REQUESTER_PRICE_BODY = `={{ { channel: $json.origin_channel_id || $json.submitted_by_slack_user_id, thread_ts: $json.origin_thread_ts || undefined, text: 'Hey <@' + ($json.submitted_by_slack_user_id || '') + '>, the invoice for *' + ($json.client_name || 'the client') + '* failed to create — price is missing from line item: *' + (($json.line_items || []).map(i => i.description || '').join(', ') || 'unnamed') + '*. Reply here with the amount (e.g. 5000 USD) and resubmit.' } }}`;
+
 const NORMALIZE_CODE = `
 const payload = $json.body || $json;
 const lineItems = Array.isArray(payload.line_items) ? payload.line_items : [];
@@ -1154,6 +1156,43 @@ const workflow = {
         jsCode: HYDRATE_FALLBACK_CODE,
       },
     },
+    {
+      id: 'n_route_missing_price',
+      name: 'Route Missing Price Failure',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.2,
+      position: [700, 620],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: false, typeValidation: 'strict', version: 2 },
+          conditions: [{
+            id: 'missing-price-check',
+            leftValue: '={{ $json.failure_reason }}',
+            rightValue: 'unit_price',
+            operator: { type: 'string', operation: 'contains' },
+          }],
+          combinator: 'and',
+        },
+      },
+    },
+    {
+      id: 'n_slack_prompt_price',
+      name: 'Slack Prompt Requester for Price',
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
+      position: [920, 620],
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'slackApi',
+        method: 'POST',
+        url: 'https://slack.com/api/chat.postMessage',
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: PROMPT_REQUESTER_PRICE_BODY,
+        options: {},
+      },
+    },
   ],
   connections: {
     'Webhook Trigger': { main: [[{ node: 'Normalize Slack Submission', type: 'main', index: 0 }]] },
@@ -1210,10 +1249,17 @@ const workflow = {
       [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
       [{ node: 'Write Tracker Success', type: 'main', index: 0 }],
     ]},
-    'Hydrate Fallback Context': { main: [[
-      { node: 'Write Tracker Fallback', type: 'main', index: 0 },
-      { node: 'DM John Failure Alert', type: 'main', index: 0 },
-    ]]},
+    'Hydrate Fallback Context': { main: [[{ node: 'Route Missing Price Failure', type: 'main', index: 0 }]] },
+    'Route Missing Price Failure': { main: [
+      [  // TRUE — missing unit_price: prompt requester + log tracker
+        { node: 'Slack Prompt Requester for Price', type: 'main', index: 0 },
+        { node: 'Write Tracker Fallback', type: 'main', index: 0 },
+      ],
+      [  // FALSE — other failure: log tracker + DM John
+        { node: 'Write Tracker Fallback', type: 'main', index: 0 },
+        { node: 'DM John Failure Alert', type: 'main', index: 0 },
+      ],
+    ]},
     'Write Tracker Success': { main: [[
       { node: 'Requester Success Confirmation', type: 'main', index: 0 },
       { node: 'Notify John for Approval', type: 'main', index: 0 },

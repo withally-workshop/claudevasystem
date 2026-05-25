@@ -1,4 +1,4 @@
-const assert = require('node:assert/strict');
+﻿const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -18,7 +18,7 @@ for (const skillPath of [codexSkillPath, claudeSkillPath]) {
   assert.match(skill, /N8N_API_KEY/, `${skillPath} should document n8n API access`);
   assert.match(skill, /1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50/, `${skillPath} should include tracker spreadsheet ID`);
   assert.match(skill, /C09HN2EBPR7/, `${skillPath} should include payments channel`);
-  assert.match(skill, /C0AQZGJDR38/, `${skillPath} should include airwallexdrafts channel`);
+  assert.match(skill, /C0AQZGJDR38/, `${skillPath} should include ops-command channel`);
   assert.match(skill, /reports\/ops-report/, `${skillPath} should define dashboard output path`);
   assert.match(skill, /live-read only/i, `${skillPath} should preserve live-read-only boundary`);
   assert.match(skill, /Ignore unrelated n8n workspace workflows/i, `${skillPath} should exclude non-project n8n workflows by default`);

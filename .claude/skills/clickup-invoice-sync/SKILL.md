@@ -1,4 +1,4 @@
-# Skill: ClickUp Invoice Sync
+﻿# Skill: ClickUp Invoice Sync
 
 **Trigger:** "sync clickup", "update clickup status", "clickup invoice sync", "/clickup-invoice-sync"
 
@@ -19,7 +19,7 @@ Strategists and John change nothing. The sync fires automatically as part of the
 
 ### Trigger: John's approval reply
 
-John already replies "approve" in `#airwallex-drafts` to finalize invoices. To activate the ClickUp sync for a given invoice, John adds the ClickUp task URL on the same line:
+John already replies "approve" in `#ops-command` to finalize invoices. To activate the ClickUp sync for a given invoice, John adds the ClickUp task URL on the same line:
 
 ```
 approve https://app.clickup.com/t/86ex3jwhn

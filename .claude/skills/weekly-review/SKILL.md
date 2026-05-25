@@ -1,4 +1,4 @@
-# Skill: Weekly Review
+﻿# Skill: Weekly Review
 
 **Purpose:** Generate Noa's weekly review — synthesizes the week's EOD summaries + Slack activity into a structured recap by business, surfaces unresolved items, and sets next-week priorities.
 
@@ -10,7 +10,7 @@
 
 ## Operator Input (Weekly)
 
-Before running, optionally post any offline context to `#airwallexdrafts` — decisions made off-channel, client calls not logged, Halo Home supplier updates from WhatsApp/WeChat, etc.
+Before running, optionally post any offline context to `#ops-command` — decisions made off-channel, client calls not logged, Halo Home supplier updates from WhatsApp/WeChat, etc.
 
 ---
 
@@ -18,7 +18,7 @@ Before running, optionally post any offline context to `#airwallexdrafts` — de
 
 | Source | Channel ID | What to pull |
 |--------|-----------|-------------|
-| `#airwallexdrafts` | `C0AQZGJDR38` | All EOD bot summaries + John's posts from Mon–Fri this week |
+| `#ops-command` | `C0AQZGJDR38` | All EOD bot summaries + John's posts from Mon–Fri this week |
 | `#ad-production-internal` | `C0AGEM919QV` | IM8 ad production updates, agency activity, Frame.io status |
 | `#payments-invoices-updates` | `C09HN2EBPR7` | Invoice requests, payment confirmations, outstanding AR |
 
@@ -32,7 +32,7 @@ Use `mcp__slack__slack_get_channel_history` on all three channels with limit: 20
 
 **Week filter:** Messages from Monday 00:00 ICT through now. Discard anything older.
 
-From `#airwallexdrafts`, extract all messages containing "Today's Wrap-up" — these are the EOD summaries. Pull all five (Mon–Fri) if available.
+From `#ops-command`, extract all messages containing "Today's Wrap-up" — these are the EOD summaries. Pull all five (Mon–Fri) if available.
 
 ---
 
@@ -124,7 +124,7 @@ Rules:
 ### Step 5 — Send via Slack MCP
 
 - **John's DM only:** `mcp__slack__slack_post_message` with `channel_id: U0AM5EGRVTP`
-- **Archive copy:** Post to `#airwallexdrafts` (`C0AQZGJDR38`) for reference
+- **Archive copy:** Post to `#ops-command` (`C0AQZGJDR38`) for reference
 
 Do NOT send to Noa. John reviews and forwards manually.
 

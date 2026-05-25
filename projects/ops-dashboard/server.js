@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const http = require('http');
 const https = require('https');
@@ -43,7 +43,7 @@ const KRAVE_WORKFLOW_IDS = new Set([
   'NurOLZkg3J6rur5Q', // Payment Detection
   'Q3IqqLvmX9H49NdE', // Invoice Reminder Cron
   'omNFmRcDeiByLOzS', // Invoice Reminder Reply Detection
-  '3YyEjk1e6oZV786T', // Inbox Triage Daily
+  'EuT6REDs5PUaoycE', // Inbox Triage Daily v2
   't7MMhlUo5H4HQmgL', // Slack Invoice Handler
   '5XHxhQ7wB2rxE3qz', // Invoice Request Intake
   'uCS9lzHtVKWlqYlk', // Invoice Approval Polling
@@ -279,6 +279,18 @@ async function sendGmailWithPdf({ to, cc, subject, bodyText, pdfBuffer, pdfFilen
   });
   if (!res.ok) throw new Error(`Gmail send failed (${res.status}): ${JSON.stringify(res.body)}`);
   return res.body.id;
+}
+
+async function handleRunTriage(req, res) {
+  const TRIAGE_WEBHOOK = 'https://noatakhel.app.n8n.cloud/webhook/krave-inbox-triage-v2';
+  try {
+    const result = await post(TRIAGE_WEBHOOK, '{}', { 'Content-Type': 'application/json' });
+    res.writeHead(result.ok ? 200 : 502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: result.ok, status: result.status }));
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: e.message }));
+  }
 }
 
 async function handleSendInvoiceEmail(req, res) {
@@ -857,7 +869,7 @@ async function gatherData(range = '7d', forceRefresh = false) {
   if (!n8nRaw.ok) caveats.push(`n8n execution history unavailable: ${n8nRaw.reason}`);
   if (!sheetsRaw.ok) caveats.push(`Invoice tracker unavailable: ${sheetsRaw.reason}`);
   if (!paymentsRaw.ok) caveats.push(`#payments-invoices-updates unavailable: ${paymentsRaw.reason}`);
-  if (!draftsRaw.ok) caveats.push(`#airwallexdrafts unavailable: ${draftsRaw.reason}`);
+  if (!draftsRaw.ok) caveats.push(`#ops-command unavailable: ${draftsRaw.reason}`);
   if (!clickupRaw.ok) caveats.push(`ClickUp unavailable: ${clickupRaw.reason}`);
 
   const data = {
@@ -1474,6 +1486,10 @@ function renderDashboard(d) {
       <span class="tool-icon">💳</span>
       <span class="tool-name">Airwallex</span>
     </a>
+    <div class="tool-card" onclick="runTriage(this)">
+      <span class="tool-icon">📥</span>
+      <span class="tool-name">Triage</span>
+    </div>
     <a class="tool-card" href="https://mail.google.com" target="_blank" rel="noopener" style="text-decoration:none">
       <span class="tool-icon">📧</span>
       <span class="tool-name">Gmail</span>
@@ -1752,7 +1768,7 @@ function renderDashboard(d) {
       <a href="https://docs.google.com/spreadsheets/d/${SHEET_ID}" target="_blank">📊 Invoice Tracker</a>
       <a href="${N8N_BASE}/workflows" target="_blank">⚙️ n8n Workflows</a>
       <a href="https://slack.com/app_redirect?channel=${PAYMENTS_CHANNEL}" target="_blank">💬 #payments-invoices-updates</a>
-      <a href="https://slack.com/app_redirect?channel=${DRAFTS_CHANNEL}" target="_blank">💬 #airwallexdrafts</a>
+      <a href="https://slack.com/app_redirect?channel=${DRAFTS_CHANNEL}" target="_blank">💬 #ops-command</a>
     </div>
   </div>
 </main>
@@ -1804,6 +1820,32 @@ function renderDashboard(d) {
       document.querySelectorAll('.tool-popup.open').forEach(p => p.classList.remove('open'));
     }
   });
+
+  // Inbox triage trigger
+  window.runTriage = async function(card) {
+    const icon = card.querySelector('.tool-icon');
+    const name = card.querySelector('.tool-name');
+    const origIcon = icon.textContent;
+    icon.textContent = '⏳';
+    name.textContent = 'Running…';
+    card.style.pointerEvents = 'none';
+    try {
+      const res = await fetch('/api/run-triage', { method: 'POST' });
+      if (res.ok) {
+        icon.textContent = '✅';
+        name.textContent = 'Triggered';
+        setTimeout(() => { icon.textContent = origIcon; name.textContent = 'Triage'; card.style.pointerEvents = ''; }, 4000);
+      } else {
+        icon.textContent = '❌';
+        name.textContent = 'Failed';
+        setTimeout(() => { icon.textContent = origIcon; name.textContent = 'Triage'; card.style.pointerEvents = ''; }, 4000);
+      }
+    } catch {
+      icon.textContent = '❌';
+      name.textContent = 'Error';
+      setTimeout(() => { icon.textContent = origIcon; name.textContent = 'Triage'; card.style.pointerEvents = ''; }, 4000);
+    }
+  };
 
 
   // Scroll-triggered section reveal
@@ -2033,6 +2075,7 @@ const server = http.createServer(async (req, res) => {
   if (req.url.startsWith('/auth/login')) return handleAuthLogin(req, res);
   if (req.url.startsWith('/auth/callback')) return handleAuthCallback(req, res);
   if (req.url.startsWith('/auth/logout')) return handleAuthLogout(req, res);
+  if (req.method === 'POST' && req.url === '/api/run-triage') return handleRunTriage(req, res);
   if (req.method === 'POST' && req.url === '/api/send-invoice-email') return handleSendInvoiceEmail(req, res);
 
   if (!AUTH_DISABLED) {

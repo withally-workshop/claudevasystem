@@ -1,4 +1,4 @@
-# Krave Media - n8n Automation Workflows
+﻿# Krave Media - n8n Automation Workflows
 
 **Instance:** `noatakhel.app.n8n.cloud`  
 **Last updated:** `2026-05-08`  
@@ -55,7 +55,7 @@
 |----------|------|---------------|--------|
 | Client Invoice Tracker | Google Sheets | `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50` | Tab: `Invoices` |
 | Slack channel | `#payments-invoices-updates` | `C09HN2EBPR7` | Bot posts and reads |
-| Slack channel | `#airwallexdrafts` | `C0AQZGJDR38` | Bot reads and archives EOD |
+| Slack channel | `#ops-command` | `C0AQZGJDR38` | Bot reads and archives EOD |
 | Slack channel | `#ad-production-internal` | `C0AGEM919QV` | Bot reads |
 | Slack DM destination | Noa Takhel | `U06TBGX9L93` | Bot sends EOD DM |
 | Slack DM destination | John | `U0AM5EGRVTP` | Bot sends invoice intake testing alerts |
@@ -443,7 +443,7 @@ Canonical source of truth: [`.claude/skills/sod-report/SKILL.md`](../.claude/ski
 
 ### Purpose
 
-Classifies all unread inbox emails for `noa@kravemedia.co` into the `EA/*` tier model. Uses a hardcoded rules classifier first (Osome, creator inbound, known contacts, client payments) and falls back to GPT-4o-mini only for unknown senders. Applies labels, creates drafts for Urgent/Needs-Reply tiers, archives non-Unsure emails, and posts a morning summary to `#airwallex-drafts` and Noa's Slack DM.
+Classifies all unread inbox emails for `noa@kravemedia.co` into the `EA/*` tier model. Uses a hardcoded rules classifier first (Osome, creator inbound, known contacts, client payments) and falls back to GPT-4o-mini only for unknown senders. Applies labels, creates drafts for Urgent/Needs-Reply tiers, archives non-Unsure emails, and posts a morning summary to `#ops-command` and Noa's Slack DM.
 
 ### Triggers
 
@@ -487,7 +487,7 @@ Classifies all unread inbox emails for `noa@kravemedia.co` into the `EA/*` tier 
 | EA/Urgent / EA/Needs-Reply | Apply label, create draft (typeform for creator inbound, AI for all others), archive |
 | EA/FYI / EA/Auto-Sorted | Apply label, archive |
 | EA/Unsure | Apply label, keep in inbox |
-| All tiers | Post to `#airwallex-drafts` channel + DM Noa |
+| All tiers | Post to `#ops-command` channel + DM Noa |
 
 ### Error Handling
 
@@ -1034,7 +1034,7 @@ The email still sends, but strategist CC is skipped and Slack includes a warning
 
 ### EOD DM to Noa fails
 
-The workflow retries once. If the retry also fails, it posts the formatted summary to `#airwallexdrafts` for manual sending.
+The workflow retries once. If the retry also fails, it posts the formatted summary to `#ops-command` for manual sending.
 
 ### Run Halo intelligence report manually
 

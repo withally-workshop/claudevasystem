@@ -1,4 +1,4 @@
-# Skill: Ops Report
+﻿# Skill: Ops Report
 
 **Trigger:** "hey report", "ops report", "daily report", "weekly report", "dashboard report", "what ran today", "how many invoices", "how many reminders", "payment sent", "payments received", "execution report", "current tracker state"
 
@@ -30,7 +30,7 @@ State the concrete range before reporting.
 | n8n API | `https://noatakhel.app.n8n.cloud`, `N8N_API_KEY` | execution counts, failures, workflow health |
 | Client Invoice Tracker | Sheet `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`, tab `Invoices` | invoice state and finance movement |
 | `#payments-invoices-updates` | `C09HN2EBPR7` | invoice requests, payment confirmations, overdue alerts |
-| `#airwallexdrafts` | `C0AQZGJDR38` | EOD, SOD, inbox triage, John approvals, failure alerts |
+| `#ops-command` | `C0AQZGJDR38` | EOD, SOD, inbox triage, John approvals, failure alerts |
 
 Read `n8n-workflows/WORKFLOWS.md` before reporting so workflow IDs, schedules, and tracker columns match the repo's current documentation.
 
@@ -129,7 +129,7 @@ Compute current state:
 Read date-range messages from:
 
 - `C09HN2EBPR7` (`#payments-invoices-updates`)
-- `C0AQZGJDR38` (`#airwallexdrafts`)
+- `C0AQZGJDR38` (`#ops-command`)
 
 Use Slack as narrative context and audit support. Tracker and n8n data remain the source of truth for counts when available.
 

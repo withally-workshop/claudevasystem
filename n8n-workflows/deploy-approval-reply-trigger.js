@@ -1,15 +1,15 @@
-// deploy-approval-reply-trigger.js
+﻿// deploy-approval-reply-trigger.js
 //
 // Deploys: Approval Reply Trigger (new workflow)
 //
 // Purpose: fires the Invoice Approval Polling workflow the moment John posts
-// "approve" (or "approve <URL>") in #airwallex-drafts, instead of waiting
+// "approve" (or "approve <URL>") in #ops-command, instead of waiting
 // for the next scheduled run.
 //
 // How it works:
 //   1. Slack Events API sends a POST to the webhook URL whenever a message
 //      is posted in a channel the Slack app has joined.
-//   2. This workflow filters to: John's messages in #airwallex-drafts that
+//   2. This workflow filters to: John's messages in #ops-command that
 //      start with "approve".
 //   3. On match: calls the approval polling webhook immediately.
 //   4. Slack URL verification (the one-time challenge) is handled inline.
@@ -22,7 +22,7 @@
 //      Slack will send a challenge — the workflow handles it automatically.
 //   4. Under "Subscribe to bot events", add: message.channels
 //   5. Save and reinstall the app (Slack will prompt).
-//   6. Make sure the Krave bot is a member of #airwallex-drafts.
+//   6. Make sure the Krave bot is a member of #ops-command.
 
 const https = require('https');
 const fs = require('fs');
@@ -34,7 +34,7 @@ env.split('\n').forEach(l => { const [k,...v]=l.split('='); if(k&&v) process.env
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = process.env.N8N_API_KEY;
 
-const JOHN_APPROVAL_CHANNEL = 'C0AQZGJDR38'; // #airwallex-drafts
+const JOHN_APPROVAL_CHANNEL = 'C0AQZGJDR38'; // #ops-command
 const JOHN_USER_ID          = 'U0AM5EGRVTP';
 const APPROVAL_POLLING_WEBHOOK = 'https://noatakhel.app.n8n.cloud/webhook/krave-invoice-approval-polling';
 const WEBHOOK_PATH = 'krave-approval-reply-trigger';
@@ -123,7 +123,7 @@ const workflow = {
       },
     },
 
-    // 3b. FALSE branch — is this John's "approve" message in #airwallex-drafts?
+    // 3b. FALSE branch — is this John's "approve" message in #ops-command?
     {
       id: 'n4', name: 'Is John Approval?',
       type: 'n8n-nodes-base.if',
@@ -285,7 +285,7 @@ async function deploy() {
   console.log('  2. Enable Events → Request URL: ' + N8N_URL + '/webhook/' + WEBHOOK_PATH);
   console.log('  3. Bot Events → Add: message.channels');
   console.log('  4. Save → reinstall app');
-  console.log('  5. Invite the bot to #airwallex-drafts if not already a member');
+  console.log('  5. Invite the bot to #ops-command if not already a member');
 }
 
 deploy().catch(console.error);

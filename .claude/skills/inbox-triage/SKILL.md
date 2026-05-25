@@ -1,4 +1,4 @@
-# Skill: Inbox Triage
+﻿# Skill: Inbox Triage
 **Trigger:** "triage inbox", "run email triage", "morning triage", "/inbox-triage", "inbox zero setup", "archive old emails"
 **Account:** noa@kravemedia.co
 **Deliver to:** Noa's Slack DM (~9 AM ICT daily)
@@ -92,90 +92,32 @@ Post this summary to John's private channel (C0AQZGJDR38), not to Noa.
 
 ---
 
-## MODE 2: Daily Triage (~9 AM ICT)
+## MODE 2: On-Demand Triage Trigger
 
-### Step 1 — Fetch last-24-hours inbox emails
+The daily triage now runs automatically at 9 AM PHT via n8n workflow `EuT6REDs5PUaoycE`. This skill's Mode 2 is an on-demand trigger — fire the workflow immediately without waiting for the schedule.
+
+### Step 1 — POST to the triage webhook
+
 ```
-gmail_list_messages with q: "in:inbox newer_than:1d"
-```
-Include both read and unread emails that are still in the inbox. Do not scan the whole inbox by default.
-If Gmail MCP is not connected: ask the user to paste email threads manually.
-
-### Step 2 — Classify each email (two layers)
-
-**Tier classification — apply in order, first match wins:**
-
-| Tier | Criteria |
-|------|----------|
-| `EA/Urgent` | Hard deadline today · Legal/contract/financial risk · Client loss risk · True emergency |
-| `EA/Needs-Reply` | Client questions · Vendor requests · Team escalations · Anything awaiting Noa's direct response |
-| `EA/FYI` | Confirmations · Tracking · Status updates · Receipts · Payment notifications |
-| `EA/Auto-Sorted` | Newsletters · Marketing · Automated SaaS notifications · noreply@ · no-reply@ |
-| `EA/Unsure` | Genuinely ambiguous — cannot confidently assign any tier |
-
-**Classification rules:**
-- When in doubt between `Needs-Reply` and `FYI`: use `Needs-Reply` — never miss an action item
-- Emails from Amanda, Shin, Joshua, IM8 agencies, Krave strategists → always `Urgent` or `Needs-Reply`
-- `EA/Unsure` emails: apply label, leave in INBOX, surface in Slack summary under "Review These"
-- Never auto-sort an email from a known contact into `Auto-Sorted`
-
-**Context classification:**
-Assign the best-fit context label from the confirmed taxonomy. If none fits cleanly, skip the context label — do not force it.
-
-### Step 3 — Draft replies (Urgent + Needs-Reply only)
-For each email in these tiers:
-1. Check whether the thread is already in motion:
-   - Noa already replied
-   - a draft already exists
-   - the thread already has an `EA/*` label
-2. If the thread is already actioned, still classify it and repair labels if needed, but do not create a fresh draft
-3. If the thread is not already actioned, draft a reply in Noa's voice
-4. Apply the **3-and-1 Framework** if a decision is needed: list 3 options, mark the recommendation
-5. Save via `gmail_create_draft` — do NOT send
-6. Note draft subject in the Slack summary when a new draft is created
-
-**Noa's voice:**
-- No: "Hope this helps", "Let me know", "Great question!", "I hope you're doing well"
-- Yes: Clear next step, named owner, deadline if applicable
-- External: authoritative and professional
-- Internal: sharp and direct
-
-### Step 4 — Apply labels + move out of inbox
-- Apply both tier + context labels to every email
-- Repair tier/context labels even when an email is already actioned and the fresh classification is better
-- Remove from inbox via `removeLabelIds: ["INBOX"]` for all tiers except `EA/Unsure`
-- `EA/Unsure` emails: label applied, remain in inbox
-
-### Step 5 — Post Slack summary to John's private channel
-Post via `mcp__slack__slack_post_message` to John's private channel (`C0AQZGJDR38`).
-John reviews and forwards to Noa manually — do NOT post directly to Noa's DM.
-
-**Format:**
-```
-*Morning Triage — [DAY, DATE] (ICT)*
-
-*[URGENT] — Action today ([N])*
-- [Sender] | [Subject] — [1-line context + deadline] → Draft ready in Gmail
-
-*Needs Your Reply ([N])*
-- [Sender] | [Subject] — [1-line context] → Draft ready in Gmail
-
-*FYI ([N])*
-- [Sender] | [Subject] — [1-line summary]
-
-*Review These ([N])* ← EA/Unsure — still in inbox
-- [Sender] | [Subject] — [why ambiguous]
-
-*Auto-Sorted ([N])* — newsletters, receipts, notifications
-
-Inbox: [N] (unsure items only, or 0 ✓)
+POST https://noatakhel.app.n8n.cloud/webhook/krave-inbox-triage-v2
+Content-Type: application/json
+Body: {}
 ```
 
-Already-actioned emails stay in their normal sections with inline notes like `[already replied]`, `[draft exists]`, or `[already labeled]`. If a thread is already in motion and still urgent, keep it in `URGENT` with the note attached.
+Use `mcp__gmail-noa__gmail_search_messages` or a raw HTTP call. The webhook responds immediately (responseMode: onReceived) — the workflow runs asynchronously.
 
-Omit sections with 0 items. Always include Auto-Sorted count.
-If deep work block is active (1:30–7:00 PM ICT): do not post — queue for 7:00 PM.
-If Slack MCP is not connected: output for manual send.
+### Step 2 — Confirm and report
+
+After the POST succeeds, report:
+```
+Inbox triage triggered. The workflow will classify unread emails, apply EA/* labels,
+create drafts, archive, and post the summary to #ops-command within ~2 minutes.
+```
+
+If the POST fails (non-2xx), report the status code and suggest checking n8n at:
+https://noatakhel.app.n8n.cloud/workflow/EuT6REDs5PUaoycE
+
+Do NOT attempt to classify emails manually in Mode 2 — the n8n workflow handles all classification, drafting, and archiving. This skill only triggers it.
 
 ---
 

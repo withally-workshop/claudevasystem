@@ -1,16 +1,16 @@
-# Skill: Start of Day Report
+﻿# Skill: Start of Day Report
 
-**Purpose:** Generate Noa's daily Start of Day Report from validated Slack inputs — yesterday's EOD carry-over, John's morning goals dump, and, when available, today's `Morning Triage` — then post the finished report to `#airwallexdrafts`.
+**Purpose:** Generate Noa's daily Start of Day Report from validated Slack inputs — yesterday's EOD carry-over, John's morning goals dump, and, when available, today's `Morning Triage` — then post the finished report to `#ops-command`.
 
 **Automated:** Runs **Monday–Friday at 10:00 AM PHT** via scheduled Claude cron (trigger ID: `trig_019phkzu3nmSJnVHqHVn4wRZ`). Also invocable manually: "run sod report", "/sod-report".
 
-**Hard-stop rule:** If yesterday's EOD or John's morning dump is missing, post an alert to `#airwallexdrafts` and stop. Do not send a partial report.
+**Hard-stop rule:** If yesterday's EOD or John's morning dump is missing, post an alert to `#ops-command` and stop. Do not send a partial report.
 
 ---
 
 ## Operator Input
 
-Post your focus goals and context for the day to `#airwallexdrafts` before 10 AM. No specific format required — dump what you're focusing on, any blockers you're aware of, and anything you want Noa to know about your day's priorities.
+Post your focus goals and context for the day to `#ops-command` before 10 AM. No specific format required — dump what you're focusing on, any blockers you're aware of, and anything you want Noa to know about your day's priorities.
 
 ---
 
@@ -18,16 +18,16 @@ Post your focus goals and context for the day to `#airwallexdrafts` before 10 AM
 
 | Source | What it provides | Required? |
 |---|---|---|
-| `#airwallexdrafts` — yesterday's EOD bot message | Carry-over from Yesterday + unresolved Blockers | **Mandatory** |
-| `#airwallexdrafts` — John's posts from today | Focus Goals + new Blockers | **Mandatory** |
-| `#airwallexdrafts` — today's `Morning Triage` bot message | BAU / Follow-ups from Inbox Triage Daily, plus inbox items that stayed `EA/Unsure` | Optional |
+| `#ops-command` — yesterday's EOD bot message | Carry-over from Yesterday + unresolved Blockers | **Mandatory** |
+| `#ops-command` — John's posts from today | Focus Goals + new Blockers | **Mandatory** |
+| `#ops-command` — today's `Morning Triage` bot message | BAU / Follow-ups from Inbox Triage Daily, plus inbox items that stayed `EA/Unsure` | Optional |
 | Client Invoice Tracker (Google Sheets) | Verify blocker invoices are still open before flagging | **Mandatory for invoice blockers** |
 
 ---
 
 ## Instructions
 
-### Step 0 — Pull #airwallexdrafts
+### Step 0 — Pull #ops-command
 
 Use `mcp__slack__slack_get_channel_history` with `channel_id: C0AQZGJDR38`, limit: 100.
 
@@ -76,7 +76,7 @@ These sources are mandatory:
 - Last business day's EOD containing `Today's Wrap-up` (scan back through history — do not limit to strict "yesterday")
 - John's same-day morning dump (at least one message from `U0AM5EGRVTP` today)
 
-If either required source is missing → post alert to `#airwallexdrafts` (`C0AQZGJDR38`) and stop. Do not draft or send a partial SOD report.
+If either required source is missing → post alert to `#ops-command` (`C0AQZGJDR38`) and stop. Do not draft or send a partial SOD report.
 
 `Morning Triage` is optional. If missing, continue and omit inbox-triage follow-ups from the report.
 
@@ -118,7 +118,7 @@ Rules:
 
 ### Step 3 — Send via Slack MCP
 
-Post to `#airwallexdrafts` only:
+Post to `#ops-command` only:
 - `mcp__slack__slack_post_message` with `channel_id: C0AQZGJDR38`
 
 Confirm `ts` returned — confirms delivery. If send fails, output the formatted message for manual send.

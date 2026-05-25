@@ -9,7 +9,9 @@ const SMARTLEAD_API_KEY = process.env.SMARTLEAD_API_KEY;
 if (!SMARTLEAD_API_KEY) throw new Error('SMARTLEAD_API_KEY not set in local .env');
 
 const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
+const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
 const SHEET_ID = '1eLQrDP3IX9ec9dtFN0UyRdlTplzkLfRG9Asyqj1gLrI';
+const SLACK_CHANNEL = 'C0B5MQF50RX'; // #krave-creator-outreach
 const SMARTLEAD_CAMPAIGN_ID = '3375376';
 const SMARTLEAD_LEADS_URL = `https://server.smartlead.ai/api/v1/campaigns/${SMARTLEAD_CAMPAIGN_ID}/leads?limit=500&api_key=${SMARTLEAD_API_KEY}`;
 
@@ -68,6 +70,16 @@ for (const item of sheetRows) {
 
 if (updates.length === 0) return [];
 return updates.map(u => ({ json: u }));
+`;
+
+// ─── Code: Collapse per-row updates into a single summary item ───────────────
+const SUMMARIZE_SYNC_CODE = `
+const items = $input.all();
+const replied  = items.filter(i => i.json.status === 'replied').length;
+const bounced  = items.filter(i => i.json.status === 'bounced').length;
+const opened   = items.filter(i => i.json.status === 'opened').length;
+const total    = items.length;
+return [{ json: { total, replied, bounced, opened } }];
 `;
 
 // ─── Workflow definition ──────────────────────────────────────────────────────
@@ -173,6 +185,32 @@ const workflow = {
         options: {},
       },
     },
+    {
+      id: 'n7',
+      name: 'Summarize Sync',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1320, 0],
+      parameters: {
+        mode: 'runOnceForAllItems',
+        jsCode: SUMMARIZE_SYNC_CODE,
+      },
+    },
+    {
+      id: 'n8',
+      name: 'Notify Slack',
+      type: 'n8n-nodes-base.slack',
+      typeVersion: 2.2,
+      position: [1540, 0],
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        resource: 'message',
+        operation: 'post',
+        channel: SLACK_CHANNEL,
+        text: `=*Status sync complete* — {{ $json.total }} rows updated in <https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit|Sheet>\n• Replied: {{ $json.replied }}  |  Opened: {{ $json.opened }}  |  Bounced: {{ $json.bounced }}`,
+        otherOptions: {},
+      },
+    },
   ],
   connections: {
     'Schedule Trigger':   { main: [[{ node: 'Get Smartlead Leads', type: 'main', index: 0 }]] },
@@ -180,6 +218,8 @@ const workflow = {
     'Aggregate Statuses': { main: [[{ node: 'Get Sheet Rows',      type: 'main', index: 0 }]] },
     'Get Sheet Rows':     { main: [[{ node: 'Build Updates',       type: 'main', index: 0 }]] },
     'Build Updates':      { main: [[{ node: 'Update Sheet Row',    type: 'main', index: 0 }]] },
+    'Update Sheet Row':   { main: [[{ node: 'Summarize Sync',      type: 'main', index: 0 }]] },
+    'Summarize Sync':     { main: [[{ node: 'Notify Slack',        type: 'main', index: 0 }]] },
   },
 };
 

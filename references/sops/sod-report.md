@@ -1,7 +1,7 @@
-# SOP: Start of Day Report
+﻿# SOP: Start of Day Report
 
 **Owner:** John (operator)
-**Recipient:** Noa Takhel (via Slack DM) and `#airwallexdrafts`
+**Recipient:** Noa Takhel (via Slack DM) and `#ops-command`
 **Frequency:** Local/manual only for now
 **Skill:** `.claude/skills/sod-report/SKILL.md`
 **Trigger:** Manual `n8n` run or `POST /webhook/krave-sod-report`
@@ -10,7 +10,7 @@
 
 ## Purpose
 
-Give Noa a clear picture of what's happening today before her deep work block starts at 1:30 PM ICT. The workflow surfaces John's focus goals, carry-overs from yesterday's EOD, blockers needing her input, and, when available, the morning inbox-triage follow-ups, then posts the same final report to both Noa's DM and `#airwallexdrafts`.
+Give Noa a clear picture of what's happening today before her deep work block starts at 1:30 PM ICT. The workflow surfaces John's focus goals, carry-overs from yesterday's EOD, blockers needing her input, and, when available, the morning inbox-triage follow-ups, then posts the same final report to both Noa's DM and `#ops-command`.
 
 ---
 
@@ -20,21 +20,21 @@ Give Noa a clear picture of what's happening today before her deep work block st
 
 | Time (GMT+8) | Action |
 |---|---|
-| Before run | John posts focus goals + context to `#airwallexdrafts` |
+| Before run | John posts focus goals + context to `#ops-command` |
 | Run time | Operator triggers the local/manual workflow or `POST /webhook/krave-sod-report` |
-| Run time | Workflow reads yesterday's EOD from `#airwallexdrafts` for carry-overs |
+| Run time | Workflow reads yesterday's EOD from `#ops-command` for carry-overs |
 | Run time | Workflow reads John's morning posts for focus goals |
 | Run time | Workflow reads same-day `Morning Triage` for BAU / inbox follow-ups when available |
 | Run time | Workflow validates the required sources before generation |
-| Run time | Workflow generates the SOD report and sends to `#airwallexdrafts` + Noa's DM |
+| Run time | Workflow generates the SOD report and sends to `#ops-command` + Noa's DM |
 
 ### Data Sources
 
 | Source | Content | How identified |
 |---|---|---|
-| `#airwallexdrafts` - yesterday | Carry-overs, unresolved blockers | Bot message from yesterday containing "Today's Wrap-up" |
-| `#airwallexdrafts` - today | Focus goals, new blockers | Messages from U0AM5EGRVTP posted after midnight GMT+8 |
-| `#airwallexdrafts` - today | BAU / inbox follow-ups | Bot message from today containing `Morning Triage` |
+| `#ops-command` - yesterday | Carry-overs, unresolved blockers | Bot message from yesterday containing "Today's Wrap-up" |
+| `#ops-command` - today | Focus goals, new blockers | Messages from U0AM5EGRVTP posted after midnight GMT+8 |
+| `#ops-command` - today | BAU / inbox follow-ups | Bot message from today containing `Morning Triage` |
 
 ---
 
@@ -60,7 +60,7 @@ Give Noa a clear picture of what's happening today before her deep work block st
 
 ## John's Daily Responsibility
 
-Post to `#airwallexdrafts` before the workflow run. Include:
+Post to `#ops-command` before the workflow run. Include:
 - What you're focusing on today
 - Any blockers you're already aware of
 - Anything Noa needs to know before her day starts
@@ -82,9 +82,9 @@ If `Morning Triage` is missing, the workflow should still send the report and om
 
 ## Failure Handling
 
-- If John hasn't posted: workflow stops and alerts `#airwallexdrafts`
+- If John hasn't posted: workflow stops and alerts `#ops-command`
 - If inbox triage has not posted `Morning Triage`: workflow still sends without inbox-triage follow-ups
-- If no yesterday EOD is found: workflow stops and alerts `#airwallexdrafts`
+- If no yesterday EOD is found: workflow stops and alerts `#ops-command`
 - If archive post succeeds but Noa DM fails: workflow raises a failure alert for manual resend
 - If the local/manual workflow is unavailable: use `/sod-report` in Claude Code as manual fallback
 
@@ -92,4 +92,4 @@ If `Morning Triage` is missing, the workflow should still send the report and om
 
 ## Manual Override
 
-Run `/sod-report` in Claude Code at any time for an off-schedule send or manual resend, keeping delivery to both `#airwallexdrafts` and Noa's DM.
+Run `/sod-report` in Claude Code at any time for an off-schedule send or manual resend, keeping delivery to both `#ops-command` and Noa's DM.

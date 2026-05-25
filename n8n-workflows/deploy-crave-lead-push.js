@@ -9,7 +9,9 @@ const SMARTLEAD_API_KEY = process.env.SMARTLEAD_API_KEY;
 if (!SMARTLEAD_API_KEY) throw new Error('SMARTLEAD_API_KEY not set in local .env');
 
 const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
+const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
 const SHEET_ID = '1eLQrDP3IX9ec9dtFN0UyRdlTplzkLfRG9Asyqj1gLrI';
+const SLACK_CHANNEL = 'C0B5MQF50RX'; // #krave-creator-outreach
 const SMARTLEAD_CAMPAIGN_ID = '3375376';
 const SMARTLEAD_PUSH_URL = `https://server.smartlead.ai/api/v1/campaigns/${SMARTLEAD_CAMPAIGN_ID}/leads`;
 
@@ -55,6 +57,14 @@ const { rowNumbers, pushedAt } = filterResult;
 return rowNumbers.map(rowNumber => ({
   json: { row_number: rowNumber, status: 'outreach_queued', outreach_sent_at: pushedAt },
 }));
+`;
+
+// ─── Code: Collapse per-row results into single summary item ─────────────────
+const SUMMARIZE_PUSH_CODE = `
+const items = $input.all();
+const count = items.length;
+const pushedAt = $('Filter and Build').first().json.pushedAt;
+return [{ json: { count, pushedAt } }];
 `;
 
 // ─── Workflow definition ──────────────────────────────────────────────────────
@@ -163,6 +173,32 @@ const workflow = {
         options: {},
       },
     },
+    {
+      id: 'n7',
+      name: 'Summarize Push',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [1320, 0],
+      parameters: {
+        mode: 'runOnceForAllItems',
+        jsCode: SUMMARIZE_PUSH_CODE,
+      },
+    },
+    {
+      id: 'n8',
+      name: 'Notify Slack',
+      type: 'n8n-nodes-base.slack',
+      typeVersion: 2.2,
+      position: [1540, 0],
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        resource: 'message',
+        operation: 'post',
+        channel: SLACK_CHANNEL,
+        text: `=*Lead Push complete* — {{ $json.count }} leads queued in Smartlead campaign ${SMARTLEAD_CAMPAIGN_ID}\n• Status set to \`outreach_queued\` in <https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit|Sheet>\n• Warm-up completes ~2026-06-12 — emails will send once campaign is activated`,
+        otherOptions: {},
+      },
+    },
   ],
   connections: {
     'Schedule Trigger':  { main: [[{ node: 'Get Sheet Rows',       type: 'main', index: 0 }]] },
@@ -170,6 +206,8 @@ const workflow = {
     'Filter and Build':  { main: [[{ node: 'Push to Smartlead',     type: 'main', index: 0 }]] },
     'Push to Smartlead': { main: [[{ node: 'Expand Row Updates',    type: 'main', index: 0 }]] },
     'Expand Row Updates':{ main: [[{ node: 'Mark Outreach Queued',  type: 'main', index: 0 }]] },
+    'Mark Outreach Queued': { main: [[{ node: 'Summarize Push',     type: 'main', index: 0 }]] },
+    'Summarize Push':    { main: [[{ node: 'Notify Slack',          type: 'main', index: 0 }]] },
   },
 };
 

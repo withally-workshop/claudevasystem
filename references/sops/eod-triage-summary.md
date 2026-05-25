@@ -1,4 +1,4 @@
-# SOP: EOD Triage Summary
+﻿# SOP: EOD Triage Summary
 
 **Owner:** John (operator)
 **Recipient:** Noa Takhel (via Slack DM)
@@ -20,17 +20,17 @@ Consolidate everything handled during the day into a single, structured Slack DM
 
 | Time (GMT+8) | Action |
 |---|---|
-| Throughout the day | John posts task updates to `#airwallexdrafts` as things happen |
+| Throughout the day | John posts task updates to `#ops-command` as things happen |
 | 6:00 PM | Remote agent fires, pulls today's messages from 3 channels |
 | 6:00 PM | Filters to today only (midnight GMT+8 cutoff) |
 | 6:00 PM | Categorizes into EOD template, sends to Noa's DM |
-| 6:00 PM | Posts same message to `#airwallexdrafts` for SOD carry-over |
+| 6:00 PM | Posts same message to `#ops-command` for SOD carry-over |
 
 ### Data Sources
 
 | Channel | ID | Content |
 |---|---|---|
-| `#airwallexdrafts` | `C0AQZGJDR38` | John's task dump + invoice drafts + inbox triage |
+| `#ops-command` | `C0AQZGJDR38` | John's task dump + invoice drafts + inbox triage |
 | `#ad-production-internal` | `C0AGEM919QV` | IM8 production updates, Frame.io status |
 | `#payments-invoices-updates` | `C09HN2EBPR7` | Invoice requests, payment confirmations |
 
@@ -58,7 +58,7 @@ Consolidate everything handled during the day into a single, structured Slack DM
 
 ## John's Daily Responsibility
 
-Post updates to `#airwallexdrafts` throughout the day. No format required — just dump:
+Post updates to `#ops-command` throughout the day. No format required — just dump:
 - Tasks completed
 - Tasks blocked (and who/what is blocking)
 - Decisions made
@@ -70,7 +70,7 @@ The richer the dump, the more useful the EOD report.
 
 ## Failure Handling
 
-- If Slack send fails: agent retries once, then posts error to `#airwallexdrafts`
+- If Slack send fails: agent retries once, then posts error to `#ops-command`
 - If agent doesn't fire: manually invoke `/eod-triage-summary` in Claude Code
 
 ---

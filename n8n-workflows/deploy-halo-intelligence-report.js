@@ -1,4 +1,4 @@
-const https = require('https');
+﻿const https = require('https');
 
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = process.env.N8N_API_KEY;
@@ -20,7 +20,7 @@ const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
 const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
 const GMAIL_JOHN_CRED = 'vsDW3WpKXqS9HUs3';
 
-// TESTING: using #airwallexdrafts (C0AQZGJDR38) — switch to C0A22NPLV38 (halo channel) once confirmed working
+// TESTING: using #ops-command (C0AQZGJDR38) — switch to C0A22NPLV38 (halo channel) once confirmed working
 const SLACK_CHANNEL_ID = 'C0AQZGJDR38';
 const GOOGLE_SHEET_ID = '1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4';
 const GOOGLE_SHEET_NAME = 'Posts';
@@ -217,7 +217,7 @@ function filterAndRank(rawPosts, platform) {
 }
 
 const tiktokPosts = extractPosts($('Fetch TikTok').all());
-const instagramPosts = extractPosts($input.all());
+const instagramPosts = extractPosts($('Fetch Instagram').all());
 
 const tiktokTop10 = filterAndRank(tiktokPosts, 'tiktok');
 const instagramTop10 = filterAndRank(instagramPosts, 'instagram');
@@ -415,8 +415,8 @@ return rows.map(row => ({ json: row }));
 // Code nodes handle pure JS: scoring, prompt building, response parsing, formatting.
 //
 // Flow:
-//   Schedule → Fetch TikTok (HTTP) → Fetch Instagram (HTTP)
-//            → Score & Rank (Code)
+//   Schedule → Fetch TikTok (HTTP) ─┐
+//            → Fetch Instagram (HTTP) ─┤→ Merge → Score & Rank (Code)
 //            → Prepare Claude Request (Code)
 //            → Claude Analysis (HTTP)
 //            → Format Report (Code)
@@ -449,7 +449,7 @@ const workflow = {
       name: 'Fetch TikTok',
       type: 'n8n-nodes-base.httpRequest',
       typeVersion: 4.2,
-      position: [480, 300],
+      position: [480, 180],
       continueOnFail: true,
       parameters: {
         method: 'POST',
@@ -467,7 +467,7 @@ const workflow = {
       name: 'Fetch Instagram',
       type: 'n8n-nodes-base.httpRequest',
       typeVersion: 4.2,
-      position: [720, 300],
+      position: [480, 420],
       continueOnFail: true,
       parameters: {
         method: 'POST',
@@ -479,7 +479,19 @@ const workflow = {
       },
     },
 
-    // ── 4. Score & Rank Posts ─────────────────────────────────────────────────
+    // ── 4. Merge — waits for both Fetch TikTok and Fetch Instagram to complete ─
+    {
+      id: 'n12',
+      name: 'Merge',
+      type: 'n8n-nodes-base.merge',
+      typeVersion: 3,
+      position: [720, 300],
+      parameters: {
+        mode: 'append',
+      },
+    },
+
+    // ── 5. Score & Rank Posts ─────────────────────────────────────────────────
     {
       id: 'n4',
       name: 'Score and Rank Posts',
@@ -638,9 +650,14 @@ const workflow = {
   ],
 
   connections: {
-    'Schedule Trigger':      { main: [[{ node: 'Fetch TikTok',            type: 'main', index: 0 }]] },
-    'Fetch TikTok':          { main: [[{ node: 'Fetch Instagram',          type: 'main', index: 0 }]] },
-    'Fetch Instagram':       { main: [[{ node: 'Score and Rank Posts',     type: 'main', index: 0 }]] },
+    // Parallel branches: both scrapers fire simultaneously from the trigger
+    'Schedule Trigger':      { main: [[
+      { node: 'Fetch TikTok',    type: 'main', index: 0 },
+      { node: 'Fetch Instagram', type: 'main', index: 0 },
+    ]] },
+    'Fetch TikTok':          { main: [[{ node: 'Merge',                    type: 'main', index: 0 }]] },
+    'Fetch Instagram':       { main: [[{ node: 'Merge',                    type: 'main', index: 1 }]] },
+    'Merge':                 { main: [[{ node: 'Score and Rank Posts',     type: 'main', index: 0 }]] },
     'Score and Rank Posts':  { main: [[{ node: 'Prepare Claude Request',   type: 'main', index: 0 }]] },
     'Prepare Claude Request':{ main: [[{ node: 'Claude Analysis',          type: 'main', index: 0 }]] },
     'Claude Analysis':       { main: [[{ node: 'Format Report',            type: 'main', index: 0 }]] },

@@ -1,4 +1,4 @@
-# Skill: Morning Coffee
+﻿# Skill: Morning Coffee
 
 **Purpose:** Generate Noa's personal daily morning briefing — a warm Slack DM from John covering today's calendar, emails needing attention, ClickUp project pulse, and open Slack threads. Personal in tone. Separate from the SOD report (which is ops-focused). Sent directly to Noa's DM.
 
@@ -48,8 +48,8 @@ mcp__claude_ai_Google_Calendar__list_events
 For each event returned:
 - Extract `summary` (title), `start.dateTime`, `end.dateTime`, attendees
 - Skip events where `status == "cancelled"`
-- Format: `[HH:MM TZ] — [Event Title] with [Person]` (omit "with" if no external attendees)
-- **Flag** events between 14:30–20:00 PHT (2:30–8:00 PM SGT / 1:30–7:00 PM ICT) with `[deep work window]`
+- Format: `[HH:MM SGT] — [Event Title] with [Person]` (omit "with" if no external attendees)
+- **Flag** events between 14:30–20:00 SGT with `[deep work window]`
 
 **Fallback:** If the Google Calendar MCP returns an error or empty result, fall back to email-based parsing:
 ```
@@ -61,38 +61,43 @@ Filter to events matching `TODAY_PHT`. Prefer `Accepted:` over `Invitation:` whe
 
 If no events today from either source: omit section silently.
 
-### Step 2 — Scan Noa's Gmail (last 24h, all mail)
+### Step 2 — Read pre-classified inbox from EA/* labels
+
+The n8n Inbox Triage workflow (ID: `EuT6REDs5PUaoycE`) runs at 9 AM PHT and labels every unread inbox email with `EA/Urgent`, `EA/Needs-Reply`, `EA/FYI`, or `EA/Auto-Sorted` before morning coffee fires at 10 AM. Read the pre-classified results directly — do NOT re-scan `in:inbox` or re-classify.
+
+Run these two searches in parallel:
 
 ```
 mcp__gmail-noa__gmail_search_messages
-  query: "in:inbox newer_than:1d"
-  max_results: 50
-```
+  query: "label:EA/Urgent newer_than:1d"
+  max_results: 20
 
-Do NOT use `is:unread` — emails Noa has opened but not acted on are still relevant and must be surfaced. Rely on content classification (below) to filter noise, not read status.
+mcp__gmail-noa__gmail_search_messages
+  query: "label:EA/Needs-Reply newer_than:1d"
+  max_results: 20
+```
 
 For each result, read sender, subject, and snippet via `mcp__gmail-noa__gmail_get_message`.
 
-Split into two buckets immediately:
-- `clickup_emails` — from `notifications@tasks.clickup.com` → route to Step 3
-- `candidate_emails` — everything else → apply filters below
+**Buckets:**
+- `urgent_emails` — from `label:EA/Urgent` query → always surface, mark `[URGENT]`
+- `reply_emails` — from `label:EA/Needs-Reply` query → surface top 5 by recency
 
-**Exclude from candidates:**
-- Automated ticket status threads (e.g. PandaDoc support auto-replies, noreply@ tool messages)
-- Marketing and promotional emails from SaaS tools
-- John's outbound invoice reminders (`from:john@kravemedia.co` + subject contains "reminder")
-- Calendar accept/decline notifications (noreply from Google Calendar)
-- Newsletters and automated digests
+**Exclude from both buckets:**
+- Emails from `@kravemedia.co` (internal — already handled in Slack)
+- ClickUp notification emails → route to Step 3 instead
 
-**Include (surface in briefing):**
-- Clients or brand partners requiring a reply (Care & Bloom, StashAway, House of Wellness, IM8 agencies, Insense, etc.)
-- Contracts or agreements incoming or requiring signature
-- Billing alerts: payment failures, overdue notices, subscription problems
-- Speaking or partnership opportunities
+**Fallback:** If both label queries return zero results (triage didn't run, or ran before any email arrived), fall back to:
+```
+mcp__gmail-noa__gmail_search_messages
+  query: "in:inbox is:unread newer_than:1d -label:EA/Auto-Sorted -label:EA/FYI"
+  max_results: 30
+```
+In fallback mode, apply the standard exclude filters (noreply@, newsletters, calendar notifications, SaaS marketing) and classify manually. Note `_(triage labels not found — fallback mode)_` in the briefing.
 
-**Urgency:** Mark `[URGENT]` inline if: hard deadline today, legal/contract risk, payment failure, client loss risk.
+**Urgency:** `EA/Urgent` emails are always `[URGENT]`. For `EA/Needs-Reply`, mark `[URGENT]` additionally if the subject or snippet contains a hard deadline today, legal/contract risk, or payment failure.
 
-Limit to top 5–7 most relevant (urgent first, then needs-reply).
+Limit to top 5–7 across both buckets combined (urgent first, then needs-reply).
 
 ### Step 3 — Aggregate ClickUp notifications (Project Pulse)
 
@@ -232,7 +237,7 @@ mcp__claude_ai_Slack__slack_send_message
 
 Confirm `ts` is returned. If delivery fails: output the composed message in full for manual copy-paste, note the failure.
 
-Do NOT post to `#airwallexdrafts` or any other channel. This is a private personal DM only.
+Do NOT post to `#ops-command` or any other channel. This is a private personal DM only.
 
 ---
 

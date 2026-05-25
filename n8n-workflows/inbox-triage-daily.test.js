@@ -1,4 +1,4 @@
-const assert = require('node:assert/strict');
+﻿const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
@@ -16,7 +16,7 @@ assert.match(deploySource, /name:\s+'Krave .* Inbox Triage Daily'/, 'Expected wo
 assert.match(deploySource, /const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD'/, 'Expected shared Slack credential id');
 assert.match(deploySource, /const OPENAI_CRED_ID = 'UIREXIYn59JOH1zU'/, 'Expected shared OpenAI credential id');
 assert.match(deploySource, /const GMAIL_CRED_ID = 'vxHex5lFrkakcsPi'/, 'Expected shared Gmail credential id');
-assert.match(deploySource, /const AIRWALLEX_DRAFTS = 'C0AQZGJDR38'/, 'Expected #airwallexdrafts channel id');
+assert.match(deploySource, /const AIRWALLEX_DRAFTS = 'C0AQZGJDR38'/, 'Expected #ops-command channel id');
 assert.match(deploySource, /const NOA_USER_ID = 'U06TBGX9L93'/, 'Expected Noa DM user id');
 assert.match(deploySource, /const TIMEZONE = 'Asia\/Manila'/, 'Expected Manila timezone constant');
 assert.match(deploySource, /const WORKFLOW_ID = '3YyEjk1e6oZV786T'/, 'Expected deploy script to target the existing inbox triage workflow id');
@@ -145,7 +145,7 @@ assert.match(deploySource, /Inbox: /, 'Expected final inbox count line');
 assert.match(deploySource, /'Did Channel Send Fail\?'/, 'Expected channel send retry decision');
 assert.match(deploySource, /'Did Noa DM Fail\?'/, 'Expected DM retry decision');
 assert.match(deploySource, /'Post Failure Alert'/, 'Expected failure alert node');
-assert.match(deploySource, /C0AQZGJDR38/, 'Expected failure alerts to route to #airwallexdrafts');
+assert.match(deploySource, /C0AQZGJDR38/, 'Expected failure alerts to route to #ops-command');
 assert.match(deploySource, /U06TBGX9L93/, 'Expected Noa DM destination');
 assert.match(deploySource, /select:\s+'channel'/, 'Expected Slack nodes to use channel selection mode');
 assert.match(deploySource, /channelId:\s+\{ __rl: true, value: AIRWALLEX_DRAFTS, mode: 'id' \}/, 'Expected archive channel to use Slack channelId');
@@ -153,7 +153,7 @@ assert.match(deploySource, /channelId:\s+\{ __rl: true, value: NOA_USER_ID, mode
 assert.match(readmeDoc, /Inbox Triage Daily/, 'Expected workflow listed in README');
 assert.match(readmeDoc, /Gmail drafts/i, 'Expected README to document draft-only email behavior');
 assert.match(readmeDoc, /EA\/Unsure/i, 'Expected README to document inbox retention for unsure emails');
-assert.match(readmeDoc, /#airwallexdrafts/i, 'Expected README to document archive channel summary');
+assert.match(readmeDoc, /#ops-command/i, 'Expected README to document archive channel summary');
 assert.match(readmeDoc, /Noa/i, 'Expected README to document Noa DM delivery');
 assert.match(readmeDoc, /newer_than:1d|last 24 hours/i, 'Expected README to document last-24-hours inbox scope');
 assert.match(readmeDoc, /already replied|draft exists|already labeled/i, 'Expected README to document inline already-actioned notes');

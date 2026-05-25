@@ -1,4 +1,4 @@
-# n8n Workflows
+﻿# n8n Workflows
 
 Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 
@@ -197,7 +197,7 @@ node n8n-workflows/deploy-invoice-reminder-reply-detection.js
 
 ## Inbox Triage Daily
 
-Reads inbox email from the last 24 hours in `noa@kravemedia.co`, classifies each message into the `EA/*` tier model, creates Gmail drafts for `EA/Urgent` and `EA/Needs-Reply` only when the thread is not already in motion, repairs Gmail labels when needed, leaves `EA/Unsure` in the inbox, and posts the final summary to both `#airwallexdrafts` and Noa's Slack DM.
+Reads inbox email from the last 24 hours in `noa@kravemedia.co`, classifies each message into the `EA/*` tier model, creates Gmail drafts for `EA/Urgent` and `EA/Needs-Reply` only when the thread is not already in motion, repairs Gmail labels when needed, leaves `EA/Unsure` in the inbox, and posts the final summary to both `#ops-command` and Noa's Slack DM.
 
 **Workflow ID:** `3YyEjk1e6oZV786T`
 
@@ -223,7 +223,7 @@ node n8n-workflows/deploy-inbox-triage-daily.js
 
 **Credentials required in n8n:**
 - `Gmail account` - `noa@kravemedia.co` OAuth2 for inbox reads, labels, archive, and Gmail drafts
-- `Krave Slack Bot` - summary posts to `#airwallexdrafts` plus Noa DM delivery
+- `Krave Slack Bot` - summary posts to `#ops-command` plus Noa DM delivery
 - `OpenAI account` - classification and reply drafting
 
 ---

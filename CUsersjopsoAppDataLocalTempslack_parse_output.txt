@@ -1,0 +1,288 @@
+--- #ad-production-internal (C0AGEM919QV) ---
+Total chars: 99668
+Total messages in file: 30
+Messages >= 1747533600 (last 24h): 30
+
+TS: 1778661523.356839
+USER: USLACKBOT
+TEXT: '*Miki Edits* has removed themselves from this channel.'
+---
+TS: 1778561323.924209
+USER: U0AKPGKSNP3
+TEXT: "hi <!here> we received some edit requests from the DB edits and not sure who was assigned to these. I've included the links below. If you could all ping me on who did what as I wasn't able to find who handled each edit. See below and ping me separately once you've identified your video. These changes are super urgent as they're for ads that are going live asap:\n\n*Batch 1: Original Batch* \n• This batch features content that was shared across originally and came back with comments. We have cleaned it up based on the directives from our content call. \n    ◦ DB X Aryna - <https://f.io/sfVowFvS>\n    ◦ DB Kitchen Interview - <https://f.io/QOKnSDJd>\n*Batch 2: Fresh Cuts*\n• These cuts are longer, but created in a way so that:\n    ◦ They feature more individuals (eg Aryna, Dr Dawn, Dr Ara) to break up the video\n    ◦ David serves as an anchor, setting the tone for the first few seconds before shifting into other scenes\n    ◦ Wherever David is featured for longer, the points are kept tight and the video is cut up with plenty of b-roll.\n    ◦ DB X Aryna X SAB Panel - <https://f.io/gXH0bhYe>\n<http://Frame.io|Frame.io>\n<https://f.io/sfVowFvS|DB X Aryna Mashups>\nCreated By Marketing +1\n<https://f.io/sfVowFvS>\n\n<http://Frame.io|Frame.io>\n<https://f.io/QOKnSDJd|DB Kitchen Interview>\nCreated By Marketing +1\n<https://f.io/QOKnSDJd>\n\n<http://Frame.io|Frame.io>\n<https://f.io/gXH0bhYe|DB X Aryna X SAB Panel>\nCreated By Marketing +1\n<https://f.io/gXH0bhYe>"
+  ATTACHMENT_FALLBACK: 'Frame.io: DB X Aryna Mashups'
+  ATTACHMENT_TEXT: 'Created By Marketing +1'
+  ATTACHMENT_FALLBACK: 'Frame.io: DB Kitchen Interview'
+  ATTACHMENT_TEXT: 'Created By Marketing +1'
+  ATTACHMENT_FALLBACK: 'Frame.io: DB X Aryna X SAB Panel'
+  ATTACHMENT_TEXT: 'Created By Marketing +1'
+  ATTACHMENT_FALLBACK: 'Frame.io: Elevate your creative workflow to an art form.'
+  ATTACHMENT_TEXT: '<http://Frame.io|Frame.io> centralizes all of your files, feedback, and people on one secure platform, so you can deliver exceptional creative faster.'
+REACTIONS: [{'name': 'raised_hands', 'count': 1, 'users': ['U09J0KR60KB']}]
+---
+TS: 1778492205.899189
+USER: U09J0KR60KB
+TEXT: "Hi <!here> - hope all is in good!\n\nMoving forward, we will be using ClickUp for the tracker and to ease the hustle. I believe Tope and Daniel has extend the invitations to you guys last week, but let me know if you need help logging in.\n\nAs aligned with Josh &amp; Denis, moving forward I'll be assigning new briefs from Denis to you, so let's make sure to check them and have it ready by to the deadline.\n\nWe aim minimum of 80 asset in a week, let me know if you have any concerns with your allocations! :slightly_smiling_face:"
+REACTIONS: [{'name': 'raised_hands', 'count': 4, 'users': ['U0853AG077S', 'U0ASA39LSJF', 'U0ANVCAEAH2', 'U0AN47EHFMW']}]
+---
+TS: 1778219479.367359
+USER: U09J0KR60KB
+TEXT: 'Hey editors <!here> Quick reminder to follow the naming convention (from the brief - tab F) when creating folders in <http://Frame.io|Frame.io>. This keeps things consistent and also helps the ads buy team to upload files correctly. Thank you :)'
+REACTIONS: [{'name': 'white_check_mark', 'count': 2, 'users': ['U0ASA39LSJF', 'U0AN81NKWTV']}]
+---
+TS: 1777898784.216429
+USER: U0AN7UJUKAP
+TEXT: 'Hello <!here> <@U0AMYBY5CQ7> and I have been assigned to first-level QC before passing to <@U0ASA39LSJF> for final review. A new batch is coming in soon, and Dennis has given us till the weekend to clear all backlogs from March and April so we can reset properly and stay ahead of incoming work. I know the workload is heavy, but I also know what we’re capable of when we stay focused and work as a team. Let’s give this our best push and close it out cleanly and efficiently.\n\nIf anything urgent comes up, I’ll reach out personally.\n\nHave a great week.'
+REACTIONS: [{'name': 'white_check_mark', 'count': 6, 'users': ['U0AJF5U8J31', 'U0ASA39LSJF', 'U0AN47EHFMW', 'U0AN7UJUKAP', 'U0853AG077S', 'U09J0KR60KB']}]
+---
+TS: 1777620967.885759
+USER: U0ALJ0SAHGE
+TEXT: '<@U0ALJ0SAHGE> has left the channel'
+---
+TS: 1777563510.983639
+USER: U0ALJ0SAHGE
+TEXT: '*IM8 Sprint Automation:* No CREATIVE SPRINT message found in the last 72 hours. Skipping this week.\n\nExpected a message containing "CREATIVE SPRINT" in this channel.'
+---
+TS: 1777283350.238939
+USER: U0AM5EGRVTP
+TEXT: '<@U0AM5EGRVTP> has left the channel'
+---
+TS: 1777278390.549859
+USER: U09HMK1FBAB
+TEXT: "Hi <!here>! Hope you all had a restful weekend. I wanted to share that I will be leaving the team with my last day on Thursday this week (30 Apr). I will still be around till then to support with the handover so feel free to ping me any questions in the meantime!\n\n<@U0ASA39LSJF> and <@U0AJF5U8J31> will be taking over the ad production workstream, and working closely with you all on branded content and ad edits, including\n• Setting sprint goals with <@U05N01Z3HEF> \n• Writing and setting up briefs in the ad production tracker \n• Reviewing, and approving all the produced ads \n• Working with you all to continuously upskill and improve the skills of the team\nIt has been such a pleasure building this team, getting to know you all, and working with such talented people! Wishing you all the best - my personal email is <mailto:noa@kravemedua.co|noa@kravemed><http://ia.co|ia.co> if you're keen to keep in touch."
+REACTIONS: [{'name': 'pray', 'count': 5, 'users': ['U0AJF5U8J31', 'U0ASH3R7QQ2', 'U0ANVCAEAH2', 'U0AN47EHFMW', 'U0853AG077S']}, {'name': 'heart', 'count': 4, 'users': ['U09J0KR60KB', 'U0ASH3R7QQ2', 'U0AN81NKWTV', 'U0AMYBY5CQ7']}, {'name': 'pleading_face', 'count': 1, 'users': ['U0AN81NKWTV']}, {'name': 'sob', 'count': 1, 'users': ['U0AN7UJUKAP']}, {'name': 'pray::skin-tone-2', 'count': 1, 'users': ['U0AKPGKSNP3']}]
+---
+TS: 1777266000.856709
+USER: U0ALJ0SAHGE
+TEXT: '*IM8 Sprint Automation:* No CREATIVE SPRINT message found in the last 72 hours. Skipping this week.\n\nExpected a message containing "CREATIVE SPRINT" in this channel.'
+---
+TS: 1776851570.467139
+USER: U0ASA39LSJF
+TEXT: '<@U0ASA39LSJF> has joined the channel'
+---
+TS: 1776759201.641919
+USER: U0AN7UJUKAP
+TEXT: 'Thank you <@U09J0KR60KB> '
+---
+TS: 1776743964.710519
+USER: U0AN81NKWTV
+TEXT: '<!here> for Premiere users.. We can try mimicking the Rec.709-A look by setting the viewer gamma to 1.96 (QuickTime). You can test it and compare how it looks on your phone.. No need to tweak anything in the render settings :blush:'
+REACTIONS: [{'name': 'white_check_mark', 'count': 1, 'users': ['U0AMYBY5CQ7']}]
+---
+TS: 1776741921.816959
+USER: U0AN81NKWTV
+TEXT: 'Nice! I see that this time you used Use Timeline (DaVinci YRGB) instead of Rec.709 and Rec.709-A for output.\n\n\nI’ll use the screengrab you sent as the color reference. Thanks for explaining that some cameras shifted during the shoot.\n\nThis is really helpful!'
+REACTIONS: [{'name': 'white_check_mark', 'count': 1, 'users': ['U0AMYBY5CQ7']}]
+THREAD_TS: 1776684947.803139
+---
+TS: 1776738936.765049
+USER: U09J0KR60KB
+TEXT: 'resharing our endcards link in here <@U0AMYBY5CQ7> please find the latest updates :+1:'
+REACTIONS: [{'name': 'white_check_mark', 'count': 1, 'users': ['U0AMYBY5CQ7']}]
+THREAD_TS: 1775102410.745719
+---
+TS: 1776737725.528019
+USER: U09J0KR60KB
+TEXT: 'hi <@U0AN7UJUKAP> and editors, you may find working file for lower third in here <https://drive.google.com/drive/folders/1hAuRYNWZNBxrHI1cg974DbfrAFt_xXZc?usp=share_link> in the folder name - 0-IM8 Template.'
+REACTIONS: [{'name': 'raised_hands', 'count': 1, 'users': ['U0AN81NKWTV']}]
+---
+TS: 1776686703.619519
+USER: U0AN7UJUKAP
+TEXT: 'Hello team! please I need the AE file of this naming lower third'
+---
+TS: 1776685022.475029
+USER: U0AKPGKSNP3
+TEXT: "let's see how it unfolds for you with the full resolution footage. the issue should not be there. maybe it's the proxy quality that's restricting, but wanted to note for when you do have the full (which is still uploading)"
+---
+TS: 1776684947.803139
+USER: U0AKPGKSNP3
+TEXT: 'i applied the same color space transform to the A and B clips (Arri Wide Gamut 4 &amp; LogC4) and only needed to adjust the hue, contrast and standard shadow, midtone, highlight adjustments to match the clips. this is due to the different lenses that were on each camera. one creates a bit more contrast, but again, just dialed that back. there should be no major shift in color spaces that need separate LUTS applied to match the clips.  give this same method a try. this obviously can be tweaked even more, but i spent 5 minutes just getting it in the ballpark'
+---
+TS: 1776676120.423489
+USER: U0AN81NKWTV
+TEXT: 'Interesting, <@U0AKPGKSNP3> thanks for confirming that both Camera A and Camera B are ARRI.\n\nDid you happen to disable the LUT before ingesting or creating proxies for the B cam? Because even if the proxies look flat/log, there might still be some metadata tagging or a Rec.709 LUT enabled. So when we apply the ARRI LogC4 LUT or use Interpret Footage, it could be stacking LUTs, which might explain why it looks brighter and more saturated.'
+THREAD_TS: 1776406346.080079
+---
+TS: 1776673812.127989
+USER: U0A6023H85C
+TEXT: "Hi team! Gerald from social media here. Wanted to confirm, who edited this Aryna video and who's doing QC on them? <https://next.frame.io/share/9aed6b7c-7d44-43e1-946d-ac9b16192bd1/view/45141e44-c76c-4d9b-908b-3b6b7241f56a>"
+  ATTACHMENT_FALLBACK: "Frame.io: Aryna's reel.mp4 - Battle of the Sexes - Frame.io"
+---
+TS: 1776673604.955289
+USER: U0A6023H85C
+TEXT: '<@U0A6023H85C> has joined the channel'
+---
+TS: 1776661200.874239
+USER: U0ALJ0SAHGE
+TEXT: '*IM8 Sprint Automation:* No CREATIVE SPRINT message found in the last 72 hours. Skipping this week.\n\nExpected a message containing "CREATIVE SPRINT" in this channel.'
+---
+TS: 1776411054.394669
+USER: U0AN81NKWTV
+TEXT: 'Yep! <@U09J0KR60KB> Red Giant plugins are amazing super powerful and can definitely go toe-to-toe with the DaVinci Resolve color page. But for our current footage, we’re actually using Premiere’s *Interpret Footage* instead of Lumetri… technically speaking :smile:'
+REACTIONS: [{'name': 'heart', 'count': 1, 'users': ['U0AKPGKSNP3']}]
+THREAD_TS: 1776406346.080079
+---
+TS: 1776410419.034049
+USER: U0AN81NKWTV
+TEXT: ''
+THREAD_TS: 1776406346.080079
+---
+TS: 1776409522.029069
+USER: U0AN81NKWTV
+TEXT: "you don't need to! I'm gonna make a video real quick <@U09J0KR60KB>"
+THREAD_TS: 1776406346.080079
+---
+TS: 1776406346.080079
+USER: U09HMK1FBAB
+TEXT: "Hi <!here> - <@U0AKPGKSNP3> put together a great coloring guide for branded content. quick note for those using Premiere - you'll have to download a plugin called red giant suite\nSpecifically colorista and looks tools.\n\n<@U09J0KR60KB> <@U0853AG077S> - for the Aryna videos you recently made, please apply this as it is currently too saturated! Please prioritize this update for today."
+REACTIONS: [{'name': 'white_check_mark', 'count': 1, 'users': ['U0AMYBY5CQ7']}, {'name': 'heart', 'count': 1, 'users': ['U0AN81NKWTV']}]
+---
+TS: 1776393416.771669
+USER: U09J0KR60KB
+TEXT: 'Hi Noa, noted on the Sprint 6 brief. Just few questions before i start on my brief:\n\n1. I understand that there are Ad ID in different excel sheets. however, there are no link to it. when i CNTRL+F Ad Link to the sheets, there are none appear.\n2. I saw in the loom video that the demonstrator used "Creative Analytics" search engine to retrieved the ads. Are you able to give access to us?\n3. As for the Hook part, the are no link, or Ad ID that we are able to retrieve the video from. Is there any link that i missed out in the brief?'
+REACTIONS: [{'name': 'raised_hands', 'count': 2, 'users': ['U0853AG077S', 'U0AMYBY5CQ7']}]
+THREAD_TS: 1776346702.212029
+---
+TS: 1776346804.431049
+USER: U0AMYBY5CQ7
+TEXT: 'Noted <@U09HMK1FBAB>\nChecking the tracker now'
+---
+TS: 1776346702.212029
+USER: U09HMK1FBAB
+TEXT: 'Hi <!here>, we have some ad videos for *Sprint 6 that are urgent.* See here the assignments. Please check them in the tab!\n\n1/ Winning ad recutting on line 38 - 49 on the April Pipeline - <@U09J0KR60KB> <@U0853AG077S> please take this on!\n2/ Re-Edit of Youtube Video into Ad Cuts - <@U0AMYBY5CQ7> this is for you (prioritize over other ad videos)\n3/ UK Unboxing Sprint - <@U0AN47EHFMW> please take this one on!\n\nThanks team'
+REACTIONS: [{'name': 'raised_hands', 'count': 1, 'users': ['U0AN47EHFMW']}, {'name': 'heart', 'count': 1, 'users': ['U0853AG077S']}]
+---
+
+============================================================
+
+--- #payments-invoices-updates (C09HN2EBPR7) ---
+Total chars: 62177
+Total messages in file: 30
+Messages >= 1747533600 (last 24h): 30
+
+TS: 1779156002.194469
+USER: U0AQK6Y1Y6T
+TEXT: '*:clipboard: Invoice Reminder Digest — 2026-05-19*\n\n*Reminders sent:* 1\n• WELLE PTY LTD — INV-ZYZXV76U-0003 — 3d reminder — Due 2026-05-22\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1779097575.799559
+USER: U0AQK6Y1Y6T
+TEXT: ':white_check_mark: Invoice request received\n- Requester: john\n- Client: Hone Aroma PTE LTD\n- Billing Address: -\n- Amount: SGD 1279\n- Invoice Date: 2026-05-18\n- Payout: 7 day payout\n- Due Date: 2026-05-25\n- Memo: -\n- Email: <mailto:admin@honearoma.com|admin@honearoma.com>\n- Line Items: Hone Aroma - 2 Concepts x 1 @1279\n- Status: Received and processing\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/t7MMhlUo5H4HQmgL?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1779070341.743649
+USER: U0A2HLNV8NM
+TEXT: 'Hi <@U0AM5EGRVTP>! Could I get an invoice link with the following details, pls date it for 18 May 2026.\n\nBilling Details:\nTo: HONE AROMA PTE. LTD. / 202125578Z\n1 UBI VIEW #04-07 FOCUS ONE\nSingapore Singapore 408555\n\nDescription:\nHone Aroma - 2 Concepts\n\nPrice:\nUSD 1,000.00\n(please convert to SGD)\n\n*Notes:*\nUSD1000 converted to SGD on 18/05/2026\n\nThank you! :pray:'
+---
+TS: 1779069602.628649
+USER: U0AQK6Y1Y6T
+TEXT: ':white_check_mark: Invoice check complete — no outstanding items.\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1779066002.323109
+USER: U0AQK6Y1Y6T
+TEXT: '*:bar_chart: Weekly Invoice Summary — 2026-05-18*\n\n*:large_orange_circle: Late Fee Applied (4):*\n• Chamelo Eyewear LLC — INV-8V9QRNIC-0001 — 4000 USD — 32 days overdue — <@U06TBGX9L93>\n• CLEAR ALIGNERS PTE LTD — INV-S3I9CIK5-0002 — 3400 USD — 11 days overdue — <@U0A2HLNV8NM>\n• IM8 (US) LLC. — INV-X0P7VFWQ-0003 — 5250 USD — 41 days overdue — <@U07J8SRCPGU>\n• IM8 (US) LLC. — INV-X0P7VFWQ-0005 — 5250 USD — 10 days overdue — <@U07J8SRCPGU>\n\n*:large_blue_circle: Due This Week (1):*\n• WELLE PTY LTD — INV-ZYZXV76U-0003 — 4600 USD — Due 2026-05-22\n\n*:white_circle: Pending — Upcoming (1):*\n• Dojocare — INV-WS4LWJ55-0001 — 5750 USD — Due 2026-06-10\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/WX1hHek0cNTyZXkS?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778810406.588199
+USER: U0AQK6Y1Y6T
+TEXT: ':warning: *Overdue Follow-Up — IM8 (US) LLC.*\n• Invoice: INV-X0P7VFWQ-0005\n• Amount: 5250 USD\n• 7 days overdue\n• <@U07J8SRCPGU> <@U07J8SRCPGU>\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778810402.418459
+USER: U0AQK6Y1Y6T
+TEXT: '*:clipboard: Invoice Reminder Digest — 2026-05-15*\n\n*Reminders sent:* 1\n• WELLE PTY LTD — INV-ZYZXV76U-0003 — 7d reminder — Due 2026-05-22\n\n*Late fees triggered:* 1\n• IM8 (US) LLC. — INV-X0P7VFWQ-0005 — $200 USD late fee flagged\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778724008.036719
+USER: U0AQK6Y1Y6T
+TEXT: ':bell: *Overdue Invoice — IM8 (US) LLC.*\n• Invoice: INV-X0P7VFWQ-0005\n• Amount: 5250 USD\n• Due: 2026-05-08 (6 days overdue)\n• <@U07J8SRCPGU> <@U07J8SRCPGU>\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778724007.743389
+USER: U0AQK6Y1Y6T
+TEXT: ':warning: *Overdue Follow-Up — IM8 (US) LLC.*\n• Invoice: INV-X0P7VFWQ-0003\n• Amount: 5250 USD\n• 37 days overdue\n• <@U07J8SRCPGU> <@U07J8SRCPGU>\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778724007.444499
+USER: U0AQK6Y1Y6T
+TEXT: ':warning: *Overdue Follow-Up — CLEAR ALIGNERS PTE LTD*\n• Invoice: INV-S3I9CIK5-0002\n• Amount: 3400 USD\n• 7 days overdue\n• <@U0A2HLNV8NM> <@U07J8SRCPGU>\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778724007.133989
+USER: U0AQK6Y1Y6T
+TEXT: ':warning: *Overdue Follow-Up — Chamelo Eyewear LLC*\n• Invoice: INV-8V9QRNIC-0001\n• Amount: 4000 USD\n• 28 days overdue\n• <@U06TBGX9L93> <@U07J8SRCPGU>\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778724002.460489
+USER: U0AQK6Y1Y6T
+TEXT: '*:clipboard: Invoice Reminder Digest — 2026-05-14*\n\n*Overdue (action needed):* 3\n• IM8 (US) LLC. — INV-X0P7VFWQ-0005 — 6 days overdue\n• Chamelo Eyewear LLC — INV-8V9QRNIC-0001 — 28 days overdue\n• IM8 (US) LLC. — INV-X0P7VFWQ-0003 — 37 days overdue\n\n*Late fees triggered:* 1\n• CLEAR ALIGNERS PTE LTD — INV-S3I9CIK5-0002 — $200 USD late fee flagged\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778637602.622599
+USER: U0AQK6Y1Y6T
+TEXT: ':white_check_mark: Invoice check complete — no outstanding items.\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778551202.429429
+USER: U0AQK6Y1Y6T
+TEXT: ':white_check_mark: Invoice check complete — no outstanding items.\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778517661.055279
+USER: U07R7FU4WBV
+TEXT: 'Hey <@U0AM5EGRVTP>\n\nPlease process this invoice:\n<https://drive.google.com/file/d/1VTl7U5FVsv9PVo8anV6ip12ium4TGreY/view?usp=drive_link>\n\n*Date*: 12 May\n*Client*: Smilefam 1x Concept\n*Creator*: Yi Xuan\n*Amount*: SGD150\n\nThank you!'
+REACTIONS: [{'name': 'white_check_mark', 'count': 1, 'users': ['U0AM5EGRVTP']}]
+---
+TS: 1778515590.659409
+USER: U07R7FU4WBV
+TEXT: "She's been paid here~ <@U07J8SRCPGU>"
+  ATTACHMENT_FALLBACK: '[April 30th, 2026 11:07 PM] noa: Hey guys, quite a few payments have gone out. Just two blockers as per below FYI <@U0AM5EGRVTP>\n• Nurul Hiraya Binta Salim - need to convert her SGD currency to MYR first before we can send\n• Raymond Cordova (no account details on the invoice)'
+  ATTACHMENT_TEXT: 'Hey guys, quite a few payments have gone out. Just two blockers as per below FYI <@U0AM5EGRVTP>\n• Nurul Hiraya Binta Salim - need to convert her SGD currency to MYR first before we can send\n• Raymond Cordova (no account details on the invoice)'
+---
+TS: 1778508553.907309
+USER: U07J8SRCPGU
+TEXT: 'Hi <@U0AM5EGRVTP> <@U07R7FU4WBV> - can I check if Shu Hui’s invoice for SkinMTX was processed? She was a creator earlier in April but she said she never received her payment. She messaged me to check as she hasn’t heard from Jeneena! :sweat_smile:\n\nAttaching her invoice here!'
+REACTIONS: [{'name': 'white_check_mark', 'count': 1, 'users': ['U07R7FU4WBV']}]
+---
+TS: 1778494941.391669
+USER: U0AQK6Y1Y6T
+TEXT: ':white_check_mark: Invoice request received\n- Requester: amanda\n- Client: Dojocare\n- Billing Address: 66 West Flagler St, Miami FL 33130\n- Amount: USD 5750 5750\n- Invoice Date: 2026-05-11\n- Payout: 30day payout\n- Due Date: Needs review\n- Memo: -\n- Email: <mailto:fiona@dojocare.co|fiona@dojocare.co>\n- Line Items: Krave Media Package (April 2026); Net New UGC  - 2 Creators x 2 Concepts x 3 Hooks - $4,600; Net New UGC - 1 Additional Concept (Brought Forward from May 2026) - $1,150\n- Status: Received, needs date review\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/t7MMhlUo5H4HQmgL?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778493733.541269
+USER: U06TBGX9L93
+TEXT: '<@U0AM5EGRVTP> can you confirm on the contract?'
+THREAD_TS: 1778493627.585519
+---
+TS: 1778493627.585519
+USER: U07J8SRCPGU
+TEXT: 'quick one <@U06TBGX9L93> - for dojo, on clickup they’re 7 days payment terms, is this correct? prepping the invoice request now as we’re wrapping up exports! :slightly_smiling_face:'
+---
+TS: 1778475227.838869
+USER: U09SCT83SUA
+TEXT: "Hi <@U0AM5EGRVTP> can I check to see if Maddie and Sara's invoices have been paid out?"
+---
+TS: 1778464808.335999
+USER: U0AQK6Y1Y6T
+TEXT: ':warning: *Payment email needs human review*\n. Subject: You received a deposit of 4,975.65 USD\n. Source: airwallex-email\n. Parsed amount: 4975.65 USD\n. Parsed invoice: none\n. Parsed depositor: CPJ INTERNATIONAL LIMITED\n. Reason: no open invoice matches amount+currency+client (depositor: CPJ INTERNATIONAL LIMITED)\n_Email ID: 19e14b75fadc836a_\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/NurOLZkg3J6rur5Q?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778464807.556679
+USER: U0AQK6Y1Y6T
+TEXT: ':bell: *Overdue Invoice — IM8 (US) LLC.*\n• Invoice: INV-X0P7VFWQ-0005\n• Amount: 5250 USD\n• Due: 2026-05-08 (3 days overdue)\n• <@U07J8SRCPGU> <@U07J8SRCPGU>\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778464807.357239
+USER: U0AQK6Y1Y6T
+TEXT: ':bell: *Overdue Invoice — CLEAR ALIGNERS PTE LTD*\n• Invoice: INV-S3I9CIK5-0002\n• Amount: 3400 USD\n• Due: May 7, 2026 (4 days overdue)\n• <@U0A2HLNV8NM> <@U07J8SRCPGU>\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778464803.116829
+USER: U0AQK6Y1Y6T
+TEXT: '*:clipboard: Invoice Reminder Digest — 2026-05-11*\n\n*Overdue (action needed):* 2\n• CLEAR ALIGNERS PTE LTD — INV-S3I9CIK5-0002 — 4 days overdue\n• IM8 (US) LLC. — INV-X0P7VFWQ-0005 — 3 days overdue\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/Q3IqqLvmX9H49NdE?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778461202.401569
+USER: U0AQK6Y1Y6T
+TEXT: '*:bar_chart: Weekly Invoice Summary — 2026-05-11*\n\n*:large_orange_circle: Late Fee Applied (2):*\n• Chamelo Eyewear LLC — INV-8V9QRNIC-0001 — 4000 USD — 25 days overdue — <@U06TBGX9L93>\n• IM8 (US) LLC. — INV-X0P7VFWQ-0003 — 5250 USD — 34 days overdue — <@U07J8SRCPGU>\n\n*:large_yellow_circle: Overdue — Needs Chase (2):*\n• CLEAR ALIGNERS PTE LTD — INV-S3I9CIK5-0002 — 3400 USD — 4 days overdue — <@U0A2HLNV8NM>\n• IM8 (US) LLC. — INV-X0P7VFWQ-0005 — 5250 USD — 3 days overdue — <@U07J8SRCPGU>\n\n*:white_circle: Pending — Upcoming (1):*\n• WELLE PTY LTD — INV-ZYZXV76U-0003 — 4600 USD — Due 2026-05-22\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/WX1hHek0cNTyZXkS?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778266807.243849
+USER: U0AQK6Y1Y6T
+TEXT: ':warning: *Payment email needs human review*\n. Subject: You received a deposit of 11,200.00 USD\n. Source: airwallex-email\n. Parsed amount: 11200 USD\n. Parsed invoice: none\n. Parsed depositor: WISE ASIA-PACIFIC PTE. LTD\n. Reason: no open invoice matches amount+currency+client (depositor: WISE ASIA-PACIFIC PTE. LTD)\n_Email ID: 19e08dea4ff6cfbf_\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/NurOLZkg3J6rur5Q?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778241784.482629
+USER: U0AQK6Y1Y6T
+TEXT: ':white_check_mark: Invoice request received\n- Requester: john\n- Client: Krave Test\n- Billing Address: -\n- Amount: USD 0\n- Invoice Date: 2026-05-08\n- Payout: 7 day payout\n- Due Date: 2026-05-15\n- Memo: -\n- Email: <mailto:john@kravemedia.co|john@kravemedia.co>\n- Line Items: krave media x1 $1\n- Status: Received and processing\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/t7MMhlUo5H4HQmgL?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
+TS: 1778232349.015039
+USER: U06TBGX9L93
+TEXT: 'payments made!'
+REACTIONS: [{'name': 'white_check_mark', 'count': 2, 'users': ['U0AM5EGRVTP', 'U07J8SRCPGU']}]
+---
+TS: 1778205608.003959
+USER: U0AQK6Y1Y6T
+TEXT: ':warning: *Payment email needs human review*\n. Subject: You received a deposit of 6,877.00 SGD\n. Source: airwallex-email\n. Parsed amount: 6877 SGD\n. Parsed invoice: none\n. Parsed depositor: none\n. Reason: no high-confidence match\n_Email ID: 19e032cb2b0ea42a_\n_Automated with this <https://noatakhel.app.n8n.cloud/workflow/NurOLZkg3J6rur5Q?utm_source=n8n-internal&amp;utm_medium=powered_by&amp;utm_campaign=n8n-nodes-base.slack_97e3917a5b174130a25e36592c1df1ff371ce0169ad461914ee2aaf8010b3078|n8n workflow>_'
+---
