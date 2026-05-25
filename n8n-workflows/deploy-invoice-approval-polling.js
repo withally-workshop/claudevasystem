@@ -501,6 +501,9 @@ return items.map(ctx => {
   const pdfUrl = ctx.pdf_url || '';
   const projectDescription = ctx['Project Description'] || ctx['D'] || '';
   const originThreadTs = (ctx['Origin Thread TS'] || '').trim();
+  const requesterUsername = (ctx['Requested By'] || '').trim().toLowerCase().replace(/^@/, '');
+  const requesterEmail = requesterUsername ? requesterUsername + '@kravemedia.co' : '';
+  const ccList = ['noa@kravemedia.co', ...(requesterEmail && requesterEmail !== 'noa@kravemedia.co' ? [requesterEmail] : [])].join(', ');
 
   const monthYear = (() => {
     const d = dueDate ? new Date(dueDate) : new Date();
@@ -511,7 +514,7 @@ return items.map(ctx => {
   return { json: {
     ...ctx,
     email_to: clientEmail,
-    email_cc: 'noa@kravemedia.co',
+    email_cc: ccList,
     email_subject: subject,
     email_pdf_url: pdfUrl,
     email_filename: invoiceNum + '.pdf',

@@ -110,7 +110,7 @@ Subject format (always):
 [FYA - Invoice {Invoice #}] - Krave Media x {Client Name} [{Month} {Year}]
 Example: [FYA - Invoice INV-00012] - Krave Media x Stashaway [May 2026]
 
-Always CC: noa@kravemedia.co on every invoice email. Do NOT CC the sender — they are already the From address.
+Always CC: noa@kravemedia.co and the requester on every invoice email. Do NOT CC the sender — they are already the From address.
 CC any additional people the requester specifies.
 Send FROM john@kravemedia.co unless told otherwise.
 Always attach the Airwallex PDF invoice: use attachment_url set to the pdf_download_url field from airwallex_get_billing_invoice (format: https://invoice.airwallex.com/pdf?s=...), and attachment_filename set to the invoice number (e.g. INV-00012.pdf). Never use hosted_invoice_url for the attachment — that is the payment page, not the PDF.
