@@ -10,10 +10,11 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Invoice Reminder Cron | Active | 10am PHT Mon–Fri | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
 | Weekly Invoice Summary | Active | 9am ICT Mondays | [deploy-weekly-invoice-summary.js](deploy-weekly-invoice-summary.js) |
 | Invoice Reminder Reply Detection | Active | 10:30am ICT weekdays + manual webhook | [deploy-invoice-reminder-reply-detection.js](deploy-invoice-reminder-reply-detection.js) |
-| Inbox Triage Daily | Active | 9am ICT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
+| Inbox Triage Daily v2 | Active | 9am PHT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
 | Slack Invoice Handler | Active | Slack slash command + modal submit | [deploy-slack-invoice-handler.js](deploy-slack-invoice-handler.js) |
 | Invoice Request Intake | Active | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
 | Invoice Approval Polling | Active | Every 2 hrs Mon-Fri 9am-5pm PHT + manual webhook | [deploy-invoice-approval-polling.js](deploy-invoice-approval-polling.js) |
+| Price Reply Auto-Resubmit | Active | Every 10min + `POST /webhook/krave-price-reply-resubmit` | [deploy-price-reply-auto-resubmit.js](deploy-price-reply-auto-resubmit.js) |
 | Client Invoice Creation | Inactive legacy | Do not use for approval finalization | [deploy-client-invoice-creation.js](deploy-client-invoice-creation.js) |
 | LinkedIn Resource Post Alert | Active | Every 30min 8AM–1PM PHT Sun–Fri | [deploy-linkedin-resource-post-alert.js](deploy-linkedin-resource-post-alert.js) |
 | Kit Subscriber Alert | Active | Kit webhook (subscriber.tag_add) | [deploy-kit-subscriber-alert.js](deploy-kit-subscriber-alert.js) |

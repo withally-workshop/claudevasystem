@@ -30,7 +30,7 @@
 | 1 | Krave - Payment Detection | `NurOLZkg3J6rur5Q` | Active | Hourly | Detect Airwallex deposits, match invoices, update tracker |
 | 2 | Krave - Invoice Reminder Cron | `Q3IqqLvmX9H49NdE` | Active | 10am PHT Mon–Fri | Send invoice reminders, alert overdue, update tracker, post daily digest |
 | 2b | Krave - Invoice Reminder Reply Detection | `omNFmRcDeiByLOzS` | Active | 10:30am ICT weekdays + `POST /webhook/krave-invoice-reminder-reply-detection` | Scan only `john@kravemedia.co` reminder threads, classify client replies, update reminder attribution columns |
-| 5 | Krave - Inbox Triage Daily | `3YyEjk1e6oZV786T` | Active | 9am ICT weekdays + manual webhook | Read inbox email, create Gmail drafts, apply labels, keep `EA/Unsure` in inbox, and post summary to `#airwallexdrafts` plus Noa |
+| 5 | Krave — Inbox Triage Daily v2 | `EuT6REDs5PUaoycE` | Active | 9am PHT weekdays + manual webhook | Classify all unread inbox emails into EA/* tiers using hardcoded rules + GPT-4o-mini fallback, create drafts, archive processed, post Slack summary |
 | 6 | Krave - Slack Invoice Handler | `t7MMhlUo5H4HQmgL` | Active | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
 | 7 | Krave - Invoice Request Intake | `5XHxhQ7wB2rxE3qz` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
 | 8 | Krave - Invoice Approval Polling | `uCS9lzHtVKWlqYlk` | Active | Every 2 hrs Mon-Fri 9am-5pm PHT + `POST /webhook/krave-invoice-approval-polling` | Poll tracker for pending drafts, detect John's "approve" replies, finalize in Airwallex, write tracker link, and reply in the original strategist thread |
@@ -43,6 +43,7 @@
 | 15 | Halo - Weekly Intelligence Report | 5ZqTSaUEtxnAndiY | Active | 7AM ICT Mondays | Scrape TikTok + Instagram by hashtag cluster, score by engagement × ICP relevance, Claude analysis of top 10 per platform, deliver to Slack + Google Sheet + email |
 | 16 | Crave - Daily Lead Push | `ke52OLrSUXk8mPVw` | Inactive (warm-up) | 9AM PHT daily | Read approved Sheet rows, push to Smartlead campaign 3375376, mark outreach_queued |
 | 17 | Crave - Status Sync | `uUGxA3GW1W0vq6el` | Inactive (warm-up) | 9AM PHT daily | Pull Smartlead lead statuses, sync opens/replies/bounces back to Sheet |
+| 18 | Krave — Price Reply Auto-Resubmit | `nzFTk4e9NRi6Jk9r` | Active | Every 10min + `POST /webhook/krave-price-reply-resubmit` | Detect bot "price missing" threads with unprocessed amount replies in #payments-invoices-updates, parse receipt + amount, resubmit to intake webhook automatically |
 
 ---
 
@@ -434,64 +435,68 @@ Canonical source of truth: [`.claude/skills/sod-report/SKILL.md`](../.claude/ski
 
 ---
 
-## Workflow 5 - Inbox Triage Daily
+## Workflow 5 - Inbox Triage Daily v2
 
-**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/3YyEjk1e6oZV786T`  
-**Deploy script:** `n8n-workflows/deploy-inbox-triage-daily.js`
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/EuT6REDs5PUaoycE`  
+**Deploy script:** `n8n-workflows/deploy-inbox-triage-daily.js`  
+**Previous workflow:** `3YyEjk1e6oZV786T` (deleted — classification stopped working April 2026)
 
 ### Purpose
 
-Reads inbox email from the last 24 hours in `noa@kravemedia.co`, classifies each message into the `EA/Urgent`, `EA/Needs-Reply`, `EA/FYI`, `EA/Auto-Sorted`, and `EA/Unsure` tier model, creates Gmail drafts for reply-needed messages only when the thread is not already in motion, repairs Gmail labels when needed, leaves `EA/Unsure` in the inbox, and posts the final summary to both `#airwallexdrafts` and Noa's Slack DM.
+Classifies all unread inbox emails for `noa@kravemedia.co` into the `EA/*` tier model. Uses a hardcoded rules classifier first (Osome, creator inbound, known contacts, client payments) and falls back to GPT-4o-mini only for unknown senders. Applies labels, creates drafts for Urgent/Needs-Reply tiers, archives non-Unsure emails, and posts a morning summary to `#airwallex-drafts` and Noa's Slack DM.
 
 ### Triggers
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 9 * * 1-5` (Asia/Manila) - 9:00 AM PHT weekdays |
-| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-inbox-triage-daily` |
+| Schedule | `0 9 * * 1-5` (Asia/Manila) — 9:00 AM PHT weekdays |
+| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-inbox-triage-v2` |
 
 ### Tier Model
 
-| Tier | Meaning |
-|------|---------|
-| `EA/Urgent` | Requires Noa's action today |
-| `EA/Needs-Reply` | Draft ready in Gmail for Noa to review |
-| `EA/FYI` | No action, but Noa should know |
-| `EA/Auto-Sorted` | Newsletters, receipts, and notifications |
-| `EA/Unsure` | Ambiguous, stays in inbox for manual review |
+| Tier | Label ID | Meaning |
+|------|----------|---------|
+| `EA/Urgent` | `Label_3` | Compliance deadlines, legal, disputes — act today |
+| `EA/Needs-Reply` | `Label_4` | Real human email needing a response — draft created |
+| `EA/FYI` | `Label_5` | Useful info, no reply needed |
+| `EA/Auto-Sorted` | `Label_6` | Automated notifications that slipped past Gmail filters |
+| `EA/Unsure` | `Label_7` | Genuinely ambiguous — stays in inbox for manual review |
 
-### Starter Context Labels
+### Hardcoded Rules (bypass AI)
 
-`Krave`, `Halo-Home`, `Skyvane`, `Invoices`, `Contracts`, `Receipts`, `Suppliers`
+| Condition | Outcome |
+|-----------|---------|
+| Sender includes `osome.com` OR has `Compliance` label (`Label_14`) | EA/Urgent + draft |
+| Has `Creators-Inbound` label (`Label_16`) | EA/Needs-Reply + typeform draft |
+| Has `Payment Received` label (`Label_5194298534623747326`) | EA/FYI, no draft |
+| Sender matches known contacts list (amanda, shin, joshua, lucas, welleco, etc.) | EA/Needs-Reply + AI draft |
+| PandaDoc completed contract notification | EA/Needs-Reply, no draft |
+| Sender matches `noreply@`, `no-reply@`, `notifications@` | EA/Auto-Sorted |
+| Everything else | AI classify (GPT-4o-mini) |
 
 ### Search Scope
 
-- Gmail query: `in:inbox newer_than:1d`
-- Includes both read and unread emails that are still in the inbox
-- Does not scan the full inbox by default
-
-### Already-Actioned Detection
-
-- Treat a thread as already actioned if Noa already replied, a draft already exists, or the thread already has an `EA/*` label
-- Still classify and repair labels when the fresh classification is better
-- Do not create a duplicate draft for already-actioned threads
-- Keep already-actioned items in their normal Morning Triage sections with inline notes like `already replied`, `draft exists`, or `already labeled`
+- Gmail query: `in:inbox is:unread -label:EA/Urgent -label:EA/Needs-Reply -label:EA/FYI -label:EA/Auto-Sorted -label:EA/Unsure`
+- Scans all unread inbox emails not yet triaged (catches weekend backlog)
+- Cap: 50 emails per run
 
 ### Outputs
 
 | Scenario | Action |
 |----------|--------|
-| `EA/Urgent` / `EA/Needs-Reply` | Create Gmail drafts when not already actioned, apply labels, include `Draft ready in Gmail` in summary |
-| `EA/FYI` / `EA/Auto-Sorted` | Apply labels, archive after triage |
-| `EA/Unsure` | Apply labels, keep in inbox, surface under `Review These` |
+| EA/Urgent / EA/Needs-Reply | Apply label, create draft (typeform for creator inbound, AI for all others), archive |
+| EA/FYI / EA/Auto-Sorted | Apply label, archive |
+| EA/Unsure | Apply label, keep in inbox |
+| All tiers | Post to `#airwallex-drafts` channel + DM Noa |
 
 ### Error Handling
 
 | Failure | Behaviour |
 |---------|-----------|
-| Slack send failure | Retry once per destination, then post failure alert to `#airwallexdrafts` |
-| Gmail draft or label issue | Workflow carries failure context into the final summary |
-| Email send | Never send automatically; draft only |
+| AI classify returns invalid JSON | Falls back to `EA/Unsure` |
+| Gmail label/draft error | `continueOnFail` — other emails continue processing |
+| Slack post failure | Workflow ends; no retry configured |
+| Email send | Never sends automatically — draft only, Noa reviews and sends |
 
 ---
 
