@@ -132,7 +132,6 @@ Body — compose naturally using Claude, tailored to the context. Follow these g
 - Sign off: "Cheers,\nJohn\nKrave Media"
 - Tone: warm, professional, concise. Match Amanda's style — friendly but not overly casual.
 - Do NOT include Drive file links unless explicitly asked.
-- Do NOT attach the PDF — just the payment link in the body.
 
 --- NOA PROFILE ---
 

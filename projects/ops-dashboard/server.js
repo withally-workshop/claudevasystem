@@ -293,6 +293,61 @@ async function handleRunTriage(req, res) {
   }
 }
 
+async function composeInvoiceEmailBody({ client_name, invoice_number, amount, currency, due_date, project_description, payment_link }) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
+  const firstName = (client_name || '').split(/[\s,]/)[0] || client_name;
+  const prompt = `You are John from Krave Media writing a short, warm invoice email to a client.
+
+Invoice details:
+- Client: ${client_name}
+- Invoice: ${invoice_number}
+- Amount: ${amount} ${currency}
+- Due date: ${due_date}
+- Project / description: ${project_description || '(not specified)'}
+- Payment link: ${payment_link || '(not available)'}
+
+Write the email body only (no subject line). Follow these rules exactly:
+- Greeting: "Hey ${firstName}!"
+- If the description suggests a deposit or kickoff (e.g. "deposit", "kickoff", "retainer", "onboarding"), express excitement about starting the project together, mention the project briefly, state this is the deposit/kickoff invoice.
+- If the description suggests a completion or final payment (e.g. "final", "completion", "remaining", "balance"), celebrate the milestone, reference deliverables if mentioned.
+- Otherwise write a warm, professional invoice note appropriate to the context.
+- Include the payment link prominently: "${firstName} — here is the link for easier payment: [payment_link]"
+- Mention the due date.
+- Sign off: "Cheers,\\nJohn\\nKrave Media"
+- Tone: warm, professional, concise. Friendly but not overly casual. No fluff.
+- Do NOT include the subject line. Do NOT include Drive file links. Do NOT mention the PDF attachment explicitly.`;
+
+  const payload = JSON.stringify({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 512,
+    messages: [{ role: 'user', content: prompt }],
+  });
+  const res = await new Promise((resolve, reject) => {
+    const buf = Buffer.from(payload);
+    const req = https.request({
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'content-length': buf.length,
+      },
+    }, (r) => {
+      let data = '';
+      r.on('data', (c) => { data += c; });
+      r.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve({ error: data }); } });
+    });
+    req.on('error', reject);
+    req.write(buf);
+    req.end();
+  });
+  if (res.error || !res.content) throw new Error(`Claude compose failed: ${JSON.stringify(res)}`);
+  return (res.content[0] && res.content[0].text) || '';
+}
+
 async function handleSendInvoiceEmail(req, res) {
   const secret = process.env.SEND_INVOICE_EMAIL_SECRET;
   const auth = req.headers['authorization'] || '';
@@ -304,16 +359,24 @@ async function handleSendInvoiceEmail(req, res) {
   req.on('data', (c) => { rawBody += c; });
   req.on('end', async () => {
     try {
-      const { to, cc, subject, body: emailBody, pdf_url, pdf_auth_token, filename } = JSON.parse(rawBody);
+      const {
+        to, cc, subject, body: emailBody, pdf_url, pdf_auth_token, filename,
+        compose_body, client_name, invoice_number, amount, currency, due_date,
+        project_description, payment_link,
+      } = JSON.parse(rawBody);
       if (!to || !subject || !pdf_url) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ ok: false, error: 'Missing required fields: to, subject, pdf_url' }));
+      }
+      let bodyText = emailBody || '';
+      if (compose_body) {
+        bodyText = await composeInvoiceEmailBody({ client_name, invoice_number, amount, currency, due_date, project_description, payment_link });
       }
       const pdfBuffer = await getBinary(pdf_url, pdf_auth_token || null);
       const msgId = await sendGmailWithPdf({
         to, cc: cc || null,
         subject,
-        bodyText: emailBody || '',
+        bodyText,
         pdfBuffer,
         pdfFilename: filename || 'invoice.pdf',
       });

@@ -499,39 +499,30 @@ return items.map(ctx => {
   const clientEmail = ctx['Email Address'] || '';
   const link = ctx.payment_link || '';
   const pdfUrl = ctx.pdf_url || '';
+  const projectDescription = ctx['Project Description'] || ctx['D'] || '';
   const originThreadTs = (ctx['Origin Thread TS'] || '').trim();
 
-  const subject = 'Invoice ' + invoiceNum + ' - ' + clientName;
-
-  const body = [
-    'Dear ' + clientName + ',',
-    '',
-    'Please find attached your invoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ', due ' + dueDate + '.',
-    '',
-    (link ? 'Payment link: ' + link : ''),
-    '',
-    'Kindly make payment by the due date to',
-    'Bank Name: DBS Bank Ltd',
-    'Bank Address: DBS Asia Central, Marina Bay Financial Centre Tower 3, 12 Marina Boulevard, Singapore 018982',
-    'Account Name: Eclipse Ventures Pte Ltd',
-    'Account Number: 8853795725',
-    'BIC/SWIFT: DBSSSGSG',
-    'or by paying via the invoice link directly.',
-    '',
-    'Please note that a US$200 per month late fee applies to invoices not paid on time.',
-    '',
-    'Best regards,',
-    'Krave Media',
-  ].filter(l => l !== undefined).join('\\n');
+  const monthYear = (() => {
+    const d = dueDate ? new Date(dueDate) : new Date();
+    return d.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'Asia/Manila' });
+  })();
+  const subject = '[FYA - Invoice ' + invoiceNum + '] - Krave Media x ' + clientName + ' [' + monthYear + ']';
 
   return { json: {
     ...ctx,
     email_to: clientEmail,
     email_cc: 'noa@kravemedia.co',
     email_subject: subject,
-    email_body: body,
     email_pdf_url: pdfUrl,
     email_filename: invoiceNum + '.pdf',
+    email_compose_body: true,
+    email_client_name: clientName,
+    email_invoice_number: invoiceNum,
+    email_amount: amount,
+    email_currency: currency,
+    email_due_date: dueDate,
+    email_project_description: projectDescription,
+    email_payment_link: link,
     origin_thread_ts: originThreadTs,
   }};
 });
@@ -552,7 +543,7 @@ return items.map(ctx => {
         ]},
         sendBody: true,
         specifyBody: 'json',
-        jsonBody: `={{ { to: $json.email_to, cc: $json.email_cc, subject: $json.email_subject, body: $json.email_body, pdf_url: $json.email_pdf_url, pdf_auth_token: 'Bearer ' + $('Airwallex Auth').item.json.token, filename: $json.email_filename } }}`,
+        jsonBody: `={{ { to: $json.email_to, cc: $json.email_cc, subject: $json.email_subject, pdf_url: $json.email_pdf_url, pdf_auth_token: 'Bearer ' + $('Airwallex Auth').item.json.token, filename: $json.email_filename, compose_body: $json.email_compose_body, client_name: $json.email_client_name, invoice_number: $json.email_invoice_number, amount: $json.email_amount, currency: $json.email_currency, due_date: $json.email_due_date, project_description: $json.email_project_description, payment_link: $json.email_payment_link } }}`,
         options: {},
       },
     },
