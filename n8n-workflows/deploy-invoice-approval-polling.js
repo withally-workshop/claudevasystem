@@ -3,6 +3,8 @@ const https = require('https');
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = process.env.N8N_API_KEY;
 const WORKFLOW_ID = process.env.INVOICE_APPROVAL_POLLING_WORKFLOW_ID || 'uCS9lzHtVKWlqYlk';
+const RENDER_DASHBOARD_URL = process.env.RENDER_DASHBOARD_URL || 'https://krave-ops-dashboard.onrender.com';
+const SEND_INVOICE_EMAIL_SECRET = process.env.SEND_INVOICE_EMAIL_SECRET;
 
 const SHEET_ID = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50';
 const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
@@ -107,7 +109,8 @@ return $input.all().map((item, index) => {
     finalize.invoice_number ||
     ctx['Invoice #'] ||
     '';
-  return { json: { ...ctx, 'Invoice #': finalizedInvoiceNumber, payment_link: link, link_found: !!link } };
+  const pdfUrl = getInvoice.pdf_url || finalize.pdf_url || '';
+  return { json: { ...ctx, 'Invoice #': finalizedInvoiceNumber, payment_link: link, pdf_url: pdfUrl, link_found: !!link } };
 });
 const finalize = $('Finalize Invoice').item.json;
 const getInvoice = (($input.all()[0] || {}).json) || {};
@@ -131,7 +134,8 @@ const finalizedInvoiceNumber =
   finalize.invoice_number ||
   ctx['Invoice #'] ||
   '';
-return [{ json: { ...ctx, 'Invoice #': finalizedInvoiceNumber, payment_link: link, link_found: !!link } }];
+const pdfUrl = getInvoice.pdf_url || finalize.pdf_url || '';
+return [{ json: { ...ctx, 'Invoice #': finalizedInvoiceNumber, payment_link: link, pdf_url: pdfUrl, link_found: !!link } }];
 `.trim();
 
 
@@ -144,18 +148,14 @@ const currency = ctx['Currency'] || '';
 const dueDate = ctx['Due Date'] || '';
 const link = ctx.payment_link || '';
 const lines = [
-  'Invoice approved and ready to send - ' + clientName,
+  'Invoice finalized - ' + clientName,
   '- Invoice #: ' + invoiceNum,
   '- Amount: ' + currency + ' ' + amount,
   '- Due: ' + dueDate,
 ];
 if (link) lines.push('- Payment link: ' + link);
-else lines.push('Payment link unavailable - retrieve from Airwallex dashboard.');
 lines.push('');
-lines.push('@John please download the invoice from the link above and email it to the client (john@kravemedia.co) with:');
-lines.push('  - The payment link');
-lines.push('  - The downloaded invoice file as an attachment');
-lines.push('  CC: john@kravemedia.co, noa@kravemedia.co');
+lines.push('Email with invoice PDF is being sent to the client automatically.');
 return [{ json: { ...ctx, john_reply_text: lines.join('\n') } }];
 `.trim();
 
@@ -193,10 +193,7 @@ const lines = [
   '• Due: ' + dueDate,
   '• Payment link: ' + (link || '⚠️ retrieve from Airwallex dashboard'),
   '',
-  requesterTag + ' please download the invoice from the link above and email it to the client' + (colC ? ' (' + colC + ')' : '') + ' with:',
-  '  - The payment link',
-  '  - The downloaded invoice file as an attachment',
-  '  CC: john@kravemedia.co, noa@kravemedia.co',
+  requesterTag + ' Invoice approved and emailed to client' + (colC ? ' (' + colC + ')' : '') + ' with PDF attached.',
 ];
 if (requesterWarning) lines.push(requesterWarning);
 
@@ -225,16 +222,13 @@ const colC = (ctx['Email Address'] || '').trim();
 const originThreadTs = (ctx['Origin Thread TS'] || '').trim();
 
 const lines = [
-  '✅ *Invoice approved and ready to send — ' + clientName + '*',
+  '✅ *Invoice approved — ' + clientName + '*',
   '• Invoice #: ' + invoiceNum,
   '• Amount: ' + amount + ' ' + currency,
   '• Due: ' + dueDate,
   '• Payment link: ' + (link || '⚠️ retrieve from Airwallex dashboard'),
   '',
-  requesterTag + ' please download the invoice from the link above and email it to the client' + (colC ? ' (' + colC + ')' : '') + ' with:',
-  '  - The payment link',
-  '  - The downloaded invoice file as an attachment',
-  '  CC: john@kravemedia.co, noa@kravemedia.co',
+  requesterTag + ' Invoice approved and emailed to client' + (colC ? ' (' + colC + ')' : '') + ' with PDF attached.',
 ];
 if (requesterWarning) lines.push(requesterWarning);
 
@@ -489,6 +483,110 @@ const workflow = {
       },
     },
 
+    // ── Email invoice to client (parallel branch from Update Tracker) ───────
+    {
+      id: 'n24', name: 'Build Email Payload',
+      type: 'n8n-nodes-base.code', typeVersion: 2,
+      position: [2700, 740],
+      parameters: { mode: 'runOnceForAllItems', jsCode: `
+const items = $items('Extract Payment Link').map(i => i.json);
+return items.map(ctx => {
+  const clientName = ctx['Client Name'] || '';
+  const invoiceNum = ctx['Invoice #'] || '';
+  const amount = ctx['Amount'] || '';
+  const currency = ctx['Currency'] || '';
+  const dueDate = ctx['Due Date'] || '';
+  const clientEmail = ctx['Email Address'] || '';
+  const link = ctx.payment_link || '';
+  const pdfUrl = ctx.pdf_url || '';
+  const originThreadTs = (ctx['Origin Thread TS'] || '').trim();
+
+  const subject = 'Invoice ' + invoiceNum + ' - ' + clientName;
+
+  const body = [
+    'Dear ' + clientName + ',',
+    '',
+    'Please find attached your invoice ' + invoiceNum + ' for ' + amount + ' ' + currency + ', due ' + dueDate + '.',
+    '',
+    (link ? 'Payment link: ' + link : ''),
+    '',
+    'Kindly make payment by the due date to',
+    'Bank Name: DBS Bank Ltd',
+    'Bank Address: DBS Asia Central, Marina Bay Financial Centre Tower 3, 12 Marina Boulevard, Singapore 018982',
+    'Account Name: Eclipse Ventures Pte Ltd',
+    'Account Number: 8853795725',
+    'BIC/SWIFT: DBSSSGSG',
+    'or by paying via the invoice link directly.',
+    '',
+    'Please note that a US$200 per month late fee applies to invoices not paid on time.',
+    '',
+    'Best regards,',
+    'Krave Media',
+  ].filter(l => l !== undefined).join('\\n');
+
+  return { json: {
+    ...ctx,
+    email_to: clientEmail,
+    email_cc: 'noa@kravemedia.co',
+    email_subject: subject,
+    email_body: body,
+    email_pdf_url: pdfUrl,
+    email_filename: invoiceNum + '.pdf',
+    origin_thread_ts: originThreadTs,
+  }};
+});
+`.trim() },
+    },
+    {
+      id: 'n25', name: 'Send Invoice Email',
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+      position: [2920, 740],
+      continueOnFail: true,
+      parameters: {
+        method: 'POST',
+        url: `${RENDER_DASHBOARD_URL}/api/send-invoice-email`,
+        sendHeaders: true,
+        headerParameters: { parameters: [
+          { name: 'Authorization', value: `Bearer ${SEND_INVOICE_EMAIL_SECRET}` },
+          { name: 'Content-Type', value: 'application/json' },
+        ]},
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: `={{ { to: $json.email_to, cc: $json.email_cc, subject: $json.email_subject, body: $json.email_body, pdf_url: $json.email_pdf_url, pdf_auth_token: 'Bearer ' + $('Airwallex Auth').item.json.token, filename: $json.email_filename } }}`,
+        options: {},
+      },
+    },
+    {
+      id: 'n26', name: 'Restore Context for Confirm',
+      type: 'n8n-nodes-base.code', typeVersion: 2,
+      position: [3140, 740],
+      parameters: { mode: 'runOnceForAllItems', jsCode: `
+const contexts = $items('Build Email Payload').map(i => i.json);
+return $input.all().map((item, idx) => {
+  const ctx = contexts[idx] || {};
+  const emailOk = (item.json || {}).ok !== false;
+  return { json: { ...ctx, email_sent: emailOk } };
+});
+`.trim() },
+    },
+    {
+      id: 'n27', name: 'Confirm Email in Thread',
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+      position: [3360, 740],
+      continueOnFail: true,
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'slackApi',
+        method: 'POST',
+        url: 'https://slack.com/api/chat.postMessage',
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: `={{ { channel: '${PAYMENTS_CHANNEL}', thread_ts: $json.origin_thread_ts || undefined, text: ($json.email_sent ? ('Invoice emailed to ' + $json.email_to + ' with PDF attached.') : ('Invoice approved. Email send failed - send manually to ' + $json.email_to + '.')) } }}`,
+        options: {},
+      },
+    },
+
     // ── ClickUp sync branch (parallel from Update Tracker) ─────────────────
     // Parses ClickUp task ID from John's approval reply text.
     // No task ID (WhatsApp clients, new clients, deposits) → IF gates everything off.
@@ -607,7 +705,11 @@ const workflow = {
     'Update Tracker':           { main: [[
       { node: 'Build John Thread Reply', type: 'main', index: 0 },
       { node: 'Parse ClickUp Task ID',   type: 'main', index: 0 },
+      { node: 'Build Email Payload',     type: 'main', index: 0 },
     ]]},
+    'Build Email Payload':       { main: [[{ node: 'Send Invoice Email', type: 'main', index: 0 }]] },
+    'Send Invoice Email':        { main: [[{ node: 'Restore Context for Confirm', type: 'main', index: 0 }]] },
+    'Restore Context for Confirm': { main: [[{ node: 'Confirm Email in Thread', type: 'main', index: 0 }]] },
     'Build John Thread Reply':  { main: [[{ node: 'Reply in John Thread', type: 'main', index: 0 }]] },
     'Reply in John Thread':     { main: [[{ node: 'Build Strategist Message', type: 'main', index: 0 }]] },
     'Build Strategist Message': { main: [[{ node: 'Notify Strategist', type: 'main', index: 0 }]] },

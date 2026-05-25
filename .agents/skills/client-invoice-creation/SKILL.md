@@ -1,13 +1,13 @@
 ---
 name: client-invoice-creation
-description: Use when Codex needs to process pending Slack invoice request receipts (Mode 1 — create Airwallex draft, log to tracker, notify John) or John's approval replies (Mode 2 — finalize invoice, get payment link, notify strategist). Triggers include "/client-invoice-creation", "process invoice requests", "client invoice creation", "create invoice", "new invoice draft".
+description: Use when Codex needs to process pending Slack invoice request receipts (Mode 0 — resubmit after price reply, Mode 1 — create Airwallex draft, log to tracker, notify John) or John's approval replies (Mode 2 — finalize invoice, get payment link, notify strategist). Triggers include "/client-invoice-creation", "process invoice requests", "client invoice creation", "create invoice", "new invoice draft", "resubmit invoice", "price reply".
 metadata:
   short-description: Process invoice requests and approval replies
 ---
 
 # Client Invoice Creation
 
-Process Slack invoice request receipts into Airwallex drafts (Mode 1) and finalize them when John approves (Mode 2). ClickUp task sync is optional — activated when John includes a task URL in his approval reply.
+Process Slack invoice request receipts into Airwallex drafts (Mode 0/1) and finalize them when John approves (Mode 2). Mode 0 handles the case where the intake workflow prompted for a missing price and the requester replied with the amount — it re-submits with full context from the original thread, never asking for information already present. ClickUp task sync is optional — activated when John includes a task URL in his approval reply.
 
 ## How to Trigger
 
@@ -29,6 +29,15 @@ Process Slack invoice request receipts into Airwallex drafts (Mode 1) and finali
 - **Payments channel:** #payments-invoices-updates (`C09HN2EBPR7`)
 
 ## What It Does
+
+### Mode 0 — Price Reply Resubmit (run first)
+1. Scans #payments-invoices-updates for bot "price missing" messages that have an unprocessed amount reply
+2. Reads the original receipt from the thread parent (all invoice context is there — client, email, line items, due date)
+3. Parses the amount from the requester's reply
+4. Reacts ✅ to the reply, then re-submits the full payload to the intake webhook
+5. Reacts ✅ to the original receipt so Mode 1 doesn't re-process it
+
+**Critical:** Never ask for client name, project description, email, or due date during Mode 0. All of it is in the thread.
 
 ### Mode 1 — Invoice Creation
 1. Reads unprocessed receipts from #payments-invoices-updates (no ✅ reaction)
@@ -65,7 +74,8 @@ Please note that a US$200 per month late fee applies to invoices not paid on tim
 ## Codex Invocation Notes
 
 - Dedup signal: ✅ (`white_check_mark`) reaction = already actioned — never reprocess
-- Mode 2 processes before Mode 1 on every manual run (approvals are time-sensitive)
+- Run order: Mode 0 → Mode 2 → Mode 1 on every manual run
+- Mode 0 detects price-reply threads by matching bot messages containing "price is missing from the line item" in C09HN2EBPR7
 - Never finalize an invoice that is not in `Draft - Pending John Review` status
 - ClickUp URL in approval reply is optional — omitting it skips sync silently
 - WhatsApp-only clients are handled fully outside this skill

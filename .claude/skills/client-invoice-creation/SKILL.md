@@ -46,19 +46,135 @@
 
 ---
 
+## Thread Context Rule
+
+**Never ask for information already present in the current thread.** Before asking any question, read the full thread and extract what is already known. This applies to every trigger — price replies, email requests, approval requests, anything. If the thread contains the invoice ID, client name, email, amount, payment link, or any other field, use it directly. Asking for it is an error.
+
+When asked to email an invoice in a thread that already has the finalization message:
+1. Extract client email from the earlier receipt in the thread
+2. Extract payment link and invoice number from the finalization message
+3. Download the PDF from Airwallex and attach it
+4. CC anyone mentioned in the thread (e.g. "CC me" = CC the requester)
+5. Send — do not ask any questions
+
+---
+
 ## Routing
 
 Slack invoice receipts, draft confirmations, John approval notifications, and approval-finalized notifications must be posted by the `Krave Slack Bot` n8n credential. Do not use a user-profile Slack connector for operational corrections that are part of the invoice audit trail; route them through the bot/n8n path.
 
 On every run, check channels in this order:
 
-1. **C0AQZGJDR38** — scan for "approve" replies in invoice notification threads that do NOT yet have a ✅ reaction → **Mode 2**
-2. **C09HN2EBPR7** — scan for form receipt messages that do NOT yet have a ✅ reaction → **Mode 1**
+1. **C09HN2EBPR7** — scan for bot price-prompt messages that have an unprocessed amount reply → **Mode 0**
+2. **C0AQZGJDR38** — scan for "approve" replies in invoice notification threads that do NOT yet have a ✅ reaction → **Mode 2**
+3. **C09HN2EBPR7** — scan for form receipt messages that do NOT yet have a ✅ reaction → **Mode 1**
 
-Process Mode 2 first (approval is time-sensitive), then Mode 1.
-If nothing pending in either channel → exit cleanly.
+Run Mode 0 first. Then Mode 2 (approval is time-sensitive). Then Mode 1.
+If nothing pending in any channel → exit cleanly.
 
 **Dedup signal:** ✅ (`white_check_mark`) reaction on the message = already actioned. Never process a ✅-reacted message.
+
+---
+
+## Mode 0: Price Reply Resubmit
+
+Handles the case where the intake workflow posted a "price missing" prompt in a thread and the requester replied with the amount. This mode prevents losing all original invoice context and asking for information already present in the thread.
+
+**Critical rule:** Never ask for client name, project description, email, due date, or any other field when a price reply is detected. All context comes from the original receipt in the thread. The requester only needed to provide the amount.
+
+### Step 1 — Find price-prompt threads
+
+`mcp__slack__slack_get_channel_history(channel: C09HN2EBPR7)`
+
+Look for messages posted by the bot that match the pattern:
+```
+the invoice for * failed to create — the price is missing from the line item
+```
+
+For each matching message:
+- Note the `thread_ts` (this is the origin thread of the original receipt)
+- Skip if the message has a ✅ reaction (already processed)
+
+### Step 2 — Check thread for amount reply
+
+`mcp__slack__slack_get_thread_replies(channel: C09HN2EBPR7, thread_ts: [thread_ts from Step 1])`
+
+The thread will contain:
+- **Thread parent** (index 0): the original form receipt with all invoice details
+- **Bot message**: the price-prompt message ("the invoice for … failed to create")
+- **Requester reply**: an amount like "USD 7,400" or "7400" or "$7,400"
+
+Look for a reply from a non-bot user that contains a number (the amount). Skip replies that are the bot's own messages. Skip replies that already have a ✅ reaction.
+
+If no matching amount reply → skip this thread, move on.
+
+### Step 3 — Parse original receipt from thread parent
+
+Re-parse the original receipt message (thread parent or first non-bot message in thread) using the standard Mode 1 parsing rules:
+
+| Field | Source |
+|-------|--------|
+| `client_name` | "- Client:" line |
+| `client_email` | "- Email:" line |
+| `currency` | "- Amount:" line prefix |
+| `payout_raw` | "- Payout:" line |
+| `due_date` | "- Due Date:" line |
+| `memo` | "- Memo:" line |
+| `submitted_by` | "- Requester:" line |
+| `line_items` | "- Line Items:" line — same parsing rules as Mode 1 |
+| `origin_thread_ts` | the thread_ts used to fetch this thread |
+
+### Step 4 — Parse amount from reply
+
+Extract the numeric value from the requester's reply. Examples:
+- "USD 7,400" → `{ currency: "USD", unit_price: 7400 }`
+- "7400 USD" → `{ currency: "USD", unit_price: 7400 }`
+- "7,400" → `{ unit_price: 7400, currency: from receipt }`
+- "$7,400" → `{ unit_price: 7400, currency: from receipt }`
+
+Use the currency from the original receipt if not specified in the reply.
+
+Apply the parsed `unit_price` to the missing-price line item(s) identified in the bot's price-prompt message.
+
+### Step 5 — React to the amount reply
+
+`mcp__slack__slack_add_reaction(channel: C09HN2EBPR7, timestamp: [reply_ts], reaction: white_check_mark)`
+
+Do this immediately before re-submitting to prevent double-processing.
+
+### Step 6 — Re-submit to intake webhook
+
+`POST https://noatakhel.app.n8n.cloud/webhook/krave-invoice-request-intake`
+
+Payload:
+```json
+{
+  "client_name": "[from receipt]",
+  "client_email": "[from receipt]",
+  "currency": "[from receipt]",
+  "payout_raw": "[from receipt, e.g. '7 day payout']",
+  "invoice_date": "[today YYYY-MM-DD]",
+  "memo": "[from receipt]",
+  "origin_channel_id": "C09HN2EBPR7",
+  "origin_thread_ts": "[thread_ts]",
+  "submitted_by_slack_user_id": "[resolved Slack ID of requester]",
+  "line_items": [
+    {
+      "description": "[from receipt line item]",
+      "quantity": 1,
+      "unit_price": [parsed amount]
+    }
+  ]
+}
+```
+
+The intake webhook will run the full Airwallex creation flow with this complete payload.
+
+### Step 7 — React to the original receipt
+
+`mcp__slack__slack_add_reaction(channel: C09HN2EBPR7, timestamp: [origin_thread_ts], reaction: white_check_mark)`
+
+Mark the original receipt as processed so Mode 1 doesn't pick it up again.
 
 ---
 
@@ -249,17 +365,34 @@ Do this immediately to prevent double-processing.
 
 → extract `hosted_invoice_url`
 
-### Step 5 — Reply to original request thread
+### Step 5 — Email invoice to client (automated via n8n Approval Polling)
+
+**This step is now fully automated.** The Invoice Approval Polling workflow (uCS9lzHtVKWlqYlk) handles email sending automatically via the Render endpoint (`/api/send-invoice-email`) after finalization. No manual action required.
+
+The automated flow:
+- Downloads PDF from Airwallex `pdf_url`
+- Sends via Gmail (john@kravemedia.co) with PDF attached — To: client_email, CC: noa@kravemedia.co
+- Subject: `Invoice [invoice_number] - [client_name]`
+- Confirms in the origin thread: "Invoice emailed to [client_email] with PDF attached."
+
+**Manual fallback (only if automation fails):**
+1. Download PDF: `GET [pdf_url]` from Airwallex invoice — follow redirects
+2. Send via `mcp__gmail-john__gmail_send` with `attachment_paths` — To: client_email, CC: noa@kravemedia.co
+3. Subject: `Invoice [invoice_number] - [client_name]` (ASCII dash, not em dash)
+4. Reply in origin thread: `<@[requester_id]> Invoice emailed to [client_email] with PDF attached.`
+
+### Step 6 — Reply to original request thread
 
 `mcp__slack__slack_reply_to_thread(channel: C09HN2EBPR7, thread_ts: receipt_ts)`:
 
 ```
-<@[requester_id]> Invoice finalized. Here's the payment link:
+<@[requester_id]> Invoice finalized. Payment link:
 [hosted_invoice_url]
+Invoice #: [invoice_number]
 Due: [due_date]
-
-Please download the file and send to the client along with the digital invoice link.
 ```
+
+**Note on subject encoding:** always use ` - ` (ASCII hyphen) not ` — ` (em dash) in email subjects.
 
 ### Step 6 — Update tracker
 

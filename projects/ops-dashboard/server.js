@@ -166,6 +166,154 @@ async function getServiceAccountToken() {
   return _sheetsTokenCache.token;
 }
 
+// ---------------------------------------------------------------------------
+// Gmail — service account token with domain-wide delegation (john@kravemedia.co)
+// ---------------------------------------------------------------------------
+
+let _gmailTokenCache = { token: null, exp: 0 };
+
+async function getGmailToken() {
+  if (_gmailTokenCache.token && Date.now() < _gmailTokenCache.exp - 60000) {
+    return _gmailTokenCache.token;
+  }
+  const sa = loadServiceAccount();
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: sa.client_email,
+    sub: 'john@kravemedia.co',
+    scope: 'https://www.googleapis.com/auth/gmail.send',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now,
+  };
+  const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sigInput = `${header}.${body}`;
+  const sig = crypto.createSign('RSA-SHA256').update(sigInput).sign(sa.private_key, 'base64url');
+  const jwt = `${sigInput}.${sig}`;
+  const tokenRes = await post(
+    'https://oauth2.googleapis.com/token',
+    `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+    { 'Content-Type': 'application/x-www-form-urlencoded' },
+  );
+  if (!tokenRes.ok) throw new Error(`Gmail token failed: ${JSON.stringify(tokenRes.body)}`);
+  _gmailTokenCache = { token: tokenRes.body.access_token, exp: now + 3600 };
+  return _gmailTokenCache.token;
+}
+
+function getBinary(url, authHeader) {
+  return new Promise((resolve, reject) => {
+    const follow = (targetUrl, hops) => {
+      if (hops > 5) return reject(new Error('Too many redirects'));
+      const parsed = new URL(targetUrl);
+      const opts = {
+        hostname: parsed.hostname,
+        path: parsed.pathname + parsed.search,
+        headers: authHeader ? { Authorization: authHeader } : {},
+      };
+      https.get(opts, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          // Drop auth on redirect to avoid leaking credentials to different hosts
+          authHeader = null;
+          return follow(res.headers.location, hops + 1);
+        }
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+      }).on('error', reject).setTimeout(30000, function () { this.destroy(new Error('timeout')); });
+    };
+    follow(url, 0);
+  });
+}
+
+function buildEmailMime({ from, to, cc, subject, bodyText, pdfBuffer, pdfFilename }) {
+  const encSubject = /^[\x00-\x7F]*$/.test(subject)
+    ? subject
+    : `=?UTF-8?B?${Buffer.from(subject, 'utf-8').toString('base64')}?=`;
+  const boundary = `b_${crypto.randomBytes(8).toString('hex')}`;
+  const parts = [
+    [
+      `From: ${from}`,
+      `To: ${to}`,
+      ...(cc ? [`Cc: ${cc}`] : []),
+      `Subject: ${encSubject}`,
+      'MIME-Version: 1.0',
+      `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    ].join('\r\n'),
+    `--${boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n${bodyText}`,
+    `--${boundary}\r\nContent-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename="${pdfFilename}"\r\n\r\n${pdfBuffer.toString('base64')}`,
+    `--${boundary}--`,
+  ];
+  return parts.join('\r\n\r\n');
+}
+
+async function sendGmailWithPdf({ to, cc, subject, bodyText, pdfBuffer, pdfFilename }) {
+  const token = await getGmailToken();
+  const mime = buildEmailMime({ from: 'john@kravemedia.co', to, cc, subject, bodyText, pdfBuffer, pdfFilename });
+  const raw = Buffer.from(mime).toString('base64url');
+  const body = JSON.stringify({ raw });
+  const parsed = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages/send');
+  const res = await new Promise((resolve, reject) => {
+    const buf = Buffer.from(body);
+    const opts = {
+      hostname: parsed.hostname,
+      path: parsed.pathname,
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Content-Length': buf.length,
+      },
+    };
+    const req = https.request(opts, (r) => {
+      let data = '';
+      r.on('data', (c) => { data += c; });
+      r.on('end', () => {
+        try { resolve({ ok: r.statusCode < 400, status: r.statusCode, body: JSON.parse(data) }); }
+        catch { resolve({ ok: false, status: r.statusCode, body: data }); }
+      });
+    });
+    req.on('error', reject);
+    req.write(buf);
+    req.end();
+  });
+  if (!res.ok) throw new Error(`Gmail send failed (${res.status}): ${JSON.stringify(res.body)}`);
+  return res.body.id;
+}
+
+async function handleSendInvoiceEmail(req, res) {
+  const secret = process.env.SEND_INVOICE_EMAIL_SECRET;
+  const auth = req.headers['authorization'] || '';
+  if (!secret || auth !== `Bearer ${secret}`) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ok: false, error: 'Unauthorized' }));
+  }
+  let rawBody = '';
+  req.on('data', (c) => { rawBody += c; });
+  req.on('end', async () => {
+    try {
+      const { to, cc, subject, body: emailBody, pdf_url, pdf_auth_token, filename } = JSON.parse(rawBody);
+      if (!to || !subject || !pdf_url) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ ok: false, error: 'Missing required fields: to, subject, pdf_url' }));
+      }
+      const pdfBuffer = await getBinary(pdf_url, pdf_auth_token || null);
+      const msgId = await sendGmailWithPdf({
+        to, cc: cc || null,
+        subject,
+        bodyText: emailBody || '',
+        pdfBuffer,
+        pdfFilename: filename || 'invoice.pdf',
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, message_id: msgId }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
+  });
+}
+
 let _invoicesGid = null;
 
 async function fetchInvoicesGid() {
@@ -1885,6 +2033,7 @@ const server = http.createServer(async (req, res) => {
   if (req.url.startsWith('/auth/login')) return handleAuthLogin(req, res);
   if (req.url.startsWith('/auth/callback')) return handleAuthCallback(req, res);
   if (req.url.startsWith('/auth/logout')) return handleAuthLogout(req, res);
+  if (req.method === 'POST' && req.url === '/api/send-invoice-email') return handleSendInvoiceEmail(req, res);
 
   if (!AUTH_DISABLED) {
     const session = readSession(req);

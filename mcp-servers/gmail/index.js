@@ -5,6 +5,8 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { google } from "googleapis";
+import fs from "fs";
+import path from "path";
 
 const KEY_FILE = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE;
 const IMPERSONATE_EMAIL = process.env.GMAIL_IMPERSONATE_EMAIL || "john@kravemedia.co";
@@ -64,13 +66,15 @@ const TOOLS = [
   {
     name: "gmail_send",
     description:
-      "Send an email or reply to an existing thread from the impersonated Gmail account. To reply in-thread, provide thread_id and in_reply_to_message_id (Gmail message ID of the message you're replying to).",
+      "Send an email or reply to an existing thread from the impersonated Gmail account. Supports attachments via local file paths. To reply in-thread, provide thread_id and in_reply_to_message_id (Gmail message ID of the message you're replying to).",
     inputSchema: {
       type: "object",
       properties: {
         to: { type: "string", description: "Recipient email address(es), comma-separated" },
+        cc: { type: "string", description: "CC email address(es), comma-separated (optional)" },
         subject: { type: "string", description: "Email subject line" },
         body: { type: "string", description: "Plain text email body" },
+        attachment_paths: { type: "array", items: { type: "string" }, description: "Optional list of absolute local file paths to attach" },
         thread_id: { type: "string", description: "Gmail thread ID to reply into (from gmail_get_message)" },
         in_reply_to_message_id: { type: "string", description: "Gmail message ID of the message being replied to — used to set In-Reply-To header for proper threading" },
       },
@@ -234,21 +238,64 @@ async function handleTool(name, args) {
         }
       }
 
+      // RFC 2047 encode subject to handle non-ASCII characters (em dash, etc.)
+      function encodeSubject(subject) {
+        if (/^[\x00-\x7F]*$/.test(subject)) return subject;
+        return `=?UTF-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`;
+      }
+
       const from = IMPERSONATE_EMAIL;
-      const mime = [
-        `From: ${from}`,
-        `To: ${args.to}`,
-        `Subject: ${args.subject}`,
-        "Content-Type: text/plain; charset=UTF-8",
-        inReplyToHeader.trimEnd(),
-        referencesHeader.trimEnd(),
-        "",
-        args.body,
-      ]
-        .filter((l) => l !== "")
-        .join("\r\n");
+      const attachments = args.attachment_paths || [];
+      let mime;
+
+      if (attachments.length === 0) {
+        // Simple text/plain message
+        const headers = [
+          `From: ${from}`,
+          `To: ${args.to}`,
+          ...(args.cc ? [`Cc: ${args.cc}`] : []),
+          `Subject: ${encodeSubject(args.subject)}`,
+          "MIME-Version: 1.0",
+          "Content-Type: text/plain; charset=UTF-8",
+          inReplyToHeader.trimEnd(),
+          referencesHeader.trimEnd(),
+        ].filter((l) => l !== "");
+        mime = headers.join("\r\n") + "\r\n\r\n" + args.body;
+      } else {
+        // multipart/mixed with attachments
+        const boundary = `boundary_${Date.now()}`;
+        const headers = [
+          `From: ${from}`,
+          `To: ${args.to}`,
+          ...(args.cc ? [`Cc: ${args.cc}`] : []),
+          `Subject: ${encodeSubject(args.subject)}`,
+          "MIME-Version: 1.0",
+          `Content-Type: multipart/mixed; boundary="${boundary}"`,
+          inReplyToHeader.trimEnd(),
+          referencesHeader.trimEnd(),
+        ].filter((l) => l !== "");
+
+        const parts = [];
+        // Text body part
+        parts.push(
+          `--${boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n${args.body}`
+        );
+        // Attachment parts
+        for (const filePath of attachments) {
+          const fileData = fs.readFileSync(filePath);
+          const filename = path.basename(filePath);
+          const ext = path.extname(filePath).toLowerCase();
+          const mimeType = ext === ".pdf" ? "application/pdf" : "application/octet-stream";
+          parts.push(
+            `--${boundary}\r\nContent-Type: ${mimeType}\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename="${filename}"\r\n\r\n${fileData.toString("base64")}`
+          );
+        }
+        parts.push(`--${boundary}--`);
+        mime = headers.join("\r\n") + "\r\n\r\n" + parts.join("\r\n");
+      }
 
       const raw = Buffer.from(mime).toString("base64url");
+
       // Auto-derive thread_id from in_reply_to message if not explicitly provided
       let threadId = args.thread_id;
       if (!threadId && args.in_reply_to_message_id) {
