@@ -215,14 +215,15 @@ const TOOLS = [
   {
     name: "airwallex_list_bills",
     description:
-      "List bills (outgoing payments to creators/vendors) from Airwallex. Filter by status.",
+      "List bills (accounts payable) from Airwallex Spend. Filter by status: DRAFT, AWAITING_APPROVAL, APPROVED, PAID, VOIDED.",
     inputSchema: {
       type: "object",
       properties: {
         status: {
           type: "string",
-          description: "Filter by status: DRAFT, SUBMITTED, APPROVED, PAID",
+          description: "Filter by status: DRAFT, AWAITING_APPROVAL, APPROVED, PAID, VOIDED",
         },
+        vendor_id: { type: "string", description: "Filter by vendor ID" },
         page_num: { type: "number" },
         page_size: { type: "number" },
       },
@@ -230,13 +231,82 @@ const TOOLS = [
   },
   {
     name: "airwallex_get_bill",
-    description: "Get full details of a specific bill by ID.",
+    description: "Get full details of a specific bill by ID (Airwallex Spend module).",
     inputSchema: {
       type: "object",
       properties: {
         bill_id: { type: "string", description: "The bill ID" },
       },
       required: ["bill_id"],
+    },
+  },
+  {
+    name: "airwallex_create_bill",
+    description:
+      "Create a new bill in Airwallex Spend (accounts payable). Requires a vendor_id — use airwallex_list_vendors or airwallex_create_vendor first. Bill is created as DRAFT or AWAITING_APPROVAL.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        external_id: {
+          type: "string",
+          description: "Your internal identifier for this bill (e.g. receipt_ts or invoice ref)",
+        },
+        vendor_id: {
+          type: "string",
+          description: "Airwallex vendor UUID — use airwallex_list_vendors to look up",
+        },
+        legal_entity_id: {
+          type: "string",
+          description: "Airwallex legal entity ID for your account",
+        },
+        invoice_number: { type: "string", description: "Vendor invoice number" },
+        issued_date: { type: "string", description: "Invoice issue date ISO8601 e.g. 2026-05-28" },
+        due_date: { type: "string", description: "Invoice due date ISO8601 e.g. 2026-06-04" },
+        currency: { type: "string", description: "Bill currency e.g. USD, SGD" },
+        description: { type: "string", description: "Optional bill description / memo" },
+        line_items: {
+          type: "array",
+          description: "Line items — each with description, quantity, unit_price (tax-exclusive)",
+          items: {
+            type: "object",
+            properties: {
+              description: { type: "string" },
+              quantity: { type: "number" },
+              unit_price: { type: "number", description: "Tax-exclusive unit price" },
+            },
+            required: ["description", "quantity", "unit_price"],
+          },
+        },
+      },
+      required: ["external_id", "vendor_id", "invoice_number", "issued_date", "due_date", "currency", "line_items"],
+    },
+  },
+  {
+    name: "airwallex_list_vendors",
+    description:
+      "List vendors in Airwallex Spend. Use this to find a vendor_id before creating a bill. Filter by name.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Filter by vendor name (partial match)" },
+        page_num: { type: "number" },
+        page_size: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "airwallex_create_vendor",
+    description:
+      "Create a new vendor in Airwallex Spend. Required before creating a bill for a vendor that doesn't exist yet. Returns vendor_id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Vendor/supplier name" },
+        email: { type: "string", description: "Vendor billing email" },
+        currency: { type: "string", description: "Default payment currency e.g. USD, SGD" },
+        country_code: { type: "string", description: "ISO country code e.g. SG, US, PH" },
+      },
+      required: ["name"],
     },
   },
   {
@@ -385,6 +455,43 @@ async function handleTool(name, args) {
 
     case "airwallex_get_bill": {
       return await airwallexRequest("GET", `/api/v1/spend/bills/${args.bill_id}`);
+    }
+
+    case "airwallex_create_bill": {
+      const body = {
+        request_id: randomUUID(),
+        external_id: args.external_id,
+        vendor_id: args.vendor_id,
+        invoice_number: args.invoice_number,
+        issued_date: args.issued_date,
+        due_date: args.due_date,
+        currency: args.currency,
+        line_items: args.line_items.map((item) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+        })),
+      };
+      if (args.legal_entity_id) body.legal_entity_id = args.legal_entity_id;
+      if (args.description) body.description = args.description;
+      return await airwallexRequest("POST", "/api/v1/spend/bills/create", body);
+    }
+
+    case "airwallex_list_vendors": {
+      const params = new URLSearchParams();
+      if (args.name) params.set("name", args.name);
+      if (args.page_num !== undefined) params.set("page_num", args.page_num);
+      if (args.page_size !== undefined) params.set("page_size", args.page_size);
+      const query = params.toString() ? `?${params}` : "";
+      return await airwallexRequest("GET", `/api/v1/spend/vendors${query}`);
+    }
+
+    case "airwallex_create_vendor": {
+      const body = { request_id: randomUUID(), name: args.name };
+      if (args.email) body.email = args.email;
+      if (args.currency) body.currency = args.currency;
+      if (args.country_code) body.country_code = args.country_code;
+      return await airwallexRequest("POST", "/api/v1/spend/vendors/create", body);
     }
 
     case "airwallex_get_billing_invoice": {
