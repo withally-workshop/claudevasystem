@@ -79,17 +79,18 @@ async function downloadSlackImage(urlPrivate) {
 // Build a user content block — text + any image attachments
 async function buildUserContent(text, files) {
   const blocks = [{ type: 'text', text: text || '(no text)' }];
-  const images = (files || []).filter((f) => f.mimetype && f.mimetype.startsWith('image/'));
-  for (const file of images) {
+  const supported = (files || []).filter((f) => f.mimetype && (f.mimetype.startsWith('image/') || f.mimetype === 'application/pdf'));
+  for (const file of supported) {
     try {
       const buf = await downloadSlackImage(file.url_private);
-      blocks.push({
-        type: 'image',
-        source: { type: 'base64', media_type: file.mimetype, data: buf.toString('base64') },
-      });
+      const isPdf = file.mimetype === 'application/pdf';
+      blocks.push(isPdf
+        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') } }
+        : { type: 'image', source: { type: 'base64', media_type: file.mimetype, data: buf.toString('base64') } }
+      );
     } catch (e) {
-      console.error('Image download failed:', file.url_private, e.message);
-      blocks.push({ type: 'text', text: `[Image could not be loaded: ${file.name || file.id}]` });
+      console.error('File download failed:', file.url_private, e.message);
+      blocks.push({ type: 'text', text: `[File could not be loaded: ${file.name || file.id}]` });
     }
   }
   return blocks.length === 1 && !images.length ? text : blocks;
