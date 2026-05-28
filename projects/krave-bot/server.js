@@ -49,15 +49,62 @@ function getConvKey(channel, thread_ts) {
   return thread_ts ? `${channel}:${thread_ts}` : channel;
 }
 
-async function runAgent(userText, convKey) {
+// Download a Slack-hosted file using the bot token (files are auth-gated)
+async function downloadSlackImage(urlPrivate) {
+  return new Promise((resolve, reject) => {
+    const https = require('https');
+    const url = new URL(urlPrivate);
+    const opts = {
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+    };
+    https.get(opts, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        // follow one redirect (Slack CDN)
+        https.get(res.headers.location, (res2) => {
+          const chunks = [];
+          res2.on('data', (c) => chunks.push(c));
+          res2.on('end', () => resolve(Buffer.concat(chunks)));
+        }).on('error', reject);
+        return;
+      }
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+    }).on('error', reject);
+  });
+}
+
+// Build a user content block — text + any image attachments
+async function buildUserContent(text, files) {
+  const blocks = [{ type: 'text', text: text || '(no text)' }];
+  const images = (files || []).filter((f) => f.mimetype && f.mimetype.startsWith('image/'));
+  for (const file of images) {
+    try {
+      const buf = await downloadSlackImage(file.url_private);
+      blocks.push({
+        type: 'image',
+        source: { type: 'base64', media_type: file.mimetype, data: buf.toString('base64') },
+      });
+    } catch (e) {
+      console.error('Image download failed:', file.url_private, e.message);
+      blocks.push({ type: 'text', text: `[Image could not be loaded: ${file.name || file.id}]` });
+    }
+  }
+  return blocks.length === 1 && !images.length ? text : blocks;
+}
+
+async function runAgent(userContent, convKey) {
   // reset command clears corrupt/stale history
-  if (userText.trim().toLowerCase() === 'reset') {
+  const rawText = typeof userContent === 'string' ? userContent : (userContent.find((b) => b.type === 'text') || {}).text || '';
+  if (rawText.trim().toLowerCase() === 'reset') {
     conversations.delete(convKey);
     return 'Conversation reset. Start fresh.';
   }
 
   const history = conversations.get(convKey) || [];
-  history.push({ role: 'user', content: userText });
+  history.push({ role: 'user', content: userContent });
 
   const messages = [...history];
   let finalText = '';
@@ -202,7 +249,8 @@ app.event('message', async ({ event, say, client }) => {
   try {
     const displayName = await resolveDisplayName(client, event.user);
     const text = withContext(event.text || '', displayName, event.ts);
-    const reply = await runAgent(text, convKey);
+    const userContent = await buildUserContent(text, event.files);
+    const reply = await runAgent(userContent, convKey);
     await say({ text: reply, thread_ts: event.ts });
   } catch (e) {
     console.error('DM handler error:', e);
@@ -218,7 +266,8 @@ app.event('app_mention', async ({ event, say, client }) => {
   try {
     const displayName = await resolveDisplayName(client, event.user);
     const contextText = withContext(text, displayName, event.thread_ts || event.ts);
-    const reply = await runAgent(contextText, convKey);
+    const userContent = await buildUserContent(contextText, event.files);
+    const reply = await runAgent(userContent, convKey);
     await say({ text: reply, thread_ts: event.thread_ts || event.ts });
   } catch (e) {
     console.error('Mention handler error:', e);
