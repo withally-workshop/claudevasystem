@@ -172,13 +172,21 @@ function downloadUrl(url) {
   });
 }
 
-async function sendEmail({ account = 'noa', to, cc, subject, body, thread_id, attachment_url, attachment_filename }) {
+async function sendEmail({ account = 'noa', to, cc, subject, body, thread_id, attachment_url, attachment_filename, attachment_base64, attachment_mime_type }) {
   const email = account === 'john' ? 'john@kravemedia.co' : 'noa@kravemedia.co';
   const token = await getToken(email);
 
   let raw;
-  if (attachment_url) {
-    const { data, contentType } = await downloadUrl(attachment_url);
+  if (attachment_url || attachment_base64) {
+    let attachData, attachContentType;
+    if (attachment_base64) {
+      attachData = attachment_base64;
+      attachContentType = attachment_mime_type || 'application/octet-stream';
+    } else {
+      const { data, contentType } = await downloadUrl(attachment_url);
+      attachData = data.toString('base64');
+      attachContentType = contentType;
+    }
     const boundary = `boundary_${Date.now()}`;
     const parts = [
       `From: ${email}`,
@@ -194,11 +202,11 @@ async function sendEmail({ account = 'noa', to, cc, subject, body, thread_id, at
       body,
       '',
       `--${boundary}`,
-      `Content-Type: ${contentType}`,
+      `Content-Type: ${attachContentType}`,
       'Content-Transfer-Encoding: base64',
       `Content-Disposition: attachment; filename="${attachment_filename || 'invoice.pdf'}"`,
       '',
-      data.toString('base64'),
+      attachData,
       '',
       `--${boundary}--`,
     ];
@@ -264,6 +272,8 @@ module.exports = {
           body: { type: 'string', description: 'Plain text email body' },
           thread_id: { type: 'string', description: 'Thread ID to reply into (optional)' },
           attachment_url: { type: 'string', description: 'URL to download and attach as a file (e.g. Airwallex PDF URL)' },
+          attachment_base64: { type: 'string', description: 'Base64-encoded file data to attach directly (use instead of attachment_url when file is already in memory)' },
+          attachment_mime_type: { type: 'string', description: 'MIME type for attachment_base64 e.g. application/pdf, image/jpeg (default: application/octet-stream)' },
           attachment_filename: { type: 'string', description: 'Filename for the attachment (e.g. INV-00012.pdf)' },
         },
         required: ['to', 'subject', 'body'],
