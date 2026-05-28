@@ -1,67 +1,103 @@
 # KM-SOP-001 — Creator Invoice Management
-**Frequency:** Weekly | **Owner:** VA / Finance | **Updated:** March 2026
+**Frequency:** Every 3 hours (weekdays) via scheduled agent + real-time via Krave bot | **Owner:** VA / Finance | **Updated:** May 2026
 
 ## Overview
-Collect creator invoices from Slack (#payments-invoices-updates) and email, log them into Airwallex as bills, handle currency conversions, and flag exceptions — before any payment round is approved.
+Collect creator and vendor invoices from three intake channels, validate each PDF, and create draft bills in Airwallex Spend via API. John reviews and finalizes all drafts by EOD. Noa processes approved payments every Thursday.
 
 **Key Rules:**
-- Never pay without owner approval. Prepare and flag only.
+- Never pay without John's approval. Create drafts only.
 - Strategists must **@tag @Claude EA** in #payments-invoices-updates to trigger invoice processing. Messages without this tag are informational — do not action them.
-- **No invoice = no bill.** If a strategist tags Claude EA but provides no invoice (no attachment, no "sent via email" confirmation), reply asking for the invoice before drafting anything in Airwallex.
+- **No PDF = no bill.** If a strategist tags Claude EA but provides no invoice, reply asking for the PDF before drafting anything.
+- **No bank details = no bill.** If the invoice PDF has no bank account details, return to sender and ask them to reissue. Do not create the bill.
 
-## Tools
-| Tool | Detail |
-|------|--------|
-| Airwallex (Bills) | app.airwallex.com → Bills section |
-| Auto-bill email | Forward to kravemedia@bills.airwallex.com |
-| Slack channel | #payments-invoices-updates (C09HN2EBPR7) |
-| Currency converter | xe.com or Google for live rates |
+## Intake Channels
+
+| Channel | Who | Type |
+|---------|-----|------|
+| Email john@kravemedia.co | Strategists (Shin, Amanda, Sybil, Jeneena) | PDF attachments; multiple PDFs = multiple separate bills |
+| #payments-invoices-updates (C09HN2EBPR7) | Strategists @mentioning Claude EA | PDF/image attachment |
+| John's Slack DMs | Editors, internal staff | PDF for salary/ad-hoc payments |
+
+## Automation Architecture
+
+```
+Invoice Input
+├── Slack DM             → Krave Bot (real-time)
+├── Slack @mention       → Krave Bot (real-time)
+├── Email                → Scheduled Claude Agent (every 3h, weekdays)
+└── /invoice-triage      → Manual on-demand sweep
+```
 
 ## Steps
 
-### Step 1 — Collect Invoices
-- Check #payments-invoices-updates for payment rounds (creator name, amount, currency, notes)
-- Check email for forwarded invoices (subjects: 'Invoice', 'Payment', creator name + campaign)
-- No invoice = no payment. Ask strategist first.
+### Step 1 — Receive Invoice
 
-### Step 2 — Forward to Airwallex (Auto-Draft)
-- Email invoices only: forward to kravemedia@bills.airwallex.com
-- Slack-only invoices: manual entry required (Step 3)
-- Verify auto-drafted bills in Airwallex → Bills → 'For Submission'
+- Krave bot handles Slack DMs and @mentions instantly when a PDF is attached
+- Scheduled agent scans john@kravemedia.co inbox every 3 hours on weekdays for new invoices
+- Manual run (`/invoice-triage`) sweeps email + Slack channel for anything pending
 
-### Step 3 — Enter / Review Bills in Airwallex
-Fields required:
-- Vendor name (creator name)
-- Description (e.g. 'UGC Video — Casetify Campaign')
-- Invoice number, date, due date (if no due date stated, use submission date)
-  - **If no invoice number provided**, generate using format: `DD-MM-YYYY-[First Initial][Last Name]`
-  - Example: `01-04-2026-MTan` for Megan Tan on April 1 2026
-- Amount and currency
-- Attach original invoice PDF/image
-- Save as draft — do not submit until currency confirmed
+### Step 2 — Validate Invoice
 
-### Step 4 — Currency Verification & Conversion
+Run these checks in order:
+
+| Check | Rule |
+|-------|------|
+| PDF attached | **Hardstop** — no PDF, ask for it first |
+| Bank details | **Hardstop** — no bank account info in PDF → return to sender, ask them to reissue |
+| Invoice number | If missing → generate: `MMDDYYYY-[FirstInitial][LastName]` (e.g. `5282026-AGMapula`) |
+| Due date | If missing → use Friday of the current week (PHT) |
+| Invoice date | If missing → use today |
+
+### Step 3 — Create Bill in Airwallex (API)
+
+1. Look up vendor by name in Airwallex Spend → `airwallex_list_vendors`
+2. If not found → create vendor (name + email only) → `airwallex_create_vendor`
+3. Create draft bill → `airwallex_create_bill` with: vendor_id, invoice_number, issued_date, due_date, currency, line_items
+4. Bill status: DRAFT or AWAITING_APPROVAL
+
+**API fallback** (if Spend API unavailable): forward PDF to `kravemedia@bills.airwallex.com`, post bill prep report to John's channel, log as "Pending manual entry."
+
+### Step 4 — Confirm to Requester
+
+After staging:
+- **Slack:** Reply in thread → "Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD." + react ✅
+- **Email:** Reply in same thread → same message, professional tone. Only reply to @kravemedia.co senders.
+
+If validation fails (missing bank details etc.) → reply with the specific issue instead.
+
+### Step 5 — Log to Tracker
+
+Append to **Client Invoice Tracker** (`1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`), tab: **Bills**
+
+Fields: Date, Creator, Email, Invoice #, Source, Currency, Amount, Due Date, Airwallex Bill ID, Status, External ID, Notes
+
+### Step 6 — John Reviews & Finalizes
+
+John reviews all drafts in Airwallex → Bills by EOD. He does not need to take any action in Slack or email — the bills are already staged.
+
+### Step 7 — Noa Processes Payments
+
+Every Thursday, Noa reviews approved bills and processes transfers in Airwallex.
+
+## Currency Rules
+
 | Scenario | Action |
 |----------|--------|
-| SG creator invoices in SGD | Enter as-is |
-| US creator invoices in USD | Enter in USD if account receives USD |
-| HK creator invoices in USD | Convert USD→HKD at live rate, subtract 3% |
-| PayPal only | FLAG as exception. Request ACH/bank details |
-
-Conversion formula: `local amount = invoice_amount * live_rate * 0.97`
-
-### Step 5 — Submit for Approval
-- Submit all bills in Airwallex for owner review
-- Do not process payment yourself
-- After approval: process transfers
-- Confirm: 'Transfers created for all X bills' green banner
+| SGD invoice | Enter as SGD — no conversion |
+| USD invoice, US creator | Enter as USD |
+| USD invoice, HK creator | Convert: `HKD = USD × live_rate × 0.97` — note rate in bill description |
+| PayPal only | Flag — ask strategist for bank/wire details |
 
 ## Exception Types
+
 | Exception | Action |
 |-----------|--------|
-| Missing bank details | Flag in Slack. Ask strategist to follow up |
-| PayPal only | Flag in Slack. Request ACH/bank wire |
-| No invoice provided | Ask strategist. No invoice = no bill |
-| Currency mismatch | Convert per Step 4. Note in bill description |
-| Duplicate invoice | Do not enter. Flag and confirm with strategist |
-| Amount doesn't match agreement | Do not enter. Flag and loop in strategist |
+| No PDF attached | Hardstop — ask for PDF first |
+| Missing bank details | Hardstop — return to sender, ask to reissue with bank details |
+| PayPal only | Flag — request ACH/bank wire |
+| No invoice number | Generate: `MMDDYYYY-[FirstInitial][LastName]` |
+| No due date | Use Friday of current week (PHT) |
+| Currency mismatch | Convert per currency rules, note rate in description |
+| Duplicate submission | Check tracker `external_id` — skip if already processed |
+| Amount doesn't match agreement | Flag to John — do not create bill without confirmation |
+| Multiple PDFs in one email | One bill per PDF — process separately |

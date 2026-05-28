@@ -21,7 +21,7 @@ This repo is a Claude Code executive-assistant workspace. Treat `.claude/skills/
 
 | User says / slash command | Claude skill file | What it does |
 |---|---|---|
-| `/invoice-triage`, "process invoices", "run invoice triage" | `.claude/skills/creator-invoice-processing/SKILL.md` | Prepare creator invoice bill report from Slack/Gmail inputs. |
+| `/invoice-triage`, "process invoices", "run invoice triage", "stage invoice", "create bill" | `.claude/skills/creator-invoice-processing/SKILL.md` and `.agents/skills/creator-invoice-processing/SKILL.md` | Receive PDF invoices from email/Slack/DMs, validate, create draft bills in Airwallex Spend, confirm to requester, log to tracker. |
 | `/inbox-triage`, "triage inbox", "morning triage", "inbox zero setup" | `.claude/skills/inbox-triage/SKILL.md` and `.agents/skills/inbox-triage/SKILL.md` | Run inbox setup or daily triage for `noa@kravemedia.co`. |
 | `/payment-detection`, "check for payments", "scan for payments" | `.claude/skills/payment-detection/SKILL.md` and `.agents/skills/payment-detection/SKILL.md` | Scan Airwallex payment emails and update invoice tracker. |
 | `/payment-detection-trigger`, "run payment detection" | `.claude/skills/payment-detection-trigger/SKILL.md` | Fire the n8n payment detection webhook. |
@@ -40,6 +40,7 @@ This repo is a Claude Code executive-assistant workspace. Treat `.claude/skills/
 | `/morning-coffee`, "morning coffee", "run morning coffee", "Noa's morning briefing", "send morning briefing", "what's on for Noa today" | `.claude/skills/morning-coffee/SKILL.md` and `.agents/skills/morning-coffee/SKILL.md` | Personal daily morning briefing DM to Noa — calendar, email attention items, ClickUp project pulse, Slack DMs and channel highlights. Sends as John's personal Slack account. |
 | `/clickup-invoice-sync`, "sync clickup", "update clickup status", "why didn't clickup update" | `.claude/skills/clickup-invoice-sync/SKILL.md` and `.agents/skills/clickup-invoice-sync/SKILL.md` | Explain and troubleshoot ClickUp ↔ invoice lifecycle sync: status moves to collections on finalization, payment complete on payment confirmed. |
 | `/crave-outreach`, "scrape creators", "scrape US creators", "scrape NL creators", "push leads", "sync outreach status", "check open rate", "campaign stats" | `.claude/skills/crave-outreach/SKILL.md` and `.agents/skills/crave-outreach/SKILL.md` | TikTok UGC creator scraper (US + NL), Smartlead lead push, reply/open/bounce sync, campaign stats. |
+| `/halo-home`, "halo home", "halo orders", "halo sales", "halo inventory", "halo revenue", "halo refunds", "halo subscriptions", "what came in today" | `.claude/skills/halo-home-ops/SKILL.md` and `.agents/skills/halo-home-ops/SKILL.md` | Read-only Halo Home Shopify store ops — sales snapshots, order lookup, inventory status, refund tracking, customer history, subscription list, comped orders. |
 
 ## n8n Automation Map
 
