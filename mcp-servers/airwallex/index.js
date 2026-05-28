@@ -44,8 +44,8 @@ async function getToken() {
 }
 
 // Billing read/write paths — do NOT use x-on-behalf-of (causes 401)
-// Bills (spend module) needs x-on-behalf-of
-const NO_BEHALF_PATHS = ["/api/v1/invoices", "/api/v1/billing", "/api/v1/bills", "/api/v1/billing_customers", "/api/v1/products", "/api/v1/prices"];
+// Spend module paths (/api/v1/spend/*) DO use x-on-behalf-of
+const NO_BEHALF_PATHS = ["/api/v1/invoices", "/api/v1/billing", "/api/v1/billing_customers", "/api/v1/products", "/api/v1/prices"];
 
 const BILLING_PATHS = ["/api/v1/invoices", "/api/v1/billing_customers", "/api/v1/products", "/api/v1/prices"];
 
@@ -380,11 +380,11 @@ async function handleTool(name, args) {
       if (args.page_num !== undefined) params.set("page_num", args.page_num);
       if (args.page_size !== undefined) params.set("page_size", args.page_size);
       const query = params.toString() ? `?${params}` : "";
-      return await airwallexRequest("GET", `/api/v1/bills${query}`);
+      return await airwallexRequest("GET", `/api/v1/spend/bills${query}`);
     }
 
     case "airwallex_get_bill": {
-      return await airwallexRequest("GET", `/api/v1/bills/${args.bill_id}`);
+      return await airwallexRequest("GET", `/api/v1/spend/bills/${args.bill_id}`);
     }
 
     case "airwallex_get_billing_invoice": {

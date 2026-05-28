@@ -93,7 +93,7 @@ async function buildUserContent(text, files) {
       blocks.push({ type: 'text', text: `[File could not be loaded: ${file.name || file.id}]` });
     }
   }
-  return blocks.length === 1 && !images.length ? text : blocks;
+  return blocks.length === 1 && !supported.length ? text : blocks;
 }
 
 async function runAgent(userContent, convKey) {
