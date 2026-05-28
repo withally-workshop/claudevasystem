@@ -44,6 +44,10 @@
 | 16 | Crave - Daily Lead Push | `ke52OLrSUXk8mPVw` | Inactive (warm-up) | 9AM PHT daily | Read approved Sheet rows, push to Smartlead campaign 3375376, mark outreach_queued |
 | 17 | Crave - Status Sync | `uUGxA3GW1W0vq6el` | Inactive (warm-up) | 9AM PHT daily | Pull Smartlead lead statuses, sync opens/replies/bounces back to Sheet |
 | 18 | Krave — Price Reply Auto-Resubmit | `nzFTk4e9NRi6Jk9r` | Active | Every 10min + `POST /webhook/krave-price-reply-resubmit` | Detect bot "price missing" threads with unprocessed amount replies in #payments-invoices-updates, parse receipt + amount, resubmit to intake webhook automatically |
+| 19 | LinkedIn Post Monitor | `wNXs7wqHz5d5naJN` | Inactive (needs actor verification) | Every 30min all day | Scrape Noa's LinkedIn profile via Apify every 30min, detect new posts using workflow static data, alert John in #noa-linkedin-posts with preview + link |
+| 20 | Halo - VA Slack Bot | TBD | Pending deploy | `app_mention` in #halo-home | VA @mentions bot → Claude classifies intent → Shopify API → formatted reply in thread |
+| 21 | Halo - Daily Digest | TBD | Pending deploy | Midnight UTC (8 AM PHT) daily | Pull yesterday's Shopify orders → Claude formats → post to #halo-home |
+| 22 | Halo - Inventory Alert | TBD | Pending deploy | Midnight UTC (8 AM PHT) daily | Compare product OOS state vs previous run, alert #halo-home on changes only |
 
 ---
 
@@ -1339,6 +1343,171 @@ Workflow is deployed **inactive**. Activate in the n8n UI on ~2026-06-12 when wa
 
 ---
 
+## Workflow 20 — Halo - VA Slack Bot
+
+**n8n URL:** TBD (update after first deploy)
+**Deploy script:** `n8n-workflows/deploy-halo-home-slack-bot.js`
+
+### Purpose
+
+Gives the Halo Home VA Shopify store access via Slack without needing admin credentials. VA @mentions the bot in #halo-home; the bot classifies intent, calls Shopify Admin REST API, and replies in thread within 3 seconds.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Webhook (Slack Event) | Slack `app_mention` event → `POST https://noatakhel.app.n8n.cloud/webhook/halo-home-bot` |
+
+### Node Flow
+
+```text
+[Webhook — halo-home-bot (onReceived)]
+  ↓
+[Parse Event] — extract text, userId, channel, threadTs
+  ↓
+[Is App Mention?] — filter: event.type = app_mention
+  ↓
+[Classify Intent (Claude Haiku)] — returns JSON intent + params
+  ↓
+[Build Shopify URL] — maps intent → Shopify REST endpoint
+  ↓
+[Fetch Shopify Data] — GET /admin/api/2024-10/...
+  ↓
+[Format Response (Claude Haiku)] — formats data into clean Slack reply
+  ↓
+[Parse Response] — extract text from Claude response
+  ↓
+[Post Slack Reply] — reply in thread
+```
+
+### Intent Types Handled
+
+sales_snapshot, order_by_email, order_by_number, inventory_check, product_availability, refund_check, customer_history, subscription_list, comped_orders, revenue_report, product_info, general
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| Valid store query | Shopify data fetched, Claude-formatted reply posted in thread |
+| General question | Claude answers from catalog knowledge, no Shopify call needed |
+| Unknown intent | "I can help with orders, inventory, refunds, and sales data." |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| Shopify API fails | `onError: continueRegularOutput`; Claude formats with available data |
+| Not an app_mention | If node filters it out, workflow exits silently |
+
+### Pre-deploy Setup
+
+1. Invite Krave Slack Bot to #halo-home
+2. In Slack App settings: Enable Event Subscriptions → Request URL: `https://noatakhel.app.n8n.cloud/webhook/halo-home-bot`
+3. Subscribe to bot event: `app_mention`
+4. Set `HALO_HOME_SLACK_CHANNEL_ID` env var after getting channel ID from Slack
+
+---
+
+## Workflow 21 — Halo - Daily Digest
+
+**n8n URL:** TBD (update after first deploy)
+**Deploy script:** `n8n-workflows/deploy-halo-home-daily-digest.js`
+
+### Purpose
+
+Posts yesterday's Halo Home sales summary to #halo-home every morning. Gives the VA and Noa/John a daily pulse without logging into Shopify.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Schedule | `0 0 * * *` (UTC) — 8:00 AM PHT daily |
+
+### Node Flow
+
+```text
+[Schedule Trigger — midnight UTC]
+  ↓
+[Build Date Range] — calculates yesterday in SGT (UTC+8)
+  ↓
+[Fetch Yesterday Orders] — GET /admin/api/2024-10/orders.json?created_at range
+  ↓
+[Format Digest (Claude Haiku)] — POST Anthropic API
+  ↓
+[Post to Slack] — #halo-home
+```
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| Orders exist | Slack digest with revenue, count, AOV, top products, refunds, comped |
+| Zero orders | "No orders yesterday." |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| Shopify API fails | `onError: continueRegularOutput`; Claude formats with whatever data arrived |
+
+---
+
+## Workflow 22 — Halo - Inventory Alert
+
+**n8n URL:** TBD (update after first deploy)
+**Deploy script:** `n8n-workflows/deploy-halo-home-inventory-alert.js`
+
+### Purpose
+
+Alerts #halo-home when Halo Home products go out of stock or come back in stock. Runs daily and only posts when there's a change — no repeat noise for already-OOS items.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Schedule | `0 0 * * *` (UTC) — 8:00 AM PHT daily |
+
+### Node Flow
+
+```text
+[Schedule Trigger]
+  ↓
+[Load OOS State] — reads workflow static data (persisted between runs)
+  ↓
+[Check Inventory] — GET /admin/api/2024-10/products.json, compare DENY policy vs saved state
+  ↓
+[Has Changes?] — IF node: has_changes = true
+  ↓ true                       ↓ false
+[Build Message]           [Save OOS State]
+  ↓
+[Post to Slack] — #halo-home
+  ↓
+[Save OOS State] — persist current OOS map to workflow static data
+```
+
+### Key Logic
+
+- `inventory_policy: DENY` + `inventory_quantity <= 0` = out of stock
+- First run saves baseline; no alert fires until second run detects a delta
+- Known pre-existing OOS products (Matte Black, Sweet Citrus, pillowcases, bundles) will not alert after the first run establishes baseline
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| New OOS detected | Posts `⚠ [Product]` alert to #halo-home |
+| Product back in stock | Posts `✓ [Product]` alert to #halo-home |
+| No change | Silent — no Slack post |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| Shopify API fails | `onError: continueRegularOutput`; Save OOS State still runs if it receives input |
+| Static data unavailable | `prevOos` defaults to `{}` — first run is always treated as baseline |
+
+---
+
 ## Handover Checklist
 
 - [ ] Access to `noatakhel.app.n8n.cloud`
@@ -1359,3 +1528,10 @@ Workflow is deployed **inactive**. Activate in the n8n UI on ~2026-06-12 when wa
 - [ ] Activate Crave - Daily Lead Push (workflow 16) and Crave - Status Sync (workflow 17) in n8n UI after warm-up completes (~2026-06-12) — both are deployed inactive
 - [ ] After deploying crave workflows, set the returned WORKFLOW_ID in `deploy-crave-lead-push.js` and `deploy-crave-status-sync.js` for future redeploys
 - [ ] Test by webhook after any workflow change
+- [ ] **Halo Home:** Set `SHOPIFY_ACCESS_TOKEN` and `HALO_HOME_SLACK_CHANNEL_ID` in n8n environment variables before deploying any Halo workflows
+- [ ] **Halo VA Bot:** Invite Krave Slack Bot to #halo-home; enable Slack app Event Subscriptions → `app_mention` → URL: `https://noatakhel.app.n8n.cloud/webhook/halo-home-bot`
+- [ ] **Halo VA Bot:** After deploy, set `HALO_HOME_SLACK_BOT_WORKFLOW_ID` in deploy script env for future redeploys
+- [ ] **Halo Digest:** After deploy, set `HALO_HOME_DAILY_DIGEST_WORKFLOW_ID` in deploy script env for future redeploys
+- [ ] **Halo Inventory Alert:** After deploy, set `HALO_HOME_INVENTORY_ALERT_WORKFLOW_ID` in deploy script env for future redeploys; first run establishes baseline OOS state (no alert), second run onward alerts on changes
+- [ ] **Halo Chatbot (Render):** Deploy `projects/halo-home-chat/` to Render → set env vars `SHOPIFY_ACCESS_TOKEN`, `MYSHOPIFY_DOMAIN`, `ANTHROPIC_API_KEY`; update `BACKEND_URL` in `widget.js` with the live Render URL
+- [ ] **Halo Chatbot (Widget):** Inject `widget.js` into Shopify theme → Online Store → Themes → Edit code → `layout/theme.liquid` → add `<script src="...">` before `</body>`

@@ -265,7 +265,7 @@ const workflow = {
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [240, 200],
       parameters: {
-        rule: { interval: [{ field: 'cronExpression', expression: '0 9,11,13,15,17 * * 1-5' }] }
+        rule: { interval: [{ field: 'cronExpression', expression: '* * * * *' }] }
       },
     },
     {
@@ -501,7 +501,7 @@ return items.map(ctx => {
   const pdfUrl = ctx.pdf_url || '';
   const projectDescription = ctx['Project Description'] || ctx['D'] || '';
   const originThreadTs = (ctx['Origin Thread TS'] || '').trim();
-  const requesterUsername = (ctx['Requested By'] || '').trim().toLowerCase().replace(/^@/, '');
+  const requesterUsername = (ctx['Requested By'] || '').trim().toLowerCase().replace(/^@/, '').replace(/[^a-z0-9._-]/g, '');
   const requesterEmail = requesterUsername ? requesterUsername + '@kravemedia.co' : '';
   const ccList = ['noa@kravemedia.co', ...(requesterEmail && requesterEmail !== 'noa@kravemedia.co' ? [requesterEmail] : [])].join(', ');
 

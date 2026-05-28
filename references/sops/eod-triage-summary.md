@@ -1,8 +1,8 @@
 ﻿# SOP: EOD Triage Summary
 
 **Owner:** John (operator)
-**Recipient:** Noa Takhel (via Slack DM)
 **Frequency:** Monday–Friday, automated at 6:00 PM GMT+8
+**Delivery:** `#ops-command` (bot post)
 **Skill:** `.claude/skills/eod-triage-summary/SKILL.md`
 **Trigger:** `trig_015YZhdGzPQNotUAruRVtSTg`
 
@@ -10,7 +10,7 @@
 
 ## Purpose
 
-Consolidate everything handled during the day into a single, structured Slack DM to Noa. Gives her a clear picture of what's done, what's blocked, and what needs her input — without requiring her to chase the team.
+Consolidate everything handled during the day into a single, structured `#ops-command` post. Provides a clear record of what's done, what's blocked, and what rolls to tomorrow — feeds the SOD carry-over.
 
 ---
 
@@ -21,17 +21,15 @@ Consolidate everything handled during the day into a single, structured Slack DM
 | Time (GMT+8) | Action |
 |---|---|
 | Throughout the day | John posts task updates to `#ops-command` as things happen |
-| 6:00 PM | Remote agent fires, pulls today's messages from 3 channels |
+| 6:00 PM | Remote agent fires, pulls today's messages from source channels |
 | 6:00 PM | Filters to today only (midnight GMT+8 cutoff) |
-| 6:00 PM | Categorizes into EOD template, sends to Noa's DM |
-| 6:00 PM | Posts same message to `#ops-command` for SOD carry-over |
+| 6:00 PM | Categorizes into EOD template, posts to `#ops-command` |
 
 ### Data Sources
 
 | Channel | ID | Content |
 |---|---|---|
 | `#ops-command` | `C0AQZGJDR38` | John's task dump + invoice drafts + inbox triage |
-| `#ad-production-internal` | `C0AGEM919QV` | IM8 production updates, Frame.io status |
 | `#payments-invoices-updates` | `C09HN2EBPR7` | Invoice requests, payment confirmations |
 
 ---

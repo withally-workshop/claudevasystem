@@ -52,8 +52,9 @@ Process Slack invoice request receipts into Airwallex drafts (Mode 0/1) and fina
 2. Guards against double-processing via tracker Col J status check
 3. Finalizes Airwallex invoice → extracts payment link
 4. Updates tracker (Col J → `Invoice Sent`, Col R → payment link)
-5. Replies in John's thread + tags strategist in original #payments-invoices-updates thread
-6. If John's reply includes a ClickUp task URL → activates ClickUp sync (see `.agents/skills/clickup-invoice-sync/SKILL.md`)
+5. Emails invoice to client — To: client_email, CC: noa@kravemedia.co AND [requester]@kravemedia.co. Do NOT CC john@kravemedia.co — that is the sender.
+6. Replies in John's thread + tags strategist in original #payments-invoices-updates thread
+7. If John's reply includes a ClickUp task URL → activates ClickUp sync (see `.agents/skills/clickup-invoice-sync/SKILL.md`)
 
 ## Standard Invoice Memo
 

@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: halo-home-chat
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SHOPIFY_ACCESS_TOKEN
+        sync: false
+      - key: MYSHOPIFY_DOMAIN
+        value: homewithhalo.myshopify.com
+      - key: ANTHROPIC_API_KEY
+        sync: false

@@ -156,7 +156,17 @@ def _normalise_profile(raw: dict, actor_id: str) -> dict:
 
 def _build_run_input(actor_id: str, search_term: str, max_results: int, cfg: dict, proxy_country: str = "US") -> dict:
     """Build actor-specific run input. Adapt as schemas differ."""
-    if "clockworks" in actor_id:
+    if "tiktok-hashtag-scraper" in actor_id:
+        # search_term is a single hashtag (without #)
+        return {
+            "hashtags": [search_term.lstrip("#")],
+            "resultsType": "posts",
+            "maxPostsPerPage": max_results,
+            "shouldDownloadVideos": False,
+            "shouldDownloadCovers": False,
+            "shouldDownloadMusicCovers": False,
+        }
+    elif "clockworks" in actor_id:
         return {
             "searchQueries": [search_term],
             "maxProfilesPerQuery": max_results,

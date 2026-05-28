@@ -377,7 +377,7 @@ The automated flow:
 
 **Manual fallback (only if automation fails):**
 1. Download PDF: `GET [pdf_url]` from Airwallex invoice — follow redirects
-2. Send via `mcp__gmail-john__gmail_send` with `attachment_paths` — To: client_email, CC: noa@kravemedia.co
+2. Send via `mcp__gmail-john__gmail_send` with `attachment_paths` — To: client_email, CC: noa@kravemedia.co, [requester]@kravemedia.co (e.g. amanda@kravemedia.co). Do NOT CC john@kravemedia.co — that is the sender.
 3. Subject: `Invoice [invoice_number] - [client_name]` (ASCII dash, not em dash)
 4. Reply in origin thread: `<@[requester_id]> Invoice emailed to [client_email] with PDF attached.`
 

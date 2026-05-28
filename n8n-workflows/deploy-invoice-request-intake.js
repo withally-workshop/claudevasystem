@@ -175,7 +175,8 @@ const daysUntilDue = computedDueDate ? diffDays(invoiceDateResult.value, compute
 const nullPriceItems = lineItems.filter(i => i.unit_price === null || i.unit_price === undefined);
 let resolvedLineItems = lineItems;
 if (nullPriceItems.length === lineItems.length && lineItems.length > 0) {
-  const payloadTotal = Number(payload.amount || payload.total || payload.subtotal_amount || 0);
+  const rawAmount = payload.amount || payload.total || payload.subtotal_amount || 0;
+  const payloadTotal = Number(String(rawAmount).replace(/[^0-9.]/g, '')) || 0;
   if (payloadTotal > 0) {
     resolvedLineItems = [{
       description: lineItems.map(i => i.raw_text || i.description || '').filter(Boolean).join(' — '),
@@ -480,7 +481,7 @@ return {
 `.trim();
 
 const HYDRATE_FALLBACK_CODE = `
-const baseline = ($items('Normalize Slack Submission', 0, 0)[0] || {}).json || {};
+const baseline = ($items('Merge Requester Name', 0, 0)[0] || $items('Normalize Slack Submission', 0, 0)[0] || {}).json || {};
 const current = $json || {};
 const errorMessage = current.error?.message || current.failure_reason || '';
 
@@ -549,6 +550,37 @@ const workflow = {
       },
     },
     {
+      id: 'n_lookup_requester',
+      name: 'Lookup Requester Name',
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
+      position: [480, 160],
+      continueOnFail: true,
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      parameters: {
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'slackApi',
+        method: 'GET',
+        url: 'https://slack.com/api/users.info',
+        sendQuery: true,
+        queryParameters: { parameters: [
+          { name: 'user', value: '={{ $json.submitted_by_slack_user_id }}' },
+        ]},
+        options: {},
+      },
+    },
+    {
+      id: 'n_merge_requester_name',
+      name: 'Merge Requester Name',
+      type: 'n8n-nodes-base.code',
+      typeVersion: 2,
+      position: [590, 160],
+      parameters: {
+        mode: 'runOnceForEachItem',
+        jsCode: `const normalized = $('Normalize Slack Submission').item.json;\nconst profile = ($json.user || {}).profile || {};\nconst displayName = profile.display_name_normalized || profile.display_name || profile.real_name || normalized.submitted_by_slack_user_name || normalized.submitted_by_slack_user_id || '';\nreturn { json: { ...normalized, submitted_by_slack_user_name: displayName } };`,
+      },
+    },
+    {
       id: 'n3',
       name: 'Airwallex Auth',
       type: 'n8n-nodes-base.httpRequest',
@@ -575,7 +607,7 @@ const workflow = {
       position: [1030, 260],
       parameters: {
         mode: 'runOnceForEachItem',
-        jsCode: `const normalized = $('Normalize Slack Submission').item.json;\nreturn { json: { ...normalized, token: $json.token } };`,
+        jsCode: `const normalized = $('Merge Requester Name').item.json;\nreturn { json: { ...normalized, token: $json.token } };`,
       },
     },
     {
@@ -1196,7 +1228,9 @@ const workflow = {
   ],
   connections: {
     'Webhook Trigger': { main: [[{ node: 'Normalize Slack Submission', type: 'main', index: 0 }]] },
-    'Normalize Slack Submission': { main: [[{ node: 'Route Validation Outcome', type: 'main', index: 0 }]] },
+    'Normalize Slack Submission': { main: [[{ node: 'Lookup Requester Name', type: 'main', index: 0 }]] },
+    'Lookup Requester Name': { main: [[{ node: 'Merge Requester Name', type: 'main', index: 0 }]] },
+    'Merge Requester Name': { main: [[{ node: 'Route Validation Outcome', type: 'main', index: 0 }]] },
     'Route Validation Outcome': { main: [
       [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],
       [{ node: 'Airwallex Auth', type: 'main', index: 0 }],

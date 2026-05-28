@@ -71,6 +71,7 @@ Current skills on disk:
 - `client-invoice-creation`
 - `creator-invoice-processing`
 - `eod-triage-summary`
+- `halo-home-ops`
 - `inbox-triage`
 - `invoice-approval-polling`
 - `invoice-reminder-cron`
@@ -92,6 +93,7 @@ Important note:
 
 Current project folders:
 
+- `halo-home-chat`
 - `halo-home-us-expansion`
 - `system-automation-build-out`
 - `krave-ops-showcase`

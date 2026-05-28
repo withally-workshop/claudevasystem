@@ -3,12 +3,14 @@ main.py — pipeline orchestrator
 Usage:
   python src/main.py --search-term "UGC creator" --max-results 100 --dry-run
   python src/main.py --search-term "UGC creator" --max-results 500
+  python src/main.py --hashtag ugcnederland --max-results 200 --region NL
 """
 import argparse
 import json
 import os
 import sys
 
+import requests
 import yaml
 from dotenv import load_dotenv
 
@@ -46,7 +48,29 @@ def parse_args():
         choices=["US", "NL"],
         help="Target region — sets proxy country and follower floor (default: US)",
     )
+    p.add_argument(
+        "--hashtag",
+        default=None,
+        help="Scrape by hashtag instead of keyword (e.g. ugcnederland). Uses clockworks/tiktok-hashtag-scraper.",
+    )
     return p.parse_args()
+
+
+def _slack_notify(text: str):
+    """Post a message to #krave-creator-outreach. Silently skips if token not set."""
+    token = os.environ.get("SLACK_BOT_TOKEN")
+    channel = os.environ.get("SLACK_OUTREACH_CHANNEL", "C0B5MQF50RX")
+    if not token:
+        return
+    try:
+        requests.post(
+            "https://slack.com/api/chat.postMessage",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"channel": channel, "text": text},
+            timeout=10,
+        )
+    except Exception:
+        pass  # Never block the pipeline on a Slack failure
 
 
 def main():
@@ -61,37 +85,40 @@ def main():
         run_outreach(max_sends=args.max_sends, dry_run=args.dry_run)
         return
 
-    if not args.search_term:
-        print("ERROR: --search-term is required unless --outreach-only is set.")
-        sys.exit(1)
-
-    actor_id = args.actor_id or cfg.get("apify", {}).get("actor_id") or ""
-    if not actor_id:
-        print(
-            "ERROR: actor_id is not set. Run tests/compare_actors.py first, "
-            "then set actor_id in config.yaml."
-        )
-        sys.exit(1)
+    # --hashtag mode: use clockworks/tiktok-hashtag-scraper
+    if args.hashtag:
+        actor_id = args.actor_id or "clockworks/tiktok-hashtag-scraper"
+        search_term = args.hashtag.lstrip("#")
+        label = f"#{search_term}"
+    else:
+        if not args.search_term:
+            print("ERROR: --search-term or --hashtag is required unless --outreach-only is set.")
+            sys.exit(1)
+        actor_id = args.actor_id or cfg.get("apify", {}).get("actor_id") or ""
+        if not actor_id:
+            print("ERROR: actor_id is not set in config.yaml.")
+            sys.exit(1)
+        search_term = args.search_term
+        label = f'"{search_term}"'
 
     region = args.region.upper()
     region_cfg = cfg.get("regions", {}).get(region, {})
     proxy_country = region_cfg.get("proxy_country", region)
-    # Override follower bounds from region config if present
     if region_cfg.get("min_followers"):
         cfg.setdefault("apify", {})["min_followers"] = region_cfg["min_followers"]
     if region_cfg.get("max_followers"):
         cfg.setdefault("apify", {})["max_followers"] = region_cfg["max_followers"]
 
     print(f"\n[main] === Crave Outreach Pipeline ===")
-    print(f"[main] search_term  = {args.search_term!r}")
-    print(f"[main] max_results  = {args.max_results}")
-    print(f"[main] actor_id     = {actor_id}")
-    print(f"[main] region       = {region} (proxy: {proxy_country})")
-    print(f"[main] dry_run      = {args.dry_run}")
+    print(f"[main] search      = {label}")
+    print(f"[main] max_results = {args.max_results}")
+    print(f"[main] actor_id    = {actor_id}")
+    print(f"[main] region      = {region} (proxy: {proxy_country})")
+    print(f"[main] dry_run     = {args.dry_run}")
     print()
 
     # Step 1: Scrape
-    raw_profiles = run_actor(actor_id, args.search_term, args.max_results, cfg, proxy_country=proxy_country)
+    raw_profiles = run_actor(actor_id, search_term, args.max_results, cfg, proxy_country=proxy_country)
     if not raw_profiles:
         print("[main] No profiles returned. Exiting.")
         sys.exit(0)
@@ -117,6 +144,12 @@ def main():
             print(json.dumps(display, indent=2, default=str))
     else:
         upsert_profiles(deduped, cfg)
+        with_email = sum(1 for p in deduped if p.get("email"))
+        _slack_notify(
+            f"*Scrape complete* — {label} ({region})\n"
+            f"• {len(deduped)} creators scraped  |  {with_email} with email\n"
+            f"• Review in <https://docs.google.com/spreadsheets/d/1eLQrDP3IX9ec9dtFN0UyRdlTplzkLfRG9Asyqj1gLrI/edit|Sheet> — flip `status` to `approved` to queue for outreach"
+        )
 
     print(f"\n[main] Done. Final profile count: {len(deduped)}")
 

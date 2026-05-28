@@ -19,10 +19,10 @@ See the full skill spec at `.claude/skills/sod-report/SKILL.md` — that file is
 ## What It Does
 
 1. Pulls `#ops-command` history (channel `C0AQZGJDR38`, limit 100)
-2. Finds last business day's EOD (message containing "Today's Wrap-up" — on Monday looks back to Friday)
-3. Finds John's morning dump posted today (user `U0AM5EGRVTP`)
-4. Optionally finds today's Morning Triage bot message
-5. Hard-stops with an alert if EOD or John's dump is missing
+2. Finds last business day's EOD (message containing "Today's Wrap-up" — on Monday looks back to Friday) — **hard-stop if missing**
+3. Finds John's morning dump posted today (user `U0AM5EGRVTP`) — **optional**
+4. If no morning dump: falls back to (a) carrying yesterday's uncompleted goals as today's focus, (b) scanning unread Gmail, (c) scanning key Slack channels for open action items
+5. Optionally finds today's Morning Triage bot message
 6. Formats and posts the SOD report to `#ops-command`
 
 ## Key IDs

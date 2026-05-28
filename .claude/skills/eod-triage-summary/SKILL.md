@@ -1,14 +1,13 @@
 ﻿# Skill: EOD Triage Summary
 
-**Purpose:** Generate Noa's daily End-of-Day Triage Summary — a clean Slack DM (and #ops-command archive) consolidating everything handled during the day.
+**Purpose:** Generate the daily End-of-Day Triage Summary — a clean `#ops-command` post consolidating everything handled during the day.
 
-**Automated:** Runs **Monday–Friday at 6:00 PM Asia/Manila (UTC+8)** via scheduled remote Claude Code agent (trigger ID: `trig_015YZhdGzPQNotUAruRVtSTg`). Sends to Noa's DM and posts a copy to `#ops-command` for SOD carry-over reference.
+**Automated:** Runs **Monday–Friday at 6:00 PM Asia/Manila (UTC+8)** via scheduled remote Claude Code agent (trigger ID: `trig_015YZhdGzPQNotUAruRVtSTg`). Posts to `#ops-command` for SOD carry-over reference.
 
 **Manual invoke:** "EOD summary", "today's wrap-up", "/eod-triage-summary", or off-schedule testing.
 
-**Delivery accounts (split):**
-- **Noa's DM** → John's personal Slack OAuth via `mcp__claude_ai_Slack__slack_send_message` so it lands as a personal message from John.
-- **`#ops-command` archive** → bot token via `mcp__slack__slack_post_message` so the channel post is attributed to the bot, not John's personal account.
+**Delivery:**
+- **`#ops-command`** → bot token via `mcp__slack__slack_post_message`.
 
 ---
 
@@ -81,22 +80,18 @@ Rules:
 - Use `_italic_` for category headlines inside a bullet; `*bold*` for section titles only.
 - Use only the validated Slack inputs — do not invent tasks or deadlines.
 
-### Step 3 — Send (split delivery)
+### Step 3 — Send
 
-Post the same message body to both destinations, but via different tools:
+Post to `#ops-command` via the bot:
 
-1. **Noa's DM — from John (personal OAuth):**
-   - Tool: `mcp__claude_ai_Slack__slack_send_message`
-   - `channel_id: U06TBGX9L93`
-2. **`#ops-command` archive — from the bot:**
-   - Tool: `mcp__slack__slack_post_message`
-   - `channel_id: C0AQZGJDR38`
+- Tool: `mcp__slack__slack_post_message`
+- `channel_id: C0AQZGJDR38`
 
 **Critical formatting rules for the send:**
 - Do NOT append `*Sent using* Claude` or any attribution footer. Message must end exactly with the last bullet.
 - The `text` parameter must contain ONLY the formatted summary — no preamble, postscript, or explanation.
 
-Confirm `ts` returned from each send. If a send fails, output the formatted message for manual copy-paste and report which destination failed.
+Confirm `ts` returned from the send. If it fails, output the formatted message for manual copy-paste.
 
 ### Step 4 — Quiet day handling
 
@@ -108,7 +103,7 @@ If there are zero actionable items across all four buckets, still send a short s
 Quiet day — no notable activity logged in the operating channels.
 ```
 
-Send to both destinations using the split delivery in Step 3 (Noa's DM via `mcp__claude_ai_Slack__slack_send_message`; `#ops-command` via `mcp__slack__slack_post_message`).
+Send to `#ops-command` via `mcp__slack__slack_post_message`.
 
 ---
 

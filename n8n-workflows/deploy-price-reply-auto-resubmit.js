@@ -18,7 +18,7 @@ const messages = ($input.all()[0] || {}).json?.messages || [];
 const pricePrompts = messages.filter(m => {
   const text = (m.text || '').toLowerCase();
   const isBot = !!(m.bot_id || m.app_id);
-  const hasPriceMissing = text.includes('price is missing from the line item');
+  const hasPriceMissing = text.includes('price is missing from line item') || text.includes('price is missing from the line item');
   const hasCheck = (m.reactions || []).some(r => r.name === 'white_check_mark');
   return isBot && hasPriceMissing && !hasCheck;
 });

@@ -140,20 +140,32 @@ const classifyEmail = node({
 function headerVal(headers, name) {
   return (headers || []).find(h => String(h.name || '').toLowerCase() === name.toLowerCase())?.value || '';
 }
+function extractFrom(json, headers) {
+  // Try payload.headers first (Gmail API raw format: [{name, value}])
+  const h = (headers || []).find(h => String(h?.name || '').toLowerCase() === 'from');
+  if (h?.value) return h.value;
+  // Try top-level From field — may be string or {value: "..."} object
+  const f = json.From || json.from;
+  if (!f) return '';
+  if (typeof f === 'string') return f;
+  if (typeof f === 'object' && f.value) return f.value;
+  return '';
+}
 function parseSender(raw) {
-  const m = String(raw || '').match(/^(.*?)(?:\\s*<([^>]+)>)?$/);
+  raw = String(raw || '');
+  const m = raw.match(/^(.*?)(?:\\s*<([^>]+)>)?$/);
   return {
     name: (m?.[1] || raw || '').replace(/["']/g, '').trim(),
     email: (m?.[2] || raw || '').toLowerCase().trim()
   };
 }
 
-const payload = $json.payload || {};
-const headers = payload.headers || [];
-const sender  = parseSender(headerVal(headers, 'From'));
-const subject = headerVal(headers, 'Subject') || $json.subject || '';
+const payload  = $json.payload || {};
+const headers  = payload.headers || [];
+const sender   = parseSender(extractFrom($json, headers));
+const subject  = headerVal(headers, 'Subject') || $json.Subject || $json.subject || '';
 const labelIds = $json.labelIds || [];
-const bodyText = ($json.textPlain || $json.textHtml || '').replace(/\\s+/g, ' ').trim().slice(0, 800);
+const bodyText = ($json.textPlain || $json.textHtml || $json.snippet || '').replace(/\\s+/g, ' ').trim().slice(0, 800);
 const haystack = [sender.name, sender.email, subject, $json.snippet || '', bodyText].join(' ').toLowerCase();
 
 const base = {
@@ -183,7 +195,7 @@ if (labelIds.includes('Label_5194298534623747326')) {
 }
 
 // 4. Known contacts — Needs-Reply
-const KNOWN = ['amanda', 'shin', 'joshua', 'amy', 'lucas', 'ani hume', 'roshni', 'stashworks', 'nelly', 'welleco', 'clear aligners', 'root labs', 'zenwise', 'comrad', 'john@kravemedia.co', 'anteros'];
+const KNOWN = ['amanda', 'shin', 'joshua', 'amy', 'lucas', 'ani mishra', 'ani hume', 'roshni', 'stashworks', 'nelly', 'welleco', 'clear aligners', 'root labs', 'zenwise', 'comrad', 'john@kravemedia.co', 'anteros', 'joseph', 'cody', 'cashew'];
 if (KNOWN.some(k => haystack.includes(k))) {
   return { json: { ...base, tier: 'EA/Needs-Reply', tier_label_id: 'Label_4', draft_required: true, ai_needed: false, is_creator_inbound: false, summary_line: 'Known contact — reply drafted' } };
 }
@@ -199,7 +211,12 @@ if (AUTO.some(p => p.test(sender.email))) {
   return { json: { ...base, tier: 'EA/Auto-Sorted', tier_label_id: 'Label_6', draft_required: false, ai_needed: false, is_creator_inbound: false, summary_line: 'Auto-sorted notification' } };
 }
 
-// 7. Unknown sender — needs AI
+// 7. Internal — john@kravemedia.co FYA/invoice CC — no reply needed
+if (sender.email === 'john@kravemedia.co' && (haystack.includes('invoice') || haystack.includes('fya'))) {
+  return { json: { ...base, tier: 'EA/FYI', tier_label_id: 'Label_5', draft_required: false, ai_needed: false, is_creator_inbound: false, summary_line: 'Internal invoice update' } };
+}
+
+// 8. Unknown sender — needs AI
 return { json: { ...base, tier: '', tier_label_id: '', draft_required: false, ai_needed: true, is_creator_inbound: false, summary_line: '' } };
       `.trim(),
     },
@@ -288,7 +305,11 @@ if ($json.ai_needed === false) return { json: $json };
 
 // AI-classified: parse response, recover original email fields
 const original = $('Classify Email').item.json;
-const raw = $json.text || $json.content || '';
+let raw = $json.text || $json.content || '';
+if (!raw && $json.output && Array.isArray($json.output)) {
+  try { raw = $json.output[0].content[0].text || ''; } catch {}
+}
+raw = raw.replace(/^\`\`\`json\\s*/i, '').replace(/\\s*\`\`\`$/, '').trim();
 let parsed = {};
 try { parsed = JSON.parse(raw); } catch(e) { parsed = {}; }
 
@@ -323,6 +344,7 @@ const applyLabel = node({
   config: {
     name: "Apply EA Label",
     position: [2180, 300],
+    onError: "continueRegularOutput",
     credentials: gmailCred,
     parameters: {
       resource: "message",
@@ -334,13 +356,35 @@ const applyLabel = node({
   output: [{ id: "msg123", labelIds: ["Label_4"] }],
 });
 
+// ─── Restore Metadata ─────────────────────────────────────────────────────────
+// Gmail addLabels returns only {id, threadId, labelIds} — restore upstream classification data
+
+const restoreMetadata = node({
+  type: "n8n-nodes-base.code",
+  version: 2,
+  config: {
+    name: "Restore Email Metadata",
+    position: [2300, 300],
+    parameters: {
+      mode: "runOnceForEachItem",
+      jsCode: `const orig = $('Resolve Final Tier').item.json;\nreturn { json: { ...orig, labelIds: $json.labelIds || [] } };`,
+    },
+  },
+  output: [{
+    id: "msg123", threadId: "thread123",
+    from_name: "Sender", from_email: "sender@example.com",
+    subject: "Hello", tier: "EA/Needs-Reply", tier_label_id: "Label_4",
+    draft_required: true, ai_needed: false, summary_line: "Known contact",
+  }],
+});
+
 // ─── Draft Branch ─────────────────────────────────────────────────────────────
 
 const checkDraftNeeded = ifElse({
   version: 2.3,
   config: {
     name: "Draft Needed?",
-    position: [2420, 300],
+    position: [2540, 300],
     parameters: {
       conditions: {
         combinator: "and",
@@ -380,6 +424,7 @@ const createCreatorDraft = node({
   config: {
     name: "Draft: Creator Typeform",
     position: [2900, 0],
+    onError: "continueRegularOutput",
     credentials: gmailCred,
     parameters: {
       resource: "draft",
@@ -432,6 +477,7 @@ const createGeneralDraft = node({
   config: {
     name: "Create Draft",
     position: [3140, 220],
+    onError: "continueRegularOutput",
     credentials: gmailCred,
     parameters: {
       resource: "draft",
@@ -484,6 +530,7 @@ const archiveEmail = node({
   config: {
     name: "Archive Email",
     position: [3860, 200],
+    onError: "continueRegularOutput",
     credentials: gmailCred,
     parameters: {
       resource: "message",
@@ -591,6 +638,7 @@ export default workflow("new", "Krave — Inbox Triage Daily v2")
   .add(mergeClassification)
   .to(resolveTier)
   .to(applyLabel)
+  .to(restoreMetadata)
   .to(
     checkDraftNeeded
       .onTrue(

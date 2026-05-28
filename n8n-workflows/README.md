@@ -23,6 +23,10 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Halo Weekly Intelligence Report | Active | 7AM ICT Mondays | [deploy-halo-intelligence-report.js](deploy-halo-intelligence-report.js) |
 | Crave - Daily Lead Push | Inactive (warm-up) | 9AM PHT daily | [deploy-crave-lead-push.js](deploy-crave-lead-push.js) |
 | Crave - Status Sync | Inactive (warm-up) | 9AM PHT daily | [deploy-crave-status-sync.js](deploy-crave-status-sync.js) |
+| LinkedIn Post Monitor | Inactive (needs actor verification) | Every 30min all day | [deploy-linkedin-post-monitor.js](deploy-linkedin-post-monitor.js) |
+| Halo - VA Slack Bot | Pending deploy | Slack `app_mention` in #halo-home | [deploy-halo-home-slack-bot.js](deploy-halo-home-slack-bot.js) |
+| Halo - Daily Digest | Pending deploy | Midnight UTC (8 AM PHT) daily | [deploy-halo-home-daily-digest.js](deploy-halo-home-daily-digest.js) |
+| Halo - Inventory Alert | Pending deploy | Midnight UTC (8 AM PHT) daily | [deploy-halo-home-inventory-alert.js](deploy-halo-home-inventory-alert.js) |
 
 ---
 
@@ -313,6 +317,69 @@ node n8n-workflows/deploy-slack-invoice-handler.js
 
 **Credentials required in n8n:**
 - `Krave Slack Bot` - used by the HTTP Request node to call Slack `views.open`
+
+---
+
+## Halo - VA Slack Bot
+
+VA-facing Shopify ops bot for #halo-home. VA @mentions the bot to query orders, inventory, refunds, revenue, and more. Claude Haiku classifies intent → Shopify REST API → formatted thread reply.
+
+**Workflow ID:** TBD (update after first deploy)
+**Webhook:** `POST https://noatakhel.app.n8n.cloud/webhook/halo-home-bot`
+
+**Pre-deploy setup:**
+1. Invite Krave Slack Bot to #halo-home
+2. Slack App: Event Subscriptions → Request URL → `https://noatakhel.app.n8n.cloud/webhook/halo-home-bot`
+3. Subscribe to bot event: `app_mention`
+
+**Deploy:**
+```bash
+SHOPIFY_ACCESS_TOKEN=... HALO_HOME_SLACK_CHANNEL_ID=... node n8n-workflows/deploy-halo-home-slack-bot.js
+```
+
+**Credentials required:**
+- `Krave Slack Bot` — `Bn2U6Cwe1wdiCXzD`
+- `SHOPIFY_ACCESS_TOKEN` — n8n environment variable
+- `ANTHROPIC_API_KEY` — n8n environment variable
+
+---
+
+## Halo - Daily Digest
+
+Posts yesterday's Halo Home revenue and order summary to #halo-home every morning at 8 AM PHT.
+
+**Workflow ID:** TBD (update after first deploy)
+**Schedule:** `0 0 * * *` UTC (8 AM PHT)
+
+**Deploy:**
+```bash
+SHOPIFY_ACCESS_TOKEN=... HALO_HOME_SLACK_CHANNEL_ID=... node n8n-workflows/deploy-halo-home-daily-digest.js
+```
+
+**Credentials required:**
+- `Krave Slack Bot` — `Bn2U6Cwe1wdiCXzD`
+- `SHOPIFY_ACCESS_TOKEN` — n8n environment variable
+- `ANTHROPIC_API_KEY` — n8n environment variable
+
+---
+
+## Halo - Inventory Alert
+
+Detects when Halo Home products go OOS or come back in stock. Compares against previous run's state — only posts to #halo-home when there's a change.
+
+**Workflow ID:** TBD (update after first deploy)
+**Schedule:** `0 0 * * *` UTC (8 AM PHT)
+
+**Note:** First run establishes baseline OOS state (no alert). Alerts fire from second run onward.
+
+**Deploy:**
+```bash
+SHOPIFY_ACCESS_TOKEN=... HALO_HOME_SLACK_CHANNEL_ID=... node n8n-workflows/deploy-halo-home-inventory-alert.js
+```
+
+**Credentials required:**
+- `Krave Slack Bot` — `Bn2U6Cwe1wdiCXzD`
+- `SHOPIFY_ACCESS_TOKEN` — n8n environment variable
 
 ---
 
