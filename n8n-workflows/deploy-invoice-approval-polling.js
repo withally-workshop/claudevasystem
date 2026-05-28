@@ -265,7 +265,7 @@ const workflow = {
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [240, 200],
       parameters: {
-        rule: { interval: [{ field: 'cronExpression', expression: '* * * * *' }] }
+        rule: { interval: [{ field: 'cronExpression', expression: '0 */2 * * 1-5' }] }
       },
     },
     {
