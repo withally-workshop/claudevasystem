@@ -169,10 +169,13 @@ const hasBankDetails = inv.has_bank_details === true || !!(
   bd.account_number || bd.iban || bd.swift || bd.bsb || bd.routing_number
 );
 
+// Guard: if Claude found no meaningful invoice data, mark as not-an-invoice
+const isInvoice = !!(creatorName && amount > 0);
+
 return [{ json: {
   ...ctx,
   creatorName, creatorEmail, invoiceNumber, dueDate, issuedDate,
-  amount, currency, lineItems, bankDetails: bd, hasBankDetails,
+  amount, currency, lineItems, bankDetails: bd, hasBankDetails, isInvoice,
 }}];
 `.trim();
 
@@ -267,7 +270,7 @@ const workflow = {
         returnAll: false,
         limit: 20,
         simple: true,
-        filters: { q: 'is:unread has:attachment filename:pdf in:inbox' },
+        filters: { q: 'is:unread has:attachment filename:pdf in:inbox (invoice OR bill OR creator OR payment)' },
       },
     },
     {
@@ -342,11 +345,38 @@ const workflow = {
       parameters: { mode: 'runOnceForEachItem', jsCode: PARSE_VALIDATE },
     },
 
+    // ── Guard: is this actually an invoice? ───────────────────────────────────
+    {
+      id: 'n11a', name: 'Is Invoice?',
+      type: 'n8n-nodes-base.if', typeVersion: 2.1,
+      position: [2420, 300],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+          conditions: [{ id: 'c1', leftValue: '={{ $json.isInvoice }}', rightValue: true, operator: { type: 'boolean', operation: 'equals' } }],
+          combinator: 'and',
+        },
+        options: {},
+      },
+    },
+    {
+      id: 'n11b', name: 'Mark Read (not invoice)',
+      type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
+      position: [2660, 500],
+      continueOnFail: true,
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
+      parameters: {
+        resource: 'message',
+        operation: 'markAsRead',
+        messageId: '={{ $json.messageId }}',
+      },
+    },
+
     // ── Validate: bank details ─────────────────────────────────────────────────
     {
       id: 'n11', name: 'Has Bank Details?',
       type: 'n8n-nodes-base.if', typeVersion: 2.1,
-      position: [2420, 300],
+      position: [2660, 200],
       parameters: {
         conditions: {
           options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
@@ -660,11 +690,16 @@ const workflow = {
     'Merge Attachment Data':      { main: [[{ node: 'Prepare Claude Request',  type: 'main', index: 0 }]] },
     'Prepare Claude Request':     { main: [[{ node: 'Call Claude API',         type: 'main', index: 0 }]] },
     'Call Claude API':            { main: [[{ node: 'Parse & Validate',        type: 'main', index: 0 }]] },
-    'Parse & Validate':           { main: [[{ node: 'Has Bank Details?',       type: 'main', index: 0 }]] },
+    'Parse & Validate':  { main: [[{ node: 'Is Invoice?', type: 'main', index: 0 }]] },
+    // Guard: not an invoice → mark read silently
+    'Is Invoice?': { main: [
+      [{ node: 'Has Bank Details?',       type: 'main', index: 0 }],  // true — is an invoice
+      [{ node: 'Mark Read (not invoice)', type: 'main', index: 0 }],  // false — skip
+    ]},
     // Validation branch
     'Has Bank Details?': { main: [
-      [{ node: 'Airwallex Auth',              type: 'main', index: 0 }],   // true
-      [{ node: 'Reply Missing Bank Details',  type: 'main', index: 0 }],  // false
+      [{ node: 'Airwallex Auth',             type: 'main', index: 0 }],  // true
+      [{ node: 'Reply Missing Bank Details', type: 'main', index: 0 }],  // false
     ]},
     // Missing bank details path
     'Reply Missing Bank Details': { main: [[{ node: 'Mark Read (missing bank details)', type: 'main', index: 0 }]] },
