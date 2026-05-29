@@ -47,7 +47,7 @@
 | 19 | LinkedIn Post Monitor | `wNXs7wqHz5d5naJN` | Inactive (needs actor verification) | Every 30min all day | Scrape Noa's LinkedIn profile via Apify every 30min, detect new posts using workflow static data, alert John in #noa-linkedin-posts with preview + link |
 | 20 | Halo - VA Slack Bot | TBD | Pending deploy | `app_mention` in #halo-home | VA @mentions bot → Claude classifies intent → Shopify API → formatted reply in thread |
 | 21 | Halo - Daily Digest | TBD | Pending deploy | Midnight UTC (8 AM PHT) daily | Pull yesterday's Shopify orders → Claude formats → post to #halo-home |
-| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Active | Every 3h Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` | Scan john@kravemedia.co for unread invoice PDFs, parse with Claude, validate bank details, create Airwallex draft bills, reply to sender, log to Bills tab |
+| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Active | Every 3h Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` | Scan john@kravemedia.co for unread invoice PDFs, parse with Claude, validate bank details, create Airwallex draft bills, reply to sender, log to Creator & AP Bills Tracker |
 | 22 | Halo - Inventory Alert | TBD | Pending deploy | Midnight UTC (8 AM PHT) daily | Compare product OOS state vs previous run, alert #halo-home on changes only |
 
 ---
@@ -1460,7 +1460,7 @@ Posts yesterday's Halo Home sales summary to #halo-home every morning. Gives the
 
 ### Purpose
 
-Replaces the manual email-check step for creator/AP invoice intake. Scans john@kravemedia.co every 3 hours for unread emails with PDF attachments, parses each PDF with Claude Sonnet, validates bank details (hardstop if missing), creates draft bills in Airwallex Spend, replies to the original sender, and logs to the Bills tab on the Client Invoice Tracker. Falls back to posting a structured prep report to #ops-command if the Spend API returns 401 (not yet activated).
+Replaces the manual email-check step for creator/AP invoice intake. Scans john@kravemedia.co every 3 hours for unread emails with PDF attachments, parses each PDF with Claude Sonnet, validates bank details (hardstop if missing), creates draft bills in Airwallex Spend, replies to the original sender, and logs to the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`). Falls back to forwarding the PDF (with attachment) to kravemedia@bills.airwallex.com and posting a prep report to #ops-command if the Spend API returns 401 or 404.
 
 ### Triggers
 
@@ -1504,8 +1504,9 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
                ↓
              [Bill Created?]
                ├─ true  → [Reply Staged] → [Log to Bills Tab] → [Mark Read]
-               └─ false → [Build Slack Fallback] → [Post Slack Prep Report]
-                          → [Reply Fallback] → [Log to Bills Tab (pending)] → [Mark Read]
+               └─ false → [Build Slack Fallback] → [Forward PDF to Airwallex Email]
+                          → [Post Slack Prep Report] → [Reply Fallback]
+                          → [Log to Bills Tab (pending)] → [Mark Read]
 ```
 
 ### Key Logic
@@ -1515,15 +1516,15 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
 - **Invoice number:** Auto-generated as `MMDDYYYY-[FirstInitialLastName]` if missing.
 - **Due date:** Defaults to Friday of current week (PHT) if not on invoice.
 - **Bank details hardstop:** Replies asking to reissue; logs nothing; marks email read.
-- **Airwallex 401 fallback:** Posts structured bill prep report to #ops-command with all extracted data for manual entry.
+- **Airwallex 401/404 fallback:** Forwards the PDF (with attachment) to kravemedia@bills.airwallex.com, posts structured bill prep report to #ops-command, logs as "Forwarded via Email."
 
 ### Outputs
 
 | Scenario | Action |
 |----------|--------|
-| Valid invoice, Spend API active | Bill created in Airwallex, reply sent, logged to Bills tab, email marked read |
+| Valid invoice, Spend API active | Bill created in Airwallex, reply sent, logged to Creator & AP Bills Tracker, email marked read |
 | Missing bank details | Reply sent asking to reissue, email marked read |
-| Spend API returns 401 | Slack prep report to #ops-command, fallback reply to sender, logged as "Pending manual entry" |
+| Spend API returns 401 or 404 | PDF forwarded to kravemedia@bills.airwallex.com with attachment, Slack prep report to #ops-command, fallback reply to sender, logged as "Forwarded via Email" |
 | No unread PDF emails | Workflow exits with 0 items, nothing happens |
 
 ### Error Handling
