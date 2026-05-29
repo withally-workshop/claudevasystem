@@ -235,7 +235,7 @@ function withContext(text, displayName, threadTs) {
 
 // DMs
 app.event('message', async ({ event, say, client }) => {
-  if (event.bot_id || event.subtype) return;
+  if (event.bot_id || (event.subtype && event.subtype !== 'file_share')) return;
   if (isDuplicate(event.client_msg_id || event.ts)) return;
 
   // Forward drafts channel messages to n8n approval polling workflow
