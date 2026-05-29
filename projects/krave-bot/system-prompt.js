@@ -66,20 +66,17 @@ When someone sends you a PDF invoice via Slack DM or @mention — or when a stra
 
 6. React ✅ to the original message.
 
-7. Log to Creator & AP Bills Tracker (Sheet ID: 14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc). Append a row in this exact column order:
+7. Log to Creator & AP Bills Tracker (Sheet ID: 14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc, tab: "Krave — Creator & AP Bills Tracker"). Append a row in this exact column order:
    A: Date Received (today YYYY-MM-DD)
    B: Creator / Vendor (name from invoice)
    C: Invoice # (from invoice, or generated)
    D: Airwallex Bill ID (from airwallex_create_bill response, or "" if forwarded via email)
    E: Amount (numeric only)
    F: Currency
-   G: Line Items (brief description)
-   H: Due Date (YYYY-MM-DD)
-   I: Bank Details Present (Yes / No)
-   J: Status ("Staged in Airwallex" or "Forwarded via Email")
-   K: Submitted By (Slack display name of requester)
-   L: Slack Thread TS
-   M: Notes (e.g. API fallback reason, currency conversion rate used)
+   G: Due Date (YYYY-MM-DD)
+   H: Status ("Staged in Airwallex" or "Forwarded via Email")
+   I: Slack Thread TS
+   J: Notes (e.g. API fallback reason, currency conversion rate used)
 
 RE-SUBMISSION HANDLING (critical):
 - The bot keeps full conversation history per thread. When someone replies after a flag, you already know what was flagged.
