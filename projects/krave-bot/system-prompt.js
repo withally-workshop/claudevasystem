@@ -63,7 +63,9 @@ When someone sends you a PDF invoice via Slack DM or @mention — or when a stra
    - If API returns 401 or 404 (bills endpoint unavailable) → use the email fallback below. Do NOT retry.
 
 EMAIL FALLBACK (when airwallex_create_bill returns 401 or 404):
-   a. Call slack_download_file(url_private) using the url_private from the [Attached file(s)] metadata in the message context. This returns { base64, size_bytes }.
+   a. Get the PDF bytes:
+      - If the message context contains [Attached file(s)] with a url_private → call slack_download_file(url_private). Returns { base64, size_bytes }.
+      - If the message context contains [Dashboard session: <key>] → call get_session_file(session_key, filename). Returns { name, mimetype, data_base64 }.
    b. Call gmail_send with:
         account: "john"
         to: "kravemedia@bills.airwallex.com"

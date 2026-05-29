@@ -294,10 +294,43 @@ app.event('app_mention', async ({ event, say, client }) => {
 });
 
 // ---------------------------------------------------------------------------
+// Dashboard file cache — stores uploaded files by session so Claude can
+// retrieve them via get_session_file tool when building email attachments
+// ---------------------------------------------------------------------------
+
+const sessionFileCache = new Map(); // session_key → [{ name, mimetype, data_base64 }]
+
+// Prune entries older than 30 minutes
+setInterval(() => {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  for (const [k, v] of sessionFileCache) if (v._ts < cutoff) sessionFileCache.delete(k);
+}, 5 * 60 * 1000);
+
+ALL_TOOLS.push({
+  name: 'get_session_file',
+  description: 'Retrieve a file uploaded via the dashboard chat as base64. Use this before gmail_send when you need to attach a file that was uploaded through the ops dashboard (not Slack). Returns { name, mimetype, data_base64 }.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      session_key: { type: 'string', description: 'The dashboard session key from the message context' },
+      filename: { type: 'string', description: 'The filename of the uploaded file (from the [Attached: ...] metadata in the message context)' },
+    },
+    required: ['session_key'],
+  },
+});
+HANDLERS['get_session_file'] = ({ session_key, filename }) => {
+  const files = sessionFileCache.get(session_key);
+  if (!files || !files.length) return { error: 'No files found for this session' };
+  const file = filename ? files.find((f) => f.name === filename) : files[0];
+  if (!file) return { error: `File not found: ${filename}` };
+  return { name: file.name, mimetype: file.mimetype, data_base64: file.data_base64 };
+};
+
+// ---------------------------------------------------------------------------
 // /api/chat — dashboard chatbot endpoint
 // ---------------------------------------------------------------------------
 
-receiver.router.use(require('express').json());
+receiver.router.use(require('express').json({ limit: '10mb' }));
 
 receiver.router.use('/api/chat', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -309,22 +342,24 @@ receiver.router.use('/api/chat', (req, res, next) => {
 
 receiver.router.post('/api/chat', async (req, res) => {
   const { message, session_key, files } = req.body || {};
-  if (!message) return res.status(400).json({ error: 'message required' });
+  if (!message && !(files && files.length)) return res.status(400).json({ error: 'message or file required' });
 
-  const convKey = `dashboard:${session_key || 'default'}`;
+  const sk = session_key || 'default';
+  const convKey = `dashboard:${sk}`;
   try {
-    let userContent = message;
+    let userContent = message || '(see attached file)';
     if (files && files.length > 0) {
-      const blocks = [{ type: 'text', text: message || '(no text)' }];
+      // Cache files so Claude can retrieve them via get_session_file tool
+      const entry = files.map((f) => ({ name: f.name, mimetype: f.mimetype, data_base64: f.data_base64 }));
+      entry._ts = Date.now();
+      sessionFileCache.set(sk, entry);
+
+      const blocks = [{ type: 'text', text: `${userContent}\n[Dashboard session: ${sk}]\n[Attached file(s):\n${files.map((f) => `  - name: ${f.name} | mimetype: ${f.mimetype}`).join('\n')}\n]` }];
       for (const file of files) {
         if (!file.data_base64 || !file.mimetype) continue;
-        const isPdf = file.mimetype === 'application/pdf';
-        const isImage = file.mimetype.startsWith('image/');
-        if (isPdf) {
-          blocks[0] = { type: 'text', text: `${blocks[0].text}\n[Attached: ${file.name} (${file.mimetype})]` };
+        if (file.mimetype === 'application/pdf') {
           blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: file.data_base64 } });
-        } else if (isImage) {
-          blocks[0] = { type: 'text', text: `${blocks[0].text}\n[Attached: ${file.name} (${file.mimetype})]` };
+        } else if (file.mimetype.startsWith('image/')) {
           blocks.push({ type: 'image', source: { type: 'base64', media_type: file.mimetype, data: file.data_base64 } });
         }
       }
