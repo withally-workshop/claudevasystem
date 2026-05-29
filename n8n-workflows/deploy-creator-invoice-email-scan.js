@@ -33,7 +33,8 @@ const GMAIL_CRED_ID  = 'vsDW3WpKXqS9HUs3';   // Gmail (john@kravemedia.co)
 const SHEETS_CRED_ID = '83MQOm78gYDvziTO';   // Google Sheets
 const SLACK_CRED_ID  = 'Bn2U6Cwe1wdiCXzD';   // Krave Slack Bot
 
-const BILLS_SHEET_ID  = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50';
+const BILLS_SHEET_ID  = '14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc';
+const BILLS_SHEET_TAB = 'Krave — Creator & AP Bills Tracker';
 const OPS_CHANNEL     = 'C0AQZGJDR38';         // John's private channel (#ops-command)
 const AW_CLIENT_ID    = 'JaQA4uJ1SDSBkTdFigT9sw';
 const AW_API_KEY      = '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af5c91666f50b10ee64fd87fa3db7435e8dc5c07721';
@@ -558,22 +559,20 @@ const workflow = {
         resource: 'sheet',
         operation: 'append',
         documentId: { __rl: true, value: BILLS_SHEET_ID, mode: 'id' },
-        sheetName:  { __rl: true, value: 'Bills', mode: 'name' },
+        sheetName:  { __rl: true, value: BILLS_SHEET_TAB, mode: 'name' },
         columns: {
           mappingMode: 'defineBelow',
           value: {
-            'Date Logged':    '={{ new Date().toISOString().split("T")[0] }}',
-            'Creator Name':   '={{ $("Parse & Validate").item.json.creatorName }}',
-            'Creator Email':  '={{ $("Parse & Validate").item.json.creatorEmail }}',
-            'Invoice #':      '={{ $("Parse & Validate").item.json.invoiceNumber }}',
-            'Issued Date':    '={{ $("Parse & Validate").item.json.issuedDate }}',
-            'Due Date':       '={{ $("Parse & Validate").item.json.dueDate }}',
-            'Amount':         '={{ $("Parse & Validate").item.json.amount }}',
-            'Currency':       '={{ $("Parse & Validate").item.json.currency }}',
+            'Date Received':     '={{ new Date().toISOString().split("T")[0] }}',
+            'Creator / Vendor':  '={{ $("Parse & Validate").item.json.creatorName }}',
+            'Invoice #':         '={{ $("Parse & Validate").item.json.invoiceNumber }}',
             'Airwallex Bill ID': '={{ $json.id || $json.bill_id || "" }}',
-            'Status':         'Staged - Pending John Review',
-            'Source':         'Email',
-            'External ID':    '={{ $("Parse & Validate").item.json.messageId }}',
+            'Amount':            '={{ $("Parse & Validate").item.json.amount }}',
+            'Currency':          '={{ $("Parse & Validate").item.json.currency }}',
+            'Due Date':          '={{ $("Parse & Validate").item.json.dueDate }}',
+            'Status':            'Staged in Airwallex',
+            'Slack Thread TS':   '={{ $("Parse & Validate").item.json.messageId }}',
+            'Notes':             'Source: Email',
           },
           schema: [],
         },
@@ -593,12 +592,67 @@ const workflow = {
       },
     },
 
-    // ── [false] Fallback path (Spend API 401 / not activated) ─────────────────
+    // ── [false] Fallback path (Spend API 401/404) ─────────────────────────────
     {
       id: 'n25', name: 'Build Slack Fallback',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [4580, 340],
       parameters: { mode: 'runOnceForEachItem', jsCode: BUILD_SLACK_FALLBACK },
+    },
+    {
+      id: 'n25b', name: 'Forward PDF to Airwallex Email',
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+      position: [4580, 500],
+      continueOnFail: true,
+      parameters: {
+        method: 'POST',
+        url: 'https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=multipart',
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'gmailOAuth2',
+        sendBody: true,
+        contentType: 'raw',
+        rawContentType: 'message/rfc822',
+        body: `={{ (() => {
+  const ctx = $input.item.json;
+  const boundary = 'boundary_' + Date.now();
+  const subject = 'Creator Invoice - ' + ctx.creatorName + ' | ' + ctx.invoiceNumber + ' | ' + ctx.currency + ' ' + ctx.amount;
+  const bodyText = [
+    'Please process the attached creator invoice.',
+    '',
+    'Creator: ' + ctx.creatorName,
+    'Invoice #: ' + ctx.invoiceNumber,
+    'Amount: ' + ctx.currency + ' ' + ctx.amount,
+    'Line Item: ' + (ctx.lineItems || []).map(i => i.description).join(', '),
+    'Bank: ' + JSON.stringify(ctx.bankDetails || {}),
+    'Issued: ' + ctx.issuedDate,
+    'Due: ' + ctx.dueDate,
+  ].join('\\n');
+  const parts = [
+    'From: john@kravemedia.co',
+    'To: kravemedia@bills.airwallex.com',
+    'Subject: ' + subject,
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/mixed; boundary="' + boundary + '"',
+    '',
+    '--' + boundary,
+    'Content-Type: text/plain; charset=UTF-8',
+    '',
+    bodyText,
+    '',
+    '--' + boundary,
+    'Content-Type: application/pdf',
+    'Content-Transfer-Encoding: base64',
+    'Content-Disposition: attachment; filename="' + ctx.invoiceNumber + '.pdf"',
+    '',
+    ctx.pdfBase64,
+    '',
+    '--' + boundary + '--',
+  ];
+  return Buffer.from(parts.join('\\r\\n')).toString('base64url');
+})() }}`,
+        options: {},
+      },
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
     },
     {
       id: 'n26', name: 'Post Slack Prep Report',
@@ -642,22 +696,20 @@ const workflow = {
         resource: 'sheet',
         operation: 'append',
         documentId: { __rl: true, value: BILLS_SHEET_ID, mode: 'id' },
-        sheetName:  { __rl: true, value: 'Bills', mode: 'name' },
+        sheetName:  { __rl: true, value: BILLS_SHEET_TAB, mode: 'name' },
         columns: {
           mappingMode: 'defineBelow',
           value: {
-            'Date Logged':   '={{ new Date().toISOString().split("T")[0] }}',
-            'Creator Name':  '={{ $("Parse & Validate").item.json.creatorName }}',
-            'Creator Email': '={{ $("Parse & Validate").item.json.creatorEmail }}',
-            'Invoice #':     '={{ $("Parse & Validate").item.json.invoiceNumber }}',
-            'Issued Date':   '={{ $("Parse & Validate").item.json.issuedDate }}',
-            'Due Date':      '={{ $("Parse & Validate").item.json.dueDate }}',
-            'Amount':        '={{ $("Parse & Validate").item.json.amount }}',
-            'Currency':      '={{ $("Parse & Validate").item.json.currency }}',
+            'Date Received':     '={{ new Date().toISOString().split("T")[0] }}',
+            'Creator / Vendor':  '={{ $("Parse & Validate").item.json.creatorName }}',
+            'Invoice #':         '={{ $("Parse & Validate").item.json.invoiceNumber }}',
             'Airwallex Bill ID': '',
-            'Status':        'Pending manual entry',
-            'Source':        'Email',
-            'External ID':   '={{ $("Parse & Validate").item.json.messageId }}',
+            'Amount':            '={{ $("Parse & Validate").item.json.amount }}',
+            'Currency':          '={{ $("Parse & Validate").item.json.currency }}',
+            'Due Date':          '={{ $("Parse & Validate").item.json.dueDate }}',
+            'Status':            'Forwarded via Email',
+            'Slack Thread TS':   '={{ $("Parse & Validate").item.json.messageId }}',
+            'Notes':             'Source: Email — Airwallex Spend API unavailable',
           },
           schema: [],
         },
@@ -723,8 +775,9 @@ const workflow = {
     'Reply Staged':      { main: [[{ node: 'Log to Bills Tab',    type: 'main', index: 0 }]] },
     'Log to Bills Tab':  { main: [[{ node: 'Mark Read (success)', type: 'main', index: 0 }]] },
     // Fallback path
-    'Build Slack Fallback':    { main: [[{ node: 'Post Slack Prep Report',    type: 'main', index: 0 }]] },
-    'Post Slack Prep Report':  { main: [[{ node: 'Reply Fallback',            type: 'main', index: 0 }]] },
+    'Build Slack Fallback':          { main: [[{ node: 'Forward PDF to Airwallex Email', type: 'main', index: 0 }]] },
+    'Forward PDF to Airwallex Email': { main: [[{ node: 'Post Slack Prep Report',         type: 'main', index: 0 }]] },
+    'Post Slack Prep Report':        { main: [[{ node: 'Reply Fallback',                  type: 'main', index: 0 }]] },
     'Reply Fallback':          { main: [[{ node: 'Log to Bills Tab (pending)', type: 'main', index: 0 }]] },
     'Log to Bills Tab (pending)': { main: [[{ node: 'Mark Read (fallback)', type: 'main', index: 0 }]] },
   },
