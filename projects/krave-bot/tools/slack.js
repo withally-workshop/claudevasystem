@@ -64,6 +64,32 @@ async function listChannels() {
   return { channels: (res.channels || []).map((c) => ({ id: c.id, name: c.name, is_private: c.is_private })) };
 }
 
+async function downloadFile({ url_private }) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(url_private);
+    const opts = {
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+    };
+    https.get(opts, (res) => {
+      const follow = (res2) => {
+        const chunks = [];
+        res2.on('data', (c) => chunks.push(c));
+        res2.on('end', () => {
+          const buf = Buffer.concat(chunks);
+          resolve({ base64: buf.toString('base64'), size_bytes: buf.length });
+        });
+      };
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        https.get(res.headers.location, follow).on('error', reject);
+      } else {
+        follow(res);
+      }
+    }).on('error', reject);
+  });
+}
+
 module.exports = {
   definitions: [
     {
@@ -108,6 +134,17 @@ module.exports = {
       description: 'List all Slack channels the bot has access to.',
       input_schema: { type: 'object', properties: {} },
     },
+    {
+      name: 'slack_download_file',
+      description: 'Download a Slack-hosted file by its url_private and return it as base64. Use this before gmail_send when you need to attach a file that was shared in Slack.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          url_private: { type: 'string', description: 'The url_private of the Slack file (from the file metadata in the message context)' },
+        },
+        required: ['url_private'],
+      },
+    },
   ],
-  handlers: { slack_get_channel_history: getChannelHistory, slack_post_message: postMessage, slack_search: searchSlack, slack_list_channels: listChannels },
+  handlers: { slack_get_channel_history: getChannelHistory, slack_post_message: postMessage, slack_search: searchSlack, slack_list_channels: listChannels, slack_download_file: downloadFile },
 };

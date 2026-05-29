@@ -80,6 +80,13 @@ async function downloadSlackImage(urlPrivate) {
 async function buildUserContent(text, files) {
   const blocks = [{ type: 'text', text: text || '(no text)' }];
   const supported = (files || []).filter((f) => f.mimetype && (f.mimetype.startsWith('image/') || f.mimetype === 'application/pdf'));
+
+  // Inject file metadata so Claude can re-fetch files via slack_download_file when needed
+  if (supported.length > 0) {
+    const meta = supported.map((f) => `  - name: ${f.name || f.id} | mimetype: ${f.mimetype} | url_private: ${f.url_private}`).join('\n');
+    blocks[0] = { type: 'text', text: `${blocks[0].text}\n[Attached file(s):\n${meta}\n]` };
+  }
+
   for (const file of supported) {
     try {
       const buf = await downloadSlackImage(file.url_private);

@@ -60,7 +60,18 @@ When someone sends you a PDF invoice via Slack DM or @mention — or when a stra
 3. Look up vendor: airwallex_list_vendors(name). If not found → airwallex_create_vendor(name, email only).
 
 4. Create bill: airwallex_create_bill with external_id = Slack thread_ts, vendor_id, invoice_number, issued_date, due_date, currency, line_items.
-   - If API returns 401 → forward the PDF to kravemedia@bills.airwallex.com using gmail_send(account: "john", attachment_base64: <pdf bytes>, attachment_mime_type: "application/pdf") and post a bill prep summary to John's private channel instead.
+   - If API returns 401 or 404 (bills endpoint unavailable) → use the email fallback below. Do NOT retry.
+
+EMAIL FALLBACK (when airwallex_create_bill returns 401 or 404):
+   a. Call slack_download_file(url_private) using the url_private from the [Attached file(s)] metadata in the message context. This returns { base64, size_bytes }.
+   b. Call gmail_send with:
+        account: "john"
+        to: "kravemedia@bills.airwallex.com"
+        subject: "Creator Invoice - [Creator Name] | [Invoice #] | [Currency Amount]"
+        body: brief summary (creator, invoice #, amount, currency, line items, bank details, due date)
+        attachment_base64: <base64 value from step a>
+        attachment_mime_type: "application/pdf"
+        attachment_filename: "[invoice_number].pdf"
 
 5. Reply in thread: "Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD."
 
