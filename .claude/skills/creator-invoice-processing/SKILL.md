@@ -21,14 +21,14 @@ Receives creator/vendor invoices from three channels (email, Slack channel, Slac
 
 **Strategists must @tag Claude EA** in #payments-invoices-updates to trigger processing. Messages without an @mention are informational — do not action them.
 
-**No n8n workflow** — real-time handled by krave-bot, scheduled handled by Windows Task Scheduler.
+**Scheduled (email):** n8n workflow `Krave — Creator Invoice Email Scan` (`DbIJYYQ3FE4HKprB`) — every 3h Mon–Fri. Deploy: `n8n-workflows/deploy-creator-invoice-email-scan.js`. Manual trigger: `POST https://noatakhel.app.n8n.cloud/webhook/krave-creator-invoice-email-scan`.
 
 ---
 
 ## Key Data
 
 - **#payments-invoices-updates:** C09HN2EBPR7
-- **Client Invoice Tracker:** `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`, tab: `Bills` (create tab if missing)
+- **Creator & AP Bills Tracker:** `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`, tab: `Krave — Creator & AP Bills Tracker`
 - **Airwallex legal_entity_id:** TBD — discover via Airwallex dashboard → Settings → Legal Entities once Spend API access is granted. Add here as a constant once confirmed.
 - **Strategists:** Shin, Amanda, Sybil, Jeneena (Slack channel); editors/internal staff (John DMs)
 
@@ -88,7 +88,7 @@ For each result:
 
 ### Step 3 — Dedup Check
 For each candidate submission:
-- Check `Bills` tab (Sheet ID: `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`) for existing row where `external_id` matches the origin Slack ts or Gmail message_id
+- Check Creator & AP Bills Tracker (Sheet ID: `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`) for existing row where `Slack Thread TS` or `Notes` contains the origin Slack ts or Gmail message_id
 - If found → skip. Already processed.
 
 ### Step 4 — Parse Each PDF
@@ -139,10 +139,11 @@ legal_entity_id: <TBD — add once confirmed, omit until then>
 
 Bill status will be DRAFT or AWAITING_APPROVAL.
 
-**API fallback (while Spend API returns 401):**
-- Forward PDF to `kravemedia@bills.airwallex.com` via john@kravemedia.co
+**API fallback (Spend API returns 401 or 404):**
+- Call `slack_download_file(url_private)` using the url_private from the attached file metadata in context (for Slack-sourced invoices), or use the pdfBase64 already in memory (for email-sourced invoices)
+- Forward PDF to `kravemedia@bills.airwallex.com` via john@kravemedia.co with the PDF attached as `attachment_base64`
 - Post bill prep report to John's channel (C0AQZGJDR38): creator, amount, currency, invoice number, due date, source
-- Log to Bills tab with status `Pending manual entry`
+- Log to Creator & AP Bills Tracker with status `Forwarded via Email`
 
 ### Step 7 — Confirmation Replies
 
@@ -179,22 +180,20 @@ Slack:
 
 ### Step 8 — Log to Tracker
 
-Append row to Sheet ID `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`, tab `Bills`:
+Append row to Creator & AP Bills Tracker (Sheet ID: `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`, tab: `Krave — Creator & AP Bills Tracker`):
 
 | Col | Value |
 |-----|-------|
 | A | Date Received (YYYY-MM-DD) |
 | B | Creator / Vendor name |
-| C | Creator email |
-| D | Invoice number |
-| E | Source (Email / Slack / DM) |
+| C | Invoice # |
+| D | Airwallex Bill ID (from API response, blank if fallback) |
+| E | Amount (numeric only) |
 | F | Currency |
-| G | Amount |
-| H | Due Date |
-| I | Airwallex Bill ID (from API response, blank if fallback) |
-| J | Status (`Staged - Pending John Review` / `Pending manual entry` / `On hold — missing bank details`) |
-| K | External ID (Slack ts or Gmail message_id) |
-| L | Notes / exception reason |
+| G | Due Date (YYYY-MM-DD) |
+| H | Status (`Staged in Airwallex` / `Forwarded via Email` / `On hold — missing bank details`) |
+| I | Slack Thread TS (or Gmail message_id for email-sourced) |
+| J | Notes (fallback reason, currency conversion rate, etc.) |
 
 ### Step 9 — Save Slack Cursor
 `mcp__krave-tools__slack_set_last_read(channel_id: C09HN2EBPR7, ts: <newest processed message ts>)`
@@ -223,4 +222,4 @@ One email with 2+ PDF attachments → one bill per PDF. Each gets its own vendor
 - VA handle: @U0AM5EGRVTP | Noa: @U06TBGX9L93
 - ✅ reaction = already actioned — never reprocess
 - Manual AP bills (Stashworks etc.) use this same flow — triggered manually via DM or dashboard with PDF attached
-- Old tracker reference `183bm4chIsw4Bf1w5_CoBVAuUODgPBfy6wk2-7I5zTFc` is superseded — use Client Invoice Tracker Bills tab
+- Old tracker references (`183bm4chIsw4Bf1w5_CoBVAuUODgPBfy6wk2-7I5zTFc` and `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50` Bills tab) are superseded — use Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`)

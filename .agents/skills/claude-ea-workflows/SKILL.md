@@ -55,6 +55,7 @@ Use `n8n-workflows/WORKFLOWS.md` for current IDs, status, webhook paths, deploym
 | Krave - Inbox Triage Daily | `inbox-triage`, `n8n-workflow-trigger` | Scheduled 9 AM ICT weekdays, or manual webhook. |
 | Krave - Slack Invoice Handler | `client-invoice-creation`, `n8n-workflow-trigger` | Slack `/invoice-request` command and modal submissions. |
 | Krave - Invoice Request Intake | `client-invoice-creation`, `n8n-workflow-trigger` | Structured Slack modal payload or manual webhook. |
+| Krave — Creator Invoice Email Scan | `creator-invoice-processing` | Scheduled every 3h Mon–Fri (`DbIJYYQ3FE4HKprB`). Scans john@kravemedia.co for unread invoice PDFs, parses with Claude, creates Airwallex draft bills. Manual: `POST /webhook/krave-creator-invoice-email-scan`. |
 | Krave - Invoice Approval Polling | `invoice-approval-polling`, `n8n-workflow-trigger` | Scheduled every 2 hrs on weekdays, or manual webhook. |
 | Krave - Weekly Invoice Summary | `weekly-invoice-summary`, `n8n-workflow-trigger` | Scheduled Monday 9 AM ICT, or manual webhook. Posts open invoice portfolio snapshot to #payments-invoices-updates. |
 | Krave - Client Invoice Creation | `client-invoice-creation` | Deprecated inactive legacy webhook from `deploy-client-invoice-creation.js`; use approval polling for finalization unless explicitly rolling back. |

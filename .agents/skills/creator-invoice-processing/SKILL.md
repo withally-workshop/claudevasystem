@@ -13,7 +13,7 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 
 **Real-time (krave-bot):** Fires automatically when John receives a Slack DM with PDF or a strategist @mentions Claude EA in #payments-invoices-updates with a PDF attached.
 
-**Scheduled:** Windows Task Scheduler runs this skill every 3 hours on weekdays — scans john@kravemedia.co inbox for new invoice emails.
+**Scheduled (email):** n8n workflow `Krave — Creator Invoice Email Scan` (`DbIJYYQ3FE4HKprB`) runs every 3 hours Mon–Fri — scans john@kravemedia.co inbox. Manual trigger: `POST https://noatakhel.app.n8n.cloud/webhook/krave-creator-invoice-email-scan`.
 
 **Manual skill run:** Follow `.claude/skills/creator-invoice-processing/SKILL.md` step-by-step.
 
@@ -22,7 +22,7 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 - **Full SOP:** `references/sops/creator-invoice-management.md`
 - **Claude Code skill:** `.claude/skills/creator-invoice-processing/SKILL.md`
 - **#payments-invoices-updates:** C09HN2EBPR7
-- **Client Invoice Tracker:** `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`, tab: `Bills`
+- **Creator & AP Bills Tracker:** `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`, tab: `Krave — Creator & AP Bills Tracker`
 
 ## What It Does
 
@@ -33,7 +33,7 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 5. Creates draft bill via `airwallex_create_bill` (external_id, vendor_id, invoice_number, issued_date, due_date, currency, line_items)
 6. Replies to requester: "Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD."
 7. Reacts ✅ to Slack message; replies in email thread for email-sourced invoices
-8. Logs to Bills tab on Client Invoice Tracker
+8. Logs to Creator & AP Bills Tracker (Sheet ID: `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`)
 
 ## Dedup Signals
 
@@ -49,6 +49,6 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 ## Codex Invocation Notes
 
 - Run order: dedup check → parse → vendor lookup → create bill → reply → log → update cursor
-- API fallback if Spend returns 401: forward PDF to kravemedia@bills.airwallex.com, post prep report to C0AQZGJDR38
+- API fallback if Spend returns 401 or 404: call `slack_download_file(url_private)` to get PDF bytes, then forward to kravemedia@bills.airwallex.com with PDF attached via `gmail_send(attachment_base64)`, post prep report to C0AQZGJDR38
 - Multiple PDFs in one email = one bill per PDF, one consolidated reply
 - legal_entity_id is TBD — omit until confirmed in the skill file

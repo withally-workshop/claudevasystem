@@ -24,7 +24,7 @@ Collect creator and vendor invoices from three intake channels, validate each PD
 Invoice Input
 ├── Slack DM             → Krave Bot (real-time)
 ├── Slack @mention       → Krave Bot (real-time)
-├── Email                → Scheduled Claude Agent (every 3h, weekdays)
+├── Email                → n8n workflow `DbIJYYQ3FE4HKprB` (every 3h, Mon–Fri)
 └── /invoice-triage      → Manual on-demand sweep
 ```
 
@@ -33,7 +33,7 @@ Invoice Input
 ### Step 1 — Receive Invoice
 
 - Krave bot handles Slack DMs and @mentions instantly when a PDF is attached
-- Scheduled agent scans john@kravemedia.co inbox every 3 hours on weekdays for new invoices
+- n8n workflow (`DbIJYYQ3FE4HKprB`) scans john@kravemedia.co inbox every 3 hours on weekdays for new invoices. Manual trigger: `POST https://noatakhel.app.n8n.cloud/webhook/krave-creator-invoice-email-scan`
 - Manual run (`/invoice-triage`) sweeps email + Slack channel for anything pending
 
 ### Step 2 — Validate Invoice
@@ -55,7 +55,7 @@ Run these checks in order:
 3. Create draft bill → `airwallex_create_bill` with: vendor_id, invoice_number, issued_date, due_date, currency, line_items
 4. Bill status: DRAFT or AWAITING_APPROVAL
 
-**API fallback** (if Spend API unavailable): forward PDF to `kravemedia@bills.airwallex.com`, post bill prep report to John's channel, log as "Pending manual entry."
+**API fallback** (if Spend API returns 401 or 404): re-download the PDF via `slack_download_file(url_private)` (Slack-sourced) or use PDF already in memory (email-sourced), then forward to `kravemedia@bills.airwallex.com` with PDF attached. Post bill prep report to John's channel. Log as "Forwarded via Email."
 
 ### Step 4 — Confirm to Requester
 
@@ -67,9 +67,9 @@ If validation fails (missing bank details etc.) → reply with the specific issu
 
 ### Step 5 — Log to Tracker
 
-Append to **Client Invoice Tracker** (`1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`), tab: **Bills**
+Append to **Creator & AP Bills Tracker** (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`), tab: `Krave — Creator & AP Bills Tracker`
 
-Fields: Date, Creator, Email, Invoice #, Source, Currency, Amount, Due Date, Airwallex Bill ID, Status, External ID, Notes
+Columns: Date Received | Creator/Vendor | Invoice # | Airwallex Bill ID | Amount | Currency | Due Date | Status | Slack Thread TS | Notes
 
 ### Step 6 — John Reviews & Finalizes
 
