@@ -1462,11 +1462,21 @@ function renderDashboard(d) {
   .ai-msg { max-width: 88%; padding: 10px 14px; border-radius: 14px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
   .ai-msg-user { background: var(--accent); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
   .ai-msg-assistant { background: var(--surface-2); color: var(--text-2); align-self: flex-start; border-bottom-left-radius: 4px; border: 0.5px solid var(--border); }
-  #ai-input-row { display: flex; gap: 8px; padding: 12px 14px; border-top: 0.5px solid var(--border); flex-shrink: 0; }
+  #ai-input-area { display: flex; flex-direction: column; border-top: 0.5px solid var(--border); flex-shrink: 0; }
+  #ai-file-badge { display: none; align-items: center; gap: 6px; padding: 6px 14px 0; font-size: 11px; color: var(--text-3); }
+  #ai-file-badge.visible { display: flex; }
+  #ai-file-badge-name { background: var(--surface-3); border: 0.5px solid var(--border-med); border-radius: 6px; padding: 2px 8px; color: var(--text-2); font-size: 11px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #ai-file-clear { background: none; border: none; color: var(--text-4); cursor: pointer; font-size: 12px; padding: 0 2px; line-height: 1; }
+  #ai-file-clear:hover { color: var(--text); }
+  #ai-input-row { display: flex; gap: 8px; padding: 10px 14px 12px; }
+  #ai-attach-btn { background: var(--surface-2); border: 0.5px solid var(--border-med); color: var(--text-3); border-radius: 50%; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+  #ai-attach-btn:hover { background: var(--surface-3); color: var(--text); }
+  #ai-attach-btn.has-file { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #ai-file-input { display: none; }
   #ai-input { flex: 1; background: var(--surface-2); border: 0.5px solid var(--border-med); border-radius: 20px; color: var(--text); font-size: 13px; padding: 9px 14px; outline: none; transition: border-color var(--dur) var(--ease); font-family: inherit; }
   #ai-input:focus { border-color: var(--accent); }
   #ai-input::placeholder { color: var(--text-4); }
-  #ai-send-btn { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 9px 16px; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity var(--dur) var(--ease); font-family: inherit; }
+  #ai-send-btn { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 9px 16px; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity var(--dur) var(--ease); font-family: inherit; flex-shrink: 0; }
   #ai-send-btn:hover { opacity: 0.85; }
   #ai-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -1847,9 +1857,20 @@ function renderDashboard(d) {
     <button onclick="toggleAiPanel()" id="ai-close-btn">✕</button>
   </div>
   <div id="ai-messages"></div>
-  <div id="ai-input-row">
-    <input id="ai-input" type="text" placeholder="Ask anything..." autocomplete="off" />
-    <button id="ai-send-btn" onclick="aiSend()">Send</button>
+  <div id="ai-input-area">
+    <div id="ai-file-badge">
+      <span>📎</span>
+      <span id="ai-file-badge-name"></span>
+      <button id="ai-file-clear" onclick="aiClearFile()" title="Remove file">✕</button>
+    </div>
+    <div id="ai-input-row">
+      <input id="ai-file-input" type="file" accept=".pdf,image/*" onchange="aiFileSelected(this)" />
+      <button id="ai-attach-btn" onclick="document.getElementById('ai-file-input').click()" title="Attach PDF or image">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      </button>
+      <input id="ai-input" type="text" placeholder="Ask anything..." autocomplete="off" />
+      <button id="ai-send-btn" onclick="aiSend()">Send</button>
+    </div>
   </div>
 </div>
 
@@ -1951,6 +1972,7 @@ function renderDashboard(d) {
   const AI_ENDPOINT = 'https://krave-ai.onrender.com/api/chat';
   const aiSessionKey = 'dash-' + Math.random().toString(36).slice(2, 9);
   let aiOpen = false;
+  let aiPendingFile = null; // { name, mimetype, data_base64 }
 
   window.toggleAiPanel = function() {
     aiOpen = !aiOpen;
@@ -1966,21 +1988,46 @@ function renderDashboard(d) {
     }
   };
 
+  window.aiFileSelected = function(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const b64 = e.target.result.split(',')[1];
+      aiPendingFile = { name: file.name, mimetype: file.type, data_base64: b64 };
+      document.getElementById('ai-file-badge-name').textContent = file.name;
+      document.getElementById('ai-file-badge').classList.add('visible');
+      document.getElementById('ai-attach-btn').classList.add('has-file');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  window.aiClearFile = function() {
+    aiPendingFile = null;
+    document.getElementById('ai-file-input').value = '';
+    document.getElementById('ai-file-badge').classList.remove('visible');
+    document.getElementById('ai-attach-btn').classList.remove('has-file');
+  };
+
   window.aiSend = async function() {
     const input = document.getElementById('ai-input');
     const msg = input.value.trim();
-    if (!msg) return;
+    if (!msg && !aiPendingFile) return;
+    const displayMsg = msg + (aiPendingFile ? '\\n📎 ' + aiPendingFile.name : '');
     input.value = '';
-    appendMsg('user', msg);
+    appendMsg('user', displayMsg);
     const thinking = appendMsg('assistant', '…');
     const sendBtn = document.getElementById('ai-send-btn');
     sendBtn.disabled = true;
     input.disabled = true;
+    const payload = { message: msg || '(see attached file)', session_key: aiSessionKey };
+    if (aiPendingFile) payload.files = [aiPendingFile];
+    aiClearFile();
     try {
       const res = await fetch(AI_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, session_key: aiSessionKey }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       thinking.textContent = data.reply || data.error || '(no response)';

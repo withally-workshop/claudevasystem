@@ -298,12 +298,29 @@ receiver.router.use('/api/chat', (req, res, next) => {
 });
 
 receiver.router.post('/api/chat', async (req, res) => {
-  const { message, session_key } = req.body || {};
+  const { message, session_key, files } = req.body || {};
   if (!message) return res.status(400).json({ error: 'message required' });
 
   const convKey = `dashboard:${session_key || 'default'}`;
   try {
-    const reply = await runAgent(message, convKey);
+    let userContent = message;
+    if (files && files.length > 0) {
+      const blocks = [{ type: 'text', text: message || '(no text)' }];
+      for (const file of files) {
+        if (!file.data_base64 || !file.mimetype) continue;
+        const isPdf = file.mimetype === 'application/pdf';
+        const isImage = file.mimetype.startsWith('image/');
+        if (isPdf) {
+          blocks[0] = { type: 'text', text: `${blocks[0].text}\n[Attached: ${file.name} (${file.mimetype})]` };
+          blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: file.data_base64 } });
+        } else if (isImage) {
+          blocks[0] = { type: 'text', text: `${blocks[0].text}\n[Attached: ${file.name} (${file.mimetype})]` };
+          blocks.push({ type: 'image', source: { type: 'base64', media_type: file.mimetype, data: file.data_base64 } });
+        }
+      }
+      if (blocks.length > 1) userContent = blocks;
+    }
+    const reply = await runAgent(userContent, convKey);
     res.json({ reply });
   } catch (e) {
     console.error('Chat API error:', e);
