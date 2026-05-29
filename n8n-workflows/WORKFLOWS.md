@@ -47,6 +47,7 @@
 | 19 | LinkedIn Post Monitor | `wNXs7wqHz5d5naJN` | Inactive (needs actor verification) | Every 30min all day | Scrape Noa's LinkedIn profile via Apify every 30min, detect new posts using workflow static data, alert John in #noa-linkedin-posts with preview + link |
 | 20 | Halo - VA Slack Bot | TBD | Pending deploy | `app_mention` in #halo-home | VA @mentions bot → Claude classifies intent → Shopify API → formatted reply in thread |
 | 21 | Halo - Daily Digest | TBD | Pending deploy | Midnight UTC (8 AM PHT) daily | Pull yesterday's Shopify orders → Claude formats → post to #halo-home |
+| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Active | Every 3h Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` | Scan john@kravemedia.co for unread invoice PDFs, parse with Claude, validate bank details, create Airwallex draft bills, reply to sender, log to Bills tab |
 | 22 | Halo - Inventory Alert | TBD | Pending deploy | Midnight UTC (8 AM PHT) daily | Compare product OOS state vs previous run, alert #halo-home on changes only |
 
 ---
@@ -1452,7 +1453,91 @@ Posts yesterday's Halo Home sales summary to #halo-home every morning. Gives the
 
 ---
 
-## Workflow 22 — Halo - Inventory Alert
+## Workflow 22 — Krave — Creator Invoice Email Scan
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/DbIJYYQ3FE4HKprB`
+**Deploy script:** `n8n-workflows/deploy-creator-invoice-email-scan.js`
+
+### Purpose
+
+Replaces the manual email-check step for creator/AP invoice intake. Scans john@kravemedia.co every 3 hours for unread emails with PDF attachments, parses each PDF with Claude Sonnet, validates bank details (hardstop if missing), creates draft bills in Airwallex Spend, replies to the original sender, and logs to the Bills tab on the Client Invoice Tracker. Falls back to posting a structured prep report to #ops-command if the Spend API returns 401 (not yet activated).
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Schedule | `0 */3 * * 1-5` — every 3 hours Mon–Fri (Asia/Manila) |
+| Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-creator-invoice-email-scan` |
+
+### Node Flow
+
+```text
+[Schedule / Webhook Trigger]
+  ↓
+[Search Inbox] — Gmail getAll, is:unread has:attachment filename:pdf, john@kravemedia.co
+  ↓
+[Get Message Details] — full payload per email
+  ↓
+[Extract PDF Attachments] — Code, splits into one item per PDF
+  ↓
+[Download Attachment] — Gmail OAuth HTTP Request, returns base64url
+  ↓
+[Merge Attachment Data] — combines base64 + email context
+  ↓
+[Prepare Claude Request] — builds document API payload with PDF
+  ↓
+[Call Claude API] — claude-sonnet-4-6, extracts invoice fields as JSON
+  ↓
+[Parse & Validate] — derives invoice number (MMDDYYYY-FLast), Friday due date, bank details check
+  ↓
+[Has Bank Details?]
+  ├─ false → [Reply Missing Bank Details] → [Mark Read]
+  └─ true  → [Airwallex Auth]
+               ↓
+             [List Vendors] → [Resolve Vendor]
+               ↓
+             [Need Create Vendor?]
+               ├─ true  → [Create Vendor] → [Set Vendor ID]
+               └─ false → [Create Bill] ←─────────────────┘
+               ↓
+             [Create Bill]
+               ↓
+             [Bill Created?]
+               ├─ true  → [Reply Staged] → [Log to Bills Tab] → [Mark Read]
+               └─ false → [Build Slack Fallback] → [Post Slack Prep Report]
+                          → [Reply Fallback] → [Log to Bills Tab (pending)] → [Mark Read]
+```
+
+### Key Logic
+
+- **Dedup:** `is:unread` search + mark as read at end of each path. Airwallex `request_id` = `messageId + attachmentId` prevents duplicate bills.
+- **Multiple PDFs per email:** Extract Attachments splits one email into N items (one per PDF). Each PDF is processed independently.
+- **Invoice number:** Auto-generated as `MMDDYYYY-[FirstInitialLastName]` if missing.
+- **Due date:** Defaults to Friday of current week (PHT) if not on invoice.
+- **Bank details hardstop:** Replies asking to reissue; logs nothing; marks email read.
+- **Airwallex 401 fallback:** Posts structured bill prep report to #ops-command with all extracted data for manual entry.
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| Valid invoice, Spend API active | Bill created in Airwallex, reply sent, logged to Bills tab, email marked read |
+| Missing bank details | Reply sent asking to reissue, email marked read |
+| Spend API returns 401 | Slack prep report to #ops-command, fallback reply to sender, logged as "Pending manual entry" |
+| No unread PDF emails | Workflow exits with 0 items, nothing happens |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| Claude API fails | `continueOnFail` — Parse & Validate gets empty response, falls through with minimal data |
+| Gmail reply fails | `continueOnFail` — mark read still runs |
+| Sheets append fails | `continueOnFail` — email still marked read |
+| Vendor create returns 401 | `continueOnFail` — Create Bill runs with null vendorId, fails, routes to fallback |
+
+---
+
+## Workflow 22b — Halo - Inventory Alert
 
 **n8n URL:** TBD (update after first deploy)
 **Deploy script:** `n8n-workflows/deploy-halo-home-inventory-alert.js`
