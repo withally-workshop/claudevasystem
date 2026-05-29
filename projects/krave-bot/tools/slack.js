@@ -64,6 +64,31 @@ async function listChannels() {
   return { channels: (res.channels || []).map((c) => ({ id: c.id, name: c.name, is_private: c.is_private })) };
 }
 
+async function postMessageAsJohn({ channel, text, thread_ts }) {
+  const payload = { channel, text };
+  if (thread_ts) payload.thread_ts = thread_ts;
+  return new Promise((resolve, reject) => {
+    const buf = Buffer.from(JSON.stringify(payload));
+    const req = https.request({
+      hostname: 'slack.com',
+      path: '/api/chat.postMessage',
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.SLACK_JOHN_USER_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Content-Length': buf.length,
+      },
+    }, (res) => {
+      let body = '';
+      res.on('data', (c) => { body += c; });
+      res.on('end', () => { try { resolve(JSON.parse(body)); } catch { resolve({ ok: false, body }); } });
+    });
+    req.on('error', reject);
+    req.write(buf);
+    req.end();
+  });
+}
+
 async function downloadFile({ url_private }) {
   return new Promise((resolve, reject) => {
     const url = new URL(url_private);
@@ -135,6 +160,19 @@ module.exports = {
       input_schema: { type: 'object', properties: {} },
     },
     {
+      name: 'slack_post_message_as_john',
+      description: 'Post a Slack message as John (personal account, not the bot). Use this when the user asks to send a message "from John" or "from my account". To DM someone, set channel to their Slack user ID.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          channel: { type: 'string', description: 'Channel ID or user ID for DMs (e.g. U07J8SRCPGU for Amanda)' },
+          text: { type: 'string', description: 'Message text (supports Slack mrkdwn)' },
+          thread_ts: { type: 'string', description: 'Thread timestamp to reply in a thread (optional)' },
+        },
+        required: ['channel', 'text'],
+      },
+    },
+    {
       name: 'slack_download_file',
       description: 'Download a Slack-hosted file by its url_private and return it as base64. Use this before gmail_send when you need to attach a file that was shared in Slack.',
       input_schema: {
@@ -146,5 +184,5 @@ module.exports = {
       },
     },
   ],
-  handlers: { slack_get_channel_history: getChannelHistory, slack_post_message: postMessage, slack_search: searchSlack, slack_list_channels: listChannels, slack_download_file: downloadFile },
+  handlers: { slack_get_channel_history: getChannelHistory, slack_post_message: postMessage, slack_post_message_as_john: postMessageAsJohn, slack_search: searchSlack, slack_list_channels: listChannels, slack_download_file: downloadFile },
 };
