@@ -117,9 +117,16 @@ async function runAgent(userContent, convKey) {
   const messages = [...history];
   let finalText = '';
 
+  const LOOP_DEADLINE = Date.now() + 4 * 60 * 1000; // 4-minute hard cap
+
   try {
     // agentic loop — keep calling until no more tool_use
     while (true) {
+      if (Date.now() > LOOP_DEADLINE) {
+        finalText = '⚠️ Took too long to complete — the task may be partially done. Please check Airwallex and the tracker, then ask me to continue if needed.';
+        break;
+      }
+
       let response;
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
@@ -148,13 +155,16 @@ async function runAgent(userContent, convKey) {
 
       messages.push({ role: 'assistant', content: response.content });
 
-      if (response.stop_reason === 'end_turn' || response.stop_reason === 'max_tokens') {
+      const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
+
+      // end_turn or max_tokens with no pending tool calls → done
+      if (response.stop_reason === 'end_turn' || (response.stop_reason === 'max_tokens' && toolUseBlocks.length === 0)) {
         finalText = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
         break;
       }
 
-      if (response.stop_reason === 'tool_use') {
-        const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
+      // tool_use (or max_tokens that still has tool calls) → run tools and continue
+      if (toolUseBlocks.length > 0) {
         const toolResults = await Promise.all(toolUseBlocks.map(async (block) => {
           const handler = HANDLERS[block.name];
           let result;
