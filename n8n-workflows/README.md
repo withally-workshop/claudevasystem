@@ -27,7 +27,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Halo - VA Slack Bot | Pending deploy | Slack `app_mention` in #halo-home | [deploy-halo-home-slack-bot.js](deploy-halo-home-slack-bot.js) |
 | Halo - Daily Digest | Pending deploy | Midnight UTC (8 AM PHT) daily | [deploy-halo-home-daily-digest.js](deploy-halo-home-daily-digest.js) |
 | Halo - Inventory Alert | Pending deploy | Midnight UTC (8 AM PHT) daily | [deploy-halo-home-inventory-alert.js](deploy-halo-home-inventory-alert.js) |
-| Krave — Creator Invoice Email Scan | **Retired** `DbIJYYQ3FE4HKprB` | — | Replaced by krave-bot internal loop |
+| Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Every 3h Mon–Fri + webhook | [deploy-creator-invoice-email-scan.js](deploy-creator-invoice-email-scan.js) |
 
 ---
 

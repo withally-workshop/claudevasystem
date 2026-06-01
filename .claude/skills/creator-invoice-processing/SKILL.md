@@ -16,12 +16,12 @@ Receives creator/vendor invoices from three channels (email, Slack channel, Slac
 |------|---------|---------|---------|
 | Slack DM | John's personal DM | Real-time | Krave bot (automatic) |
 | Slack @mention | #payments-invoices-updates (C09HN2EBPR7) | Real-time | Krave bot (automatic) |
-| Email | john@kravemedia.co | ≤3 hours | krave-bot internal loop (every 3h, Mon–Fri PHT) |
+| Email | john@kravemedia.co | ≤3 hours | n8n workflow `DbIJYYQ3FE4HKprB` (every 3h, weekdays) |
 | Manual | Dashboard or `/invoice-triage` | On-demand | Full sweep of all channels |
 
 **Strategists must @tag Claude EA** in #payments-invoices-updates to trigger processing. Messages without an @mention are informational — do not action them.
 
-**Scheduled (email):** krave-bot internal `setInterval` loop — every 3h Mon–Fri PHT. No external trigger needed. n8n workflow `DbIJYYQ3FE4HKprB` is retired.
+**Scheduled (email):** n8n workflow `Krave — Creator Invoice Email Scan` (`DbIJYYQ3FE4HKprB`) — every 3h Mon–Fri. Deploy: `n8n-workflows/deploy-creator-invoice-email-scan.js`. Manual trigger: `POST https://noatakhel.app.n8n.cloud/webhook/krave-creator-invoice-email-scan`.
 
 ---
 
