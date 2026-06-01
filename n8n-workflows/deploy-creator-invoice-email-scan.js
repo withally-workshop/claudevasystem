@@ -42,8 +42,8 @@ const AW_API_KEY      = '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af
 // ─── Code node contents ───────────────────────────────────────────────────────
 
 const EXTRACT_PDF_ATTACHMENTS = `
-// Returns one item per PDF attachment found in the email.
-// Handles both simple:false (payload.headers array) and simple:true (flat headers object).
+// Runs once across all input items.
+// Returns one output item per PDF attachment found across all emails.
 function findPDFs(parts, found) {
   if (!parts) return found;
   for (const p of parts) {
@@ -57,39 +57,51 @@ function findPDFs(parts, found) {
   return found;
 }
 
-const msg = $input.item.json;
-const payload = msg.payload || {};
-const headerArr = Array.isArray(payload.headers) ? payload.headers : [];
-
-function hdrArr(name) {
-  const h = headerArr.find(h => String(h.name || '').toLowerCase() === name.toLowerCase());
-  return h ? h.value : '';
+function hdrFrom(msg) {
+  const payload = msg.payload || {};
+  const arr = Array.isArray(payload.headers) ? payload.headers : [];
+  function fromArr(name) {
+    const h = arr.find(h => String(h.name || '').toLowerCase() === name.toLowerCase());
+    return h ? h.value : '';
+  }
+  function fromFlat(name) {
+    const flat = msg.headers && typeof msg.headers === 'object' ? msg.headers : {};
+    const raw = flat[name.toLowerCase()] || flat[name] || '';
+    const colon = raw.indexOf(':');
+    if (colon > 0 && colon < 20) return raw.slice(colon + 1).trim();
+    return raw;
+  }
+  function hdr(name) { return fromArr(name) || fromFlat(name); }
+  return { from: hdr('from'), subject: hdr('subject') || '(no subject)' };
 }
-function hdrFlat(name) {
-  const flat = msg.headers && typeof msg.headers === 'object' ? msg.headers : {};
-  return flat[name.toLowerCase()] || flat[name] || '';
+
+const output = [];
+
+for (const item of $input.all()) {
+  const msg = item.json;
+  const payload = msg.payload || {};
+  const pdfs = findPDFs(payload.parts || [], []);
+  if (!pdfs.length) continue;
+
+  const { from: rawFrom, subject } = hdrFrom(msg);
+  const mf = rawFrom.match(/^([^<]*?)<([^>]+)>/);
+  const fromName  = mf ? mf[1].trim().replace(/^["']|["']$/g, '') : rawFrom.trim();
+  const fromEmail = (mf ? mf[2] : rawFrom).trim().toLowerCase();
+
+  for (const pdf of pdfs) {
+    output.push({ json: {
+      messageId:      String(msg.id || ''),
+      threadId:       String(msg.threadId || ''),
+      subject:        String(subject),
+      fromName:       String(fromName),
+      fromEmail:      String(fromEmail),
+      attachmentId:   String(pdf.attachmentId),
+      attachmentName: String(pdf.attachmentName),
+    }});
+  }
 }
-function hdr(name) { return hdrArr(name) || hdrFlat(name); }
 
-const rawFrom = hdr('from');
-const mf = rawFrom.match(/^([^<]*?)<([^>]+)>/);
-const fromName  = mf ? mf[1].trim().replace(/^["']|["']$/g, '') : rawFrom.trim();
-const fromEmail = (mf ? mf[2] : rawFrom).trim().toLowerCase();
-const subject   = hdr('subject') || '(no subject)';
-
-const pdfs = findPDFs(payload.parts || [], []);
-
-if (!pdfs.length) return [];
-
-return pdfs.map(pdf => ({ json: {
-  messageId:      String(msg.id || ''),
-  threadId:       String(msg.threadId || ''),
-  subject,
-  fromName,
-  fromEmail,
-  attachmentId:   String(pdf.attachmentId),
-  attachmentName: String(pdf.attachmentName),
-}}));
+return output;
 `.trim();
 
 const MERGE_ATTACHMENT_DATA = `
@@ -300,7 +312,7 @@ const workflow = {
       id: 'n5', name: 'Extract PDF Attachments',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [980, 300],
-      parameters: { mode: 'runOnceForEachItem', jsCode: EXTRACT_PDF_ATTACHMENTS },
+      parameters: { mode: 'runOnceForAllItems', jsCode: EXTRACT_PDF_ATTACHMENTS },
     },
 
     // ── Download & parse ──────────────────────────────────────────────────────
