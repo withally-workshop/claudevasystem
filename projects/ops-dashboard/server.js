@@ -2037,9 +2037,22 @@ function renderDashboard(d) {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      thinking.textContent = data.reply || data.error || '(no response)';
+      if (data.reply) {
+        thinking.textContent = data.reply;
+      } else if (data.error) {
+        const err = String(data.error);
+        if (err.includes('429') || err.includes('rate_limit')) {
+          thinking.textContent = 'Rate limit hit — too many requests this minute. Wait 30 seconds and try again.';
+        } else if (err.includes('529') || err.includes('overloaded')) {
+          thinking.textContent = 'Claude is overloaded right now. Try again in a few seconds.';
+        } else {
+          thinking.textContent = 'Something went wrong. Try again.';
+        }
+      } else {
+        thinking.textContent = '(no response)';
+      }
     } catch (e) {
-      thinking.textContent = 'Error: could not reach AI.';
+      thinking.textContent = 'Could not reach the AI — check that krave-bot is running.';
     } finally {
       sendBtn.disabled = false;
       input.disabled = false;

@@ -119,6 +119,7 @@ async function runAgent(userContent, convKey) {
 
   const messages = [...history];
   let finalText = '';
+  const isBackground = convKey.startsWith('autonomous:');
 
   const LOOP_DEADLINE = Date.now() + 10 * 60 * 1000; // 10-minute hard cap
 
@@ -148,9 +149,16 @@ async function runAgent(userContent, convKey) {
             await new Promise((r) => setTimeout(r, (attempt + 1) * 8000));
             continue;
           }
-          if (isRateLimit && attempt < 2) {
-            await new Promise((r) => setTimeout(r, 65000));
-            continue;
+          if (isRateLimit) {
+            // Background tasks retry patiently; interactive sessions fail fast
+            if (isBackground && attempt < 2) {
+              await new Promise((r) => setTimeout(r, 65000));
+              continue;
+            }
+            if (!isBackground && attempt < 1) {
+              await new Promise((r) => setTimeout(r, 8000));
+              continue;
+            }
           }
           throw e;
         }
@@ -188,8 +196,10 @@ async function runAgent(userContent, convKey) {
     // persist last 20 turns to keep context manageable
     conversations.set(convKey, messages.slice(-20));
   } catch (e) {
-    // clear corrupt history so next message starts clean
     conversations.delete(convKey);
+    if (e.status === 429) {
+      return 'Rate limit hit — too many requests this minute. Wait 30 seconds and try again.';
+    }
     throw e;
   }
 
