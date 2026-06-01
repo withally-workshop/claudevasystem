@@ -106,58 +106,38 @@ return output;
 `.trim();
 
 const MERGE_ATTACHMENT_DATA = `
-// Combines Gmail attachment download (base64url) with email context from n5.
-const ctx    = $('Extract PDF Attachments').item.json;
-const raw64  = ($json.data || '').replace(/-/g, '+').replace(/_/g, '/');
-return [{ json: { ...ctx, pdfBase64: raw64 } }];
+const contexts = $('Extract PDF Attachments').all();
+const output = [];
+$input.all().forEach((item, i) => {
+  const ctx = (contexts[i] || { json: {} }).json;
+  const raw64 = (item.json.data || '').replace(/-/g, '+').replace(/_/g, '/');
+  output.push({ json: { ...ctx, pdfBase64: raw64 } });
+});
+return output;
 `.trim();
 
 const PREPARE_CLAUDE_REQUEST = `
-const ctx = $input.item.json;
-const system = \`You are an invoice parser. Extract invoice data from the PDF and return ONLY valid JSON with these exact fields:
-{
-  "creator_name": "string",
-  "email": "string or null",
-  "invoice_number": "string or null",
-  "issued_date": "YYYY-MM-DD or null",
-  "due_date": "YYYY-MM-DD or null",
-  "amount": number,
-  "currency": "ISO currency code e.g. USD SGD AUD",
-  "line_items": [{"description":"string","quantity":number,"unit_price":number}],
-  "bank_details": {
-    "bank_name": "string or null",
-    "account_name": "string or null",
-    "account_number": "string or null",
-    "swift": "string or null",
-    "iban": "string or null",
-    "bsb": "string or null",
-    "routing_number": "string or null"
-  },
-  "has_bank_details": boolean
-}\`;
-
-return [{ json: {
-  ...ctx,
-  claudeSystem: system,
-  claudeMessages: [{
-    role: 'user',
-    content: [
-      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: ctx.pdfBase64 } },
-      { type: 'text', text: 'Extract the invoice data from this PDF and return the JSON as specified.' }
-    ]
-  }]
-}}];
+const output = [];
+for (const item of $input.all()) {
+  const ctx = item.json;
+  const system = 'You are an invoice parser. Extract invoice data from the PDF and return ONLY valid JSON with these exact fields: { "creator_name": "string", "email": "string or null", "invoice_number": "string or null", "issued_date": "YYYY-MM-DD or null", "due_date": "YYYY-MM-DD or null", "amount": number, "currency": "ISO currency code e.g. USD SGD AUD", "line_items": [{"description":"string","quantity":number,"unit_price":number}], "bank_details": { "bank_name": "string or null", "account_name": "string or null", "account_number": "string or null", "swift": "string or null", "iban": "string or null", "bsb": "string or null", "routing_number": "string or null" }, "has_bank_details": boolean }';
+  output.push({ json: {
+    ...ctx,
+    claudeSystem: system,
+    claudeMessages: [{
+      role: 'user',
+      content: [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: ctx.pdfBase64 } },
+        { type: 'text', text: 'Extract the invoice data from this PDF and return the JSON as specified.' }
+      ]
+    }]
+  }});
+}
+return output;
 `.trim();
 
 const PARSE_VALIDATE = `
-const claudeText = (($json.content || []).map(c => c.text || '').join(''));
-const ctx = $('Prepare Claude Request').item.json;
-
-let inv = {};
-try {
-  const m = claudeText.match(/\\{[\\s\\S]*\\}/);
-  inv = m ? JSON.parse(m[0]) : {};
-} catch(_) {}
+const contexts = $('Prepare Claude Request').all();
 
 function genInvoiceNumber(name, date) {
   const d = date ? new Date(date) : new Date();
@@ -166,7 +146,7 @@ function genInvoiceNumber(name, date) {
   const yyyy = d.getFullYear();
   const parts = (name || '').trim().split(/\\s+/).filter(Boolean);
   const first = parts[0] || 'X';
-  const last  = parts[parts.length - 1] || 'X';
+  const last = parts[parts.length - 1] || 'X';
   return mm + dd + yyyy + '-' + first.charAt(0).toUpperCase() + last;
 }
 
@@ -178,81 +158,85 @@ function getFriday() {
   return pht.toISOString().split('T')[0];
 }
 
-const creatorName   = inv.creator_name || inv.vendor_name || ctx.fromName || '';
-const creatorEmail  = inv.email || ctx.fromEmail || '';
-const invoiceNumber = inv.invoice_number || genInvoiceNumber(creatorName, inv.issued_date);
-const dueDate       = inv.due_date   || getFriday();
-const issuedDate    = inv.issued_date || new Date().toISOString().split('T')[0];
-const amount        = Number(inv.amount) || 0;
-const currency      = (inv.currency || 'USD').toUpperCase();
-const lineItems     = (inv.line_items && inv.line_items.length)
-  ? inv.line_items
-  : [{ description: 'Services', quantity: 1, unit_price: amount }];
-const bd = inv.bank_details || {};
-const hasBankDetails = inv.has_bank_details === true || !!(
-  bd.account_number || bd.iban || bd.swift || bd.bsb || bd.routing_number
-);
+const output = [];
+$input.all().forEach((item, i) => {
+  const claudeText = (item.json.content || []).map(c => c.text || '').join('');
+  const ctx = (contexts[i] || { json: {} }).json;
+  let inv = {};
+  try { const m = claudeText.match(/\\{[\\s\\S]*\\}/); inv = m ? JSON.parse(m[0]) : {}; } catch(_) {}
 
-// Guard: if Claude found no meaningful invoice data, mark as not-an-invoice
-const isInvoice = !!(creatorName && amount > 0);
+  const creatorName = inv.creator_name || inv.vendor_name || ctx.fromName || '';
+  const creatorEmail = inv.email || ctx.fromEmail || '';
+  const invoiceNumber = inv.invoice_number || genInvoiceNumber(creatorName, inv.issued_date);
+  const dueDate = inv.due_date || getFriday();
+  const issuedDate = inv.issued_date || new Date().toISOString().split('T')[0];
+  const amount = Number(inv.amount) || 0;
+  const currency = (inv.currency || 'USD').toUpperCase();
+  const lineItems = (inv.line_items && inv.line_items.length) ? inv.line_items : [{ description: 'Services', quantity: 1, unit_price: amount }];
+  const bd = inv.bank_details || {};
+  const hasBankDetails = inv.has_bank_details === true || !!(bd.account_number || bd.iban || bd.swift || bd.bsb || bd.routing_number);
+  const isInvoice = !!(creatorName && amount > 0);
 
-return [{ json: {
-  ...ctx,
-  creatorName, creatorEmail, invoiceNumber, dueDate, issuedDate,
-  amount, currency, lineItems, bankDetails: bd, hasBankDetails, isInvoice,
-}}];
+  output.push({ json: { ...ctx, creatorName, creatorEmail, invoiceNumber, dueDate, issuedDate, amount, currency, lineItems, bankDetails: bd, hasBankDetails, isInvoice } });
+});
+return output;
 `.trim();
 
 const RESOLVE_VENDOR = `
-const listResp = $json;
-const ctx = $('Parse & Validate').item.json;
-const vendors = listResp.items || listResp.data || [];
-const q = (ctx.creatorName || '').toLowerCase();
-const match = vendors.find(v => {
-  const n = (v.short_name || v.name || '').toLowerCase();
-  return n.includes(q) || q.includes(n);
+const contexts = $('Parse & Validate').all();
+const output = [];
+$input.all().forEach((item, i) => {
+  const ctx = (contexts[i] || { json: {} }).json;
+  const vendors = item.json.items || item.json.data || [];
+  const q = (ctx.creatorName || '').toLowerCase();
+  const match = vendors.find(v => {
+    const n = (v.short_name || v.name || '').toLowerCase();
+    return n.includes(q) || q.includes(n);
+  });
+  output.push({ json: { ...ctx, vendorFound: !!match, vendorId: match ? (match.vendor_id || match.id || null) : null } });
 });
-return [{ json: {
-  ...ctx,
-  vendorFound: !!match,
-  vendorId: match ? (match.vendor_id || match.id || null) : null,
-}}];
+return output;
 `.trim();
 
 const SET_VENDOR_ID = `
-// After Create Vendor — combine new vendor_id with context from Resolve Vendor
-const createResp = $json;
-const ctx = $('Resolve Vendor').item.json;
-const vendorId = createResp.vendor_id || createResp.id || null;
-return [{ json: { ...ctx, vendorId } }];
+const contexts = $('Resolve Vendor').all();
+const output = [];
+$input.all().forEach((item, i) => {
+  const ctx = (contexts[i] || { json: {} }).json;
+  const vendorId = item.json.vendor_id || item.json.id || null;
+  output.push({ json: { ...ctx, vendorId } });
+});
+return output;
 `.trim();
 
 const BUILD_SLACK_FALLBACK = `
-const ctx = $input.item.json;
-const lines = [
-  '*📋 Creator Invoice — Manual Entry Required*',
-  '• Creator: ' + (ctx.creatorName || 'Unknown'),
-  '• Email: '   + (ctx.creatorEmail || 'Unknown'),
-  '• Invoice #: ' + ctx.invoiceNumber,
-  '• Amount: '    + ctx.currency + ' ' + ctx.amount,
-  '• Issued: '   + ctx.issuedDate,
-  '• Due: '      + ctx.dueDate,
-  '• Line items: ' + JSON.stringify(ctx.lineItems),
-  '',
-  '⚠️ Airwallex Spend API not yet activated — bill could not be created automatically.',
-  'Please create this bill manually in Airwallex or forward the PDF to kravemedia@bills.airwallex.com.',
-  '',
-  '*Bank Details:*',
-];
-const bd = ctx.bankDetails || {};
-if (bd.bank_name)      lines.push('  Bank: ' + bd.bank_name);
-if (bd.account_name)   lines.push('  Account Name: ' + bd.account_name);
-if (bd.account_number) lines.push('  Account #: ' + bd.account_number);
-if (bd.swift)          lines.push('  SWIFT: ' + bd.swift);
-if (bd.bsb)            lines.push('  BSB: ' + bd.bsb);
-if (bd.iban)           lines.push('  IBAN: ' + bd.iban);
-lines.push('', 'Source email from: ' + ctx.fromEmail + ' — Subject: ' + ctx.subject);
-return [{ json: { ...ctx, slackText: lines.join('\\n') } }];
+const output = [];
+for (const item of $input.all()) {
+  const ctx = item.json;
+  const lines = [
+    '*Creator Invoice - Manual Entry Required*',
+    '- Creator: ' + (ctx.creatorName || 'Unknown'),
+    '- Email: ' + (ctx.creatorEmail || 'Unknown'),
+    '- Invoice #: ' + ctx.invoiceNumber,
+    '- Amount: ' + ctx.currency + ' ' + ctx.amount,
+    '- Issued: ' + ctx.issuedDate,
+    '- Due: ' + ctx.dueDate,
+    '',
+    'Airwallex Spend API unavailable - please create manually or forward PDF to kravemedia@bills.airwallex.com.',
+    '',
+    'Bank Details:',
+  ];
+  const bd = ctx.bankDetails || {};
+  if (bd.bank_name) lines.push('  Bank: ' + bd.bank_name);
+  if (bd.account_name) lines.push('  Account Name: ' + bd.account_name);
+  if (bd.account_number) lines.push('  Account #: ' + bd.account_number);
+  if (bd.swift) lines.push('  SWIFT: ' + bd.swift);
+  if (bd.bsb) lines.push('  BSB: ' + bd.bsb);
+  if (bd.iban) lines.push('  IBAN: ' + bd.iban);
+  lines.push('', 'Source: ' + ctx.fromEmail + ' - ' + ctx.subject);
+  output.push({ json: { ...ctx, slackText: lines.join('\\n') } });
+}
+return output;
 `.trim();
 
 // ─── Workflow definition ──────────────────────────────────────────────────────
@@ -335,13 +319,13 @@ const workflow = {
       id: 'n7', name: 'Merge Attachment Data',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [1460, 300],
-      parameters: { mode: 'runOnceForEachItem', jsCode: MERGE_ATTACHMENT_DATA },
+      parameters: { mode: 'runOnceForAllItems', jsCode: MERGE_ATTACHMENT_DATA },
     },
     {
       id: 'n8', name: 'Prepare Claude Request',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [1700, 300],
-      parameters: { mode: 'runOnceForEachItem', jsCode: PREPARE_CLAUDE_REQUEST },
+      parameters: { mode: 'runOnceForAllItems', jsCode: PREPARE_CLAUDE_REQUEST },
     },
     {
       id: 'n9', name: 'Call Claude API',
@@ -367,7 +351,7 @@ const workflow = {
       id: 'n10', name: 'Parse & Validate',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [2180, 300],
-      parameters: { mode: 'runOnceForEachItem', jsCode: PARSE_VALIDATE },
+      parameters: { mode: 'runOnceForAllItems', jsCode: PARSE_VALIDATE },
     },
 
     // ── Guard: is this actually an invoice? ───────────────────────────────────
@@ -478,7 +462,7 @@ const workflow = {
       id: 'n16', name: 'Resolve Vendor',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [3140, 200],
-      parameters: { mode: 'runOnceForEachItem', jsCode: RESOLVE_VENDOR },
+      parameters: { mode: 'runOnceForAllItems', jsCode: RESOLVE_VENDOR },
     },
     {
       id: 'n17', name: 'Need Create Vendor?',
@@ -517,7 +501,7 @@ const workflow = {
       id: 'n19', name: 'Set Vendor ID',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [3860, 100],
-      parameters: { mode: 'runOnceForEachItem', jsCode: SET_VENDOR_ID },
+      parameters: { mode: 'runOnceForAllItems', jsCode: SET_VENDOR_ID },
     },
 
     // ── Create Bill (reached from n19 and from n17-false) ─────────────────────
@@ -621,7 +605,7 @@ const workflow = {
       id: 'n25', name: 'Build Slack Fallback',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [4580, 340],
-      parameters: { mode: 'runOnceForEachItem', jsCode: BUILD_SLACK_FALLBACK },
+      parameters: { mode: 'runOnceForAllItems', jsCode: BUILD_SLACK_FALLBACK },
     },
     {
       id: 'n25b', name: 'Forward PDF to Airwallex Email',
