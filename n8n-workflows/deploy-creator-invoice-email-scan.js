@@ -43,8 +43,9 @@ const AW_API_KEY      = '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af
 
 const EXTRACT_PDF_ATTACHMENTS = `
 // Runs once across all input items.
-// Returns one output item per PDF attachment found across all emails.
-function findPDFs(parts, found) {
+// Extracts one output item per attachment found in each email.
+// Gmail search already filters for PDF emails — accept any attachment with an ID.
+function findAttachments(parts, found) {
   if (!parts) return found;
   for (const p of parts) {
     if (p.body && p.body.attachmentId && p.filename &&
@@ -298,14 +299,15 @@ const workflow = {
     },
     {
       id: 'n4', name: 'Get Message Details',
-      type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
       position: [740, 300],
       credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
-        resource: 'message',
-        operation: 'get',
-        messageId: '={{ $json.id }}',
-        simple: false,
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'gmailOAuth2',
+        method: 'GET',
+        url: '={{ "https://gmail.googleapis.com/gmail/v1/users/me/messages/" + $json.id + "?format=full" }}',
+        options: {},
       },
     },
     {
