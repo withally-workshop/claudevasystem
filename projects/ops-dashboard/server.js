@@ -293,6 +293,18 @@ async function handleRunTriage(req, res) {
   }
 }
 
+async function handleRunEmailScan(req, res) {
+  const EMAIL_SCAN_WEBHOOK = 'https://noatakhel.app.n8n.cloud/webhook/krave-creator-invoice-email-scan';
+  try {
+    const result = await post(EMAIL_SCAN_WEBHOOK, '{}', { 'Content-Type': 'application/json' });
+    res.writeHead(result.ok ? 200 : 502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: result.ok, status: result.status }));
+  } catch (e) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: e.message }));
+  }
+}
+
 async function composeInvoiceEmailBody({ client_name, invoice_number, amount, currency, due_date, project_description, payment_link }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
@@ -1862,7 +1874,7 @@ function renderDashboard(d) {
   <div id="ai-messages"></div>
   <div id="ai-input-area">
     <div id="ai-quick-actions">
-      <button class="ai-quick-btn" onclick="aiQuickSend('scan email for new invoices')">Scan Email</button>
+      <button class="ai-quick-btn" id="scan-email-btn" onclick="triggerEmailScan()">Scan Email</button>
       <button class="ai-quick-btn" onclick="aiQuickSend('run inbox triage')">Inbox Triage</button>
     </div>
     <div id="ai-file-badge">
@@ -2060,6 +2072,21 @@ function renderDashboard(d) {
     }
   };
 
+  window.triggerEmailScan = async function() {
+    const btn = document.getElementById('scan-email-btn');
+    const orig = btn.textContent;
+    btn.textContent = 'Triggering…';
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/run-email-scan', { method: 'POST' });
+      btn.textContent = res.ok ? 'Triggered ✓' : 'Failed';
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 4000);
+    } catch (e) {
+      btn.textContent = 'Error';
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+    }
+  };
+
   window.aiQuickSend = function(message) {
     const input = document.getElementById('ai-input');
     input.value = message;
@@ -2212,6 +2239,7 @@ const server = http.createServer(async (req, res) => {
   if (req.url.startsWith('/auth/callback')) return handleAuthCallback(req, res);
   if (req.url.startsWith('/auth/logout')) return handleAuthLogout(req, res);
   if (req.method === 'POST' && req.url === '/api/run-triage') return handleRunTriage(req, res);
+  if (req.method === 'POST' && req.url === '/api/run-email-scan') return handleRunEmailScan(req, res);
   if (req.method === 'POST' && req.url === '/api/send-invoice-email') return handleSendInvoiceEmail(req, res);
 
   if (!AUTH_DISABLED) {

@@ -53,6 +53,8 @@ Enrichment = Claude Haiku classifies each creator's niche (UGC, lifestyle, fitne
 
 --- CREATOR / AP INVOICE PROCESSING (BILLS) ---
 
+EMAIL SCAN RULE: When asked to "scan email", "check email for invoices", "run email scan", or anything similar — do NOT do it yourself. Instead call n8n_trigger_workflow with workflowId "DbIJYYQ3FE4HKprB" and reply: "On it — triggered the email scan. Results will appear in Airwallex and the tracker within a few minutes." This keeps costs low. Never run the email scan agentically.
+
 When someone sends you a PDF invoice via Slack DM or @mention — or when a strategist tags you in #payments-invoices-updates with a PDF — run the following flow:
 
 1. Parse the PDF using document vision. Extract: creator/vendor name, email, invoice number, issued date, due date, amount, currency, line items, bank details.
