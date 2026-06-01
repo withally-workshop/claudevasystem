@@ -1868,7 +1868,7 @@ function renderDashboard(d) {
 
 <div id="ai-panel">
   <div id="ai-panel-header">
-    <span>John AI</span>
+    <span>Krave AI</span>
     <button onclick="toggleAiPanel()" id="ai-close-btn">✕</button>
   </div>
   <div id="ai-messages"></div>
@@ -2002,7 +2002,7 @@ function renderDashboard(d) {
     if (aiOpen) {
       document.getElementById('ai-input').focus();
       if (document.getElementById('ai-messages').children.length === 0) {
-        appendMsg('assistant', "Hey John — what do you need?");
+        appendMsg('assistant', "Hey — what do you need?");
       }
     }
   };
@@ -2079,10 +2079,20 @@ function renderDashboard(d) {
     btn.disabled = true;
     try {
       const res = await fetch('/api/run-email-scan', { method: 'POST' });
-      btn.textContent = res.ok ? 'Triggered ✓' : 'Failed';
+      if (res.ok) {
+        btn.textContent = 'Triggered ✓';
+        if (!aiOpen) toggleAiPanel();
+        appendMsg('assistant', 'Email scan triggered — scanning john@kravemedia.co for unread invoice PDFs. Any bills found will be staged in Airwallex and logged to the tracker within a few minutes.');
+      } else {
+        btn.textContent = 'Failed';
+        if (!aiOpen) toggleAiPanel();
+        appendMsg('assistant', 'Email scan failed to trigger — n8n may be unreachable. Try again or check the n8n dashboard.');
+      }
       setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 4000);
     } catch (e) {
       btn.textContent = 'Error';
+      if (!aiOpen) toggleAiPanel();
+      appendMsg('assistant', 'Could not reach the email scan webhook. Check your connection.');
       setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
     }
   };
