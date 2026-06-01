@@ -69,15 +69,17 @@ When someone sends you a PDF invoice via Slack DM or @mention — or when a stra
    - If API returns 401 or 404 (bills endpoint unavailable) → use the email fallback below. Do NOT retry.
 
 EMAIL FALLBACK (when airwallex_create_bill returns 401 or 404):
-   a. Get the PDF bytes:
-      - If the message context contains [Attached file(s)] with a url_private → call slack_download_file(url_private). Returns { base64, size_bytes }.
-      - If the message context contains [Dashboard session: <key>] → call get_session_file(session_key, filename). Returns { name, mimetype, data_base64 }.
+IMPORTANT: Do NOT call gmail_send without the PDF attached — an email without the attachment is useless. Always complete step (a) before step (b).
+   a. Get the PDF as base64:
+      - If the message context contains [Attached file(s)] with a url_private → call slack_download_file({ url_private }). Returns { base64, size_bytes }. Store the base64 value.
+      - If the message context contains [Dashboard session: <key>] → call get_session_file(session_key, filename). Returns { name, mimetype, data_base64 }. Use data_base64.
+      - If slack_download_file or get_session_file returns an error → do NOT send the email. Post in the Slack thread: "⚠️ Could not retrieve the PDF to forward. Please manually forward the invoice to kravemedia@bills.airwallex.com." Then stop.
    b. Call gmail_send with:
         account: "john"
         to: "kravemedia@bills.airwallex.com"
         subject: "Creator Invoice - [Creator Name] | [Invoice #] | [Currency Amount]"
         body: brief summary (creator, invoice #, amount, currency, line items, bank details, due date)
-        attachment_base64: <base64 value from step a>
+        attachment_base64: <the base64 value from step a — required, never omit>
         attachment_mime_type: "application/pdf"
         attachment_filename: "[invoice_number].pdf"
 

@@ -153,13 +153,24 @@ Slack (reply in origin thread + react ✅):
 > Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD.
 
 Email (reply in same thread via `in_reply_to_message_id`):
+
+Before replying, check if the sender is in the Slack workspace: `mcp__slack__slack_get_users` → search by email.
+
+**If sender is in the Slack workspace (internal — @kravemedia.co or known external editors):**
 > Hi [First Name],
 >
 > Received. The invoice for [Creator] ([Amount] [Currency]) has been staged in Airwallex for payment. John will review by end of day.
 >
 > Thanks!
 
-Only reply to `@kravemedia.co` senders. Do not reply to external/creator email addresses.
+**If sender is NOT in the Slack workspace (external vendor/creator):**
+> Hi [First Name],
+>
+> Received — your invoice is being processed. We'll confirm once payment is staged.
+>
+> Thanks!
+
+Do NOT send the detailed internal status to senders who are not in the Slack workspace.
 
 **On hardstop — missing bank details:**
 

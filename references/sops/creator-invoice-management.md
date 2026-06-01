@@ -55,13 +55,15 @@ Run these checks in order:
 3. Create draft bill → `airwallex_create_bill` with: vendor_id, invoice_number, issued_date, due_date, currency, line_items
 4. Bill status: DRAFT or AWAITING_APPROVAL
 
-**API fallback** (if Spend API returns 401 or 404): re-download the PDF via `slack_download_file(url_private)` (Slack-sourced) or use PDF already in memory (email-sourced), then forward to `kravemedia@bills.airwallex.com` with PDF attached. Post bill prep report to John's channel. Log as "Forwarded via Email."
+**API fallback** (if Spend API returns 401 or 404): call `slack_download_file(url_private)` first to get `{ base64 }` (Slack-sourced) or retrieve PDF bytes already in memory (email-sourced), then forward to `kravemedia@bills.airwallex.com` via `gmail_send` with `attachment_base64` set — the PDF must be attached or the forwarding is useless. If download fails, post a Slack message asking for manual forwarding instead. Post bill prep report to John's channel. Log as "Forwarded via Email."
 
 ### Step 4 — Confirm to Requester
 
 After staging:
 - **Slack:** Reply in thread → "Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD." + react ✅
-- **Email:** Reply in same thread → same message, professional tone. Only reply to @kravemedia.co senders.
+- **Email:** Reply in same thread. Check if sender is in the Slack workspace (`slack_get_users` by email):
+  - **Internal (found in workspace):** "Received. The invoice for [Creator] ([Amount] [Currency]) has been staged in Airwallex for payment. John will review by end of day."
+  - **External (not in workspace):** "Received — your invoice is being processed. We'll confirm once payment is staged."
 
 If validation fails (missing bank details etc.) → reply with the specific issue instead.
 

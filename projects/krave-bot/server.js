@@ -24,6 +24,8 @@ const PORT = process.env.PORT || 3001;
 // Drop a new tools/xyz.js and it's live on next deploy, no changes needed here
 // ---------------------------------------------------------------------------
 
+const fileCache = require('./tools/file-cache');
+
 const ALL_TOOLS = [];
 const HANDLERS = {};
 fs.readdirSync(path.join(__dirname, 'tools'))
@@ -90,6 +92,7 @@ async function buildUserContent(text, files) {
   for (const file of supported) {
     try {
       const buf = await downloadSlackImage(file.url_private);
+      fileCache.store(file.url_private, buf.toString('base64'));
       const isPdf = file.mimetype === 'application/pdf';
       blocks.push(isPdf
         ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') } }
@@ -117,7 +120,7 @@ async function runAgent(userContent, convKey) {
   const messages = [...history];
   let finalText = '';
 
-  const LOOP_DEADLINE = Date.now() + 4 * 60 * 1000; // 4-minute hard cap
+  const LOOP_DEADLINE = Date.now() + 10 * 60 * 1000; // 10-minute hard cap
 
   try {
     // agentic loop — keep calling until no more tool_use

@@ -31,7 +31,10 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 3. Validates: hardstop if no bank details (return to sender), hardstop if no PDF. Generates invoice number if missing (`MMDDYYYY-[FirstInitial][LastName]`). Uses Friday of current week if no due date.
 4. Looks up or creates vendor in Airwallex Spend (`airwallex_list_vendors` → `airwallex_create_vendor` if not found — name + email only)
 5. Creates draft bill via `airwallex_create_bill` (external_id, vendor_id, invoice_number, issued_date, due_date, currency, line_items)
-6. Replies to requester: "Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD."
+6. Replies to requester:
+   - **Slack:** "Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD."
+   - **Email (internal — sender found in Slack workspace via `slack_get_users`):** "Received. The invoice for [Creator] ([Amount] [Currency]) has been staged in Airwallex for payment. John will review by end of day."
+   - **Email (external — sender NOT in Slack workspace):** "Received — your invoice is being processed. We'll confirm once payment is staged."
 7. Reacts ✅ to Slack message; replies in email thread for email-sourced invoices
 8. Logs to Creator & AP Bills Tracker (Sheet ID: `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`)
 
@@ -49,6 +52,6 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 ## Codex Invocation Notes
 
 - Run order: dedup check → parse → vendor lookup → create bill → reply → log → update cursor
-- API fallback if Spend returns 401 or 404: call `slack_download_file(url_private)` to get PDF bytes, then forward to kravemedia@bills.airwallex.com with PDF attached via `gmail_send(attachment_base64)`, post prep report to C0AQZGJDR38
+- API fallback if Spend returns 401 or 404: call `slack_download_file(url_private)` first to get `{ base64 }`, then forward to kravemedia@bills.airwallex.com via `gmail_send(attachment_base64=<that base64>)`. NEVER call gmail_send without attachment_base64 — an email without the PDF is useless. If download fails, post a Slack message instead asking for manual forwarding. Post prep report to C0AQZGJDR38.
 - Multiple PDFs in one email = one bill per PDF, one consolidated reply
 - legal_entity_id is TBD — omit until confirmed in the skill file

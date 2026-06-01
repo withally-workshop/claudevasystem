@@ -1,6 +1,7 @@
 'use strict';
 
 const https = require('https');
+const fileCache = require('./file-cache');
 
 function slackGet(path) {
   return new Promise((resolve, reject) => {
@@ -90,6 +91,8 @@ async function postMessageAsJohn({ channel, text, thread_ts }) {
 }
 
 async function downloadFile({ url_private }) {
+  const cached = fileCache.retrieve(url_private);
+  if (cached) return { base64: cached, size_bytes: Buffer.from(cached, 'base64').length };
   return new Promise((resolve, reject) => {
     const url = new URL(url_private);
     const opts = {
