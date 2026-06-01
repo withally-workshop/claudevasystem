@@ -141,7 +141,6 @@ async function runAgent(userContent, convKey) {
             system: CACHED_SYSTEM,
             tools: ALL_TOOLS.map((t, i) => i === ALL_TOOLS.length - 1 ? { ...t, cache_control: { type: 'ephemeral' } } : t),
             messages,
-            betas: ['prompt-caching-2024-07-31'],
           });
           break;
         } catch (e) {
