@@ -33,8 +33,7 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 5. Creates draft bill via `airwallex_create_bill` (external_id, vendor_id, invoice_number, issued_date, due_date, currency, line_items)
 6. Replies to requester:
    - **Slack:** "Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD."
-   - **Email (internal — sender found in Slack workspace via `slack_get_users`):** "Received. The invoice for [Creator] ([Amount] [Currency]) has been staged in Airwallex for payment. John will review by end of day."
-   - **Email (external — sender NOT in Slack workspace):** "Received — your invoice is being processed. We'll confirm once payment is staged."
+   - **Email:** "Hi [First Name], Received. Staged for payment — John will review by EOD. Cheers, John / Krave Media"
 7. Reacts ✅ to Slack message; replies in email thread for email-sourced invoices
 8. Logs to Creator & AP Bills Tracker (Sheet ID: `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`)
 

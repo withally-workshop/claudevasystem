@@ -61,9 +61,7 @@ Run these checks in order:
 
 After staging:
 - **Slack:** Reply in thread → "Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD." + react ✅
-- **Email:** Reply in same thread. Check if sender is in the Slack workspace (`slack_get_users` by email):
-  - **Internal (found in workspace):** "Received. The invoice for [Creator] ([Amount] [Currency]) has been staged in Airwallex for payment. John will review by end of day."
-  - **External (not in workspace):** "Received — your invoice is being processed. We'll confirm once payment is staged."
+- **Email:** Reply in same thread → "Hi [First Name], Received. Staged for payment — John will review by EOD. Cheers, John / Krave Media"
 
 If validation fails (missing bank details etc.) → reply with the specific issue instead.
 

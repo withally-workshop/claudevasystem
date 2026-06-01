@@ -154,23 +154,13 @@ Slack (reply in origin thread + react ✅):
 
 Email (reply in same thread via `in_reply_to_message_id`):
 
-Before replying, check if the sender is in the Slack workspace: `mcp__slack__slack_get_users` → search by email.
-
-**If sender is in the Slack workspace (internal — @kravemedia.co or known external editors):**
 > Hi [First Name],
 >
-> Received. The invoice for [Creator] ([Amount] [Currency]) has been staged in Airwallex for payment. John will review by end of day.
+> Received. Staged for payment — John will review by EOD.
 >
-> Thanks!
-
-**If sender is NOT in the Slack workspace (external vendor/creator):**
-> Hi [First Name],
->
-> Received — your invoice is being processed. We'll confirm once payment is staged.
->
-> Thanks!
-
-Do NOT send the detailed internal status to senders who are not in the Slack workspace.
+> Cheers,
+> John
+> Krave Media
 
 **On hardstop — missing bank details:**
 

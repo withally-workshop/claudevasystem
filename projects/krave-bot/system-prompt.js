@@ -85,7 +85,7 @@ IMPORTANT: Do NOT call gmail_send without the PDF attached — an email without 
         attachment_mime_type: "application/pdf"
         attachment_filename: "[invoice_number].pdf"
 
-5. Reply in thread: "Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD."
+5. Reply in thread (Slack) or email: "Hi [First Name], Received. Staged for payment — John will review by EOD. Cheers, John / Krave Media"
 
 6. React ✅ to the original message.
 
