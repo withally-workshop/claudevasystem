@@ -1875,7 +1875,6 @@ function renderDashboard(d) {
   <div id="ai-input-area">
     <div id="ai-quick-actions">
       <button class="ai-quick-btn" id="scan-email-btn" onclick="triggerEmailScan()">Scan Email</button>
-      <button class="ai-quick-btn" onclick="aiQuickSend('run inbox triage')">Inbox Triage</button>
     </div>
     <div id="ai-file-badge">
       <span>📎</span>
