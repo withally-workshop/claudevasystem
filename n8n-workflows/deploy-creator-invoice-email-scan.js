@@ -43,65 +43,63 @@ const AW_API_KEY      = '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af
 
 const EXTRACT_PDF_ATTACHMENTS = `
 // Runs once across all input items.
-// Extracts one output item per attachment found in each email.
-// Gmail search already filters for PDF emails — accept any attachment with an ID.
+// Accepts PDF and image (PNG/JPG) invoice attachments.
 function findAttachments(parts, found) {
   if (!parts) return found;
   for (const p of parts) {
-    if (p.body && p.body.attachmentId && p.filename &&
-        (p.mimeType === 'application/pdf' ||
-         (p.filename || '').toLowerCase().endsWith('.pdf'))) {
-      found.push({ attachmentId: p.body.attachmentId, attachmentName: p.filename });
+    if (p.body && p.body.attachmentId) {
+      const name = (p.filename || p.name || '').toLowerCase();
+      const mime = (p.mimeType || '').toLowerCase();
+      const isInvoiceFile = name.endsWith('.pdf') || name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg')
+        || mime === 'application/pdf' || mime.startsWith('image/');
+      if (isInvoiceFile && (p.filename || p.name)) {
+        found.push({ attachmentId: p.body.attachmentId, attachmentName: p.filename || p.name, mimeType: p.mimeType || 'application/octet-stream' });
+      }
     }
-    if (p.parts) findPDFs(p.parts, found);
+    if (p.parts) findAttachments(p.parts, found);
   }
   return found;
 }
 
-function hdrFrom(msg) {
+function getHeader(msg, name) {
   const payload = msg.payload || {};
   const arr = Array.isArray(payload.headers) ? payload.headers : [];
-  function fromArr(name) {
-    const h = arr.find(h => String(h.name || '').toLowerCase() === name.toLowerCase());
-    return h ? h.value : '';
-  }
-  function fromFlat(name) {
-    const flat = msg.headers && typeof msg.headers === 'object' ? msg.headers : {};
-    const raw = flat[name.toLowerCase()] || flat[name] || '';
-    const colon = raw.indexOf(':');
-    if (colon > 0 && colon < 20) return raw.slice(colon + 1).trim();
-    return raw;
-  }
-  function hdr(name) { return fromArr(name) || fromFlat(name); }
-  return { from: hdr('from'), subject: hdr('subject') || '(no subject)' };
+  const fromArr = arr.find(h => String(h.name || '').toLowerCase() === name.toLowerCase());
+  if (fromArr) return fromArr.value;
+  const flat = msg.headers && typeof msg.headers === 'object' ? msg.headers : {};
+  const raw = flat[name.toLowerCase()] || flat[name] || '';
+  if (!raw) return '';
+  const colon = raw.indexOf(':');
+  if (colon > 0 && colon < 20) return raw.slice(colon + 1).trim();
+  return raw;
 }
 
 const output = [];
-
 for (const item of $input.all()) {
   const msg = item.json;
   const payload = msg.payload || {};
-  const pdfs = findPDFs(payload.parts || [], []);
-  if (!pdfs.length) continue;
+  const attachments = findAttachments(payload.parts || [], []);
+  if (!attachments.length) continue;
 
-  const { from: rawFrom, subject } = hdrFrom(msg);
+  const rawFrom = getHeader(msg, 'from');
   const mf = rawFrom.match(/^([^<]*?)<([^>]+)>/);
   const fromName  = mf ? mf[1].trim().replace(/^["']|["']$/g, '') : rawFrom.trim();
   const fromEmail = (mf ? mf[2] : rawFrom).trim().toLowerCase();
+  const subject   = getHeader(msg, 'subject') || '(no subject)';
 
-  for (const pdf of pdfs) {
+  for (const att of attachments) {
     output.push({ json: {
       messageId:      String(msg.id || ''),
       threadId:       String(msg.threadId || ''),
       subject:        String(subject),
       fromName:       String(fromName),
       fromEmail:      String(fromEmail),
-      attachmentId:   String(pdf.attachmentId),
-      attachmentName: String(pdf.attachmentName),
+      attachmentId:   String(att.attachmentId),
+      attachmentName: String(att.attachmentName),
+      mimeType:       String(att.mimeType),
     }});
   }
 }
-
 return output;
 `.trim();
 
@@ -120,15 +118,30 @@ const PREPARE_CLAUDE_REQUEST = `
 const output = [];
 for (const item of $input.all()) {
   const ctx = item.json;
-  const system = 'You are an invoice parser. Extract invoice data from the PDF and return ONLY valid JSON with these exact fields: { "creator_name": "string", "email": "string or null", "invoice_number": "string or null", "issued_date": "YYYY-MM-DD or null", "due_date": "YYYY-MM-DD or null", "amount": number, "currency": "ISO currency code e.g. USD SGD AUD", "line_items": [{"description":"string","quantity":number,"unit_price":number}], "bank_details": { "bank_name": "string or null", "account_name": "string or null", "account_number": "string or null", "swift": "string or null", "iban": "string or null", "bsb": "string or null", "routing_number": "string or null" }, "has_bank_details": boolean }';
+  const mime = (ctx.mimeType || '').toLowerCase();
+  const isPdf = mime === 'application/pdf' || ctx.attachmentName.toLowerCase().endsWith('.pdf');
+  const isImage = mime.startsWith('image/') || /\\.(png|jpg|jpeg|gif|webp)$/i.test(ctx.attachmentName);
+
+  let contentBlock;
+  if (isPdf) {
+    contentBlock = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: ctx.pdfBase64 } };
+  } else if (isImage) {
+    const imgMime = mime.startsWith('image/') ? mime : 'image/png';
+    contentBlock = { type: 'image', source: { type: 'base64', media_type: imgMime, data: ctx.pdfBase64 } };
+  } else {
+    contentBlock = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: ctx.pdfBase64 } };
+  }
+
+  const system = 'You are an invoice parser. Extract invoice data from the attached file and return ONLY valid JSON with these exact fields: { "creator_name": "string", "email": "string or null", "invoice_number": "string or null", "issued_date": "YYYY-MM-DD or null", "due_date": "YYYY-MM-DD or null", "amount": number, "currency": "ISO currency code e.g. USD SGD AUD", "line_items": [{"description":"string","quantity":number,"unit_price":number}], "bank_details": { "bank_name": "string or null", "account_name": "string or null", "account_number": "string or null", "swift": "string or null", "iban": "string or null", "bsb": "string or null", "routing_number": "string or null" }, "has_bank_details": boolean }';
+
   output.push({ json: {
     ...ctx,
     claudeSystem: system,
     claudeMessages: [{
       role: 'user',
       content: [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: ctx.pdfBase64 } },
-        { type: 'text', text: 'Extract the invoice data from this PDF and return the JSON as specified.' }
+        contentBlock,
+        { type: 'text', text: 'Extract the invoice data from this file and return the JSON as specified.' }
       ]
     }]
   }});
@@ -279,7 +292,7 @@ const workflow = {
         returnAll: false,
         limit: 20,
         simple: true,
-        filters: { q: 'is:unread has:attachment filename:pdf in:inbox (invoice OR bill OR creator OR payment)' },
+        filters: { q: 'is:unread has:attachment in:inbox (invoice OR bill OR creator OR payment) (filename:pdf OR filename:png OR filename:jpg OR filename:jpeg)' },
       },
     },
     {
