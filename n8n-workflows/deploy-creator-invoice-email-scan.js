@@ -210,19 +210,20 @@ return output;
 `.trim();
 
 const BUILD_SLACK_FALLBACK = `
+const contexts = $('Parse & Validate').all();
 const output = [];
-for (const item of $input.all()) {
-  const ctx = item.json;
+$input.all().forEach((item, i) => {
+  const ctx = (contexts[i] || { json: {} }).json;
   const lines = [
     '*Creator Invoice - Manual Entry Required*',
     '- Creator: ' + (ctx.creatorName || 'Unknown'),
     '- Email: ' + (ctx.creatorEmail || 'Unknown'),
-    '- Invoice #: ' + ctx.invoiceNumber,
-    '- Amount: ' + ctx.currency + ' ' + ctx.amount,
-    '- Issued: ' + ctx.issuedDate,
-    '- Due: ' + ctx.dueDate,
+    '- Invoice #: ' + (ctx.invoiceNumber || 'Unknown'),
+    '- Amount: ' + (ctx.currency || '') + ' ' + (ctx.amount || ''),
+    '- Issued: ' + (ctx.issuedDate || 'Unknown'),
+    '- Due: ' + (ctx.dueDate || 'Unknown'),
     '',
-    'Airwallex Spend API unavailable - please create manually or forward PDF to kravemedia@bills.airwallex.com.',
+    'Airwallex Spend API unavailable - please create this bill manually or forward the PDF to kravemedia@bills.airwallex.com.',
     '',
     'Bank Details:',
   ];
@@ -233,9 +234,9 @@ for (const item of $input.all()) {
   if (bd.swift) lines.push('  SWIFT: ' + bd.swift);
   if (bd.bsb) lines.push('  BSB: ' + bd.bsb);
   if (bd.iban) lines.push('  IBAN: ' + bd.iban);
-  lines.push('', 'Source: ' + ctx.fromEmail + ' - ' + ctx.subject);
+  lines.push('', 'Source: ' + (ctx.fromEmail || '') + ' - ' + (ctx.subject || ''));
   output.push({ json: { ...ctx, slackText: lines.join('\\n') } });
-}
+});
 return output;
 `.trim();
 
