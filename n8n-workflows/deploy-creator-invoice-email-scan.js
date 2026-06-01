@@ -43,7 +43,7 @@ const AW_API_KEY      = '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af
 
 const EXTRACT_PDF_ATTACHMENTS = `
 // Returns one item per PDF attachment found in the email.
-// If email has no PDFs, returns [] and the item is dropped.
+// Handles both simple:false (payload.headers array) and simple:true (flat headers object).
 function findPDFs(parts, found) {
   if (!parts) return found;
   for (const p of parts) {
@@ -58,27 +58,37 @@ function findPDFs(parts, found) {
 }
 
 const msg = $input.item.json;
-const headers = (msg.payload && msg.payload.headers) || [];
-function hdr(name) {
-  const h = headers.find(h => String(h.name || '').toLowerCase() === name.toLowerCase());
+const payload = msg.payload || {};
+const headerArr = Array.isArray(payload.headers) ? payload.headers : [];
+
+function hdrArr(name) {
+  const h = headerArr.find(h => String(h.name || '').toLowerCase() === name.toLowerCase());
   return h ? h.value : '';
 }
-const raw = hdr('from');
-const m = raw.match(/^([^<]*?)<([^>]+)>/);
-const fromName  = m ? m[1].trim().replace(/^["']|["']$/g, '') : raw.trim();
-const fromEmail = (m ? m[2] : raw).trim().toLowerCase();
+function hdrFlat(name) {
+  const flat = msg.headers && typeof msg.headers === 'object' ? msg.headers : {};
+  return flat[name.toLowerCase()] || flat[name] || '';
+}
+function hdr(name) { return hdrArr(name) || hdrFlat(name); }
 
-const pdfs = findPDFs((msg.payload && msg.payload.parts) || [], []);
+const rawFrom = hdr('from');
+const mf = rawFrom.match(/^([^<]*?)<([^>]+)>/);
+const fromName  = mf ? mf[1].trim().replace(/^["']|["']$/g, '') : rawFrom.trim();
+const fromEmail = (mf ? mf[2] : rawFrom).trim().toLowerCase();
+const subject   = hdr('subject') || '(no subject)';
+
+const pdfs = findPDFs(payload.parts || [], []);
+
 if (!pdfs.length) return [];
 
 return pdfs.map(pdf => ({ json: {
-  messageId:      msg.id,
-  threadId:       msg.threadId,
-  subject:        hdr('subject') || '(no subject)',
+  messageId:      String(msg.id || ''),
+  threadId:       String(msg.threadId || ''),
+  subject,
   fromName,
   fromEmail,
-  attachmentId:   pdf.attachmentId,
-  attachmentName: pdf.attachmentName,
+  attachmentId:   String(pdf.attachmentId),
+  attachmentName: String(pdf.attachmentName),
 }}));
 `.trim();
 
