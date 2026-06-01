@@ -228,6 +228,27 @@ async function sendEmail({ account = 'noa', to, cc, subject, body, thread_id, at
   return res.error ? { error: res.error } : { message_id: res.id, thread_id: res.threadId, status: 'sent' };
 }
 
+async function downloadAttachment({ account = 'noa', message_id, attachment_id }) {
+  const email = account === 'john' ? 'john@kravemedia.co' : 'noa@kravemedia.co';
+  const token = await getToken(email);
+  const d = await gmailGet(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message_id}/attachments/${attachment_id}`,
+    { Authorization: `Bearer ${token}` }
+  );
+  return { base64: d.data || '' };
+}
+
+async function markRead({ account = 'noa', message_id }) {
+  const email = account === 'john' ? 'john@kravemedia.co' : 'noa@kravemedia.co';
+  const token = await getToken(email);
+  await gmailPost(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message_id}/modify`,
+    JSON.stringify({ removeLabelIds: ['UNREAD'] }),
+    { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+  );
+  return { success: true, message_id };
+}
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
@@ -260,6 +281,31 @@ module.exports = {
       },
     },
     {
+      name: 'gmail_download_attachment',
+      description: 'Download a Gmail attachment as base64. Get message_id and attachment_id from gmail_get_message first.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          account: { type: 'string', description: '"noa" or "john" (default: noa)' },
+          message_id: { type: 'string', description: 'Gmail message ID' },
+          attachment_id: { type: 'string', description: 'Attachment ID from the attachments array in gmail_get_message' },
+        },
+        required: ['message_id', 'attachment_id'],
+      },
+    },
+    {
+      name: 'gmail_mark_read',
+      description: 'Mark a Gmail message as read (removes UNREAD label). Use after processing an email to prevent reprocessing.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          account: { type: 'string', description: '"noa" or "john" (default: noa)' },
+          message_id: { type: 'string', description: 'Gmail message ID to mark as read' },
+        },
+        required: ['message_id'],
+      },
+    },
+    {
       name: 'gmail_send',
       description: 'Send an email from Noa or John\'s Gmail account. Supports CC and PDF attachments via URL.',
       input_schema: {
@@ -284,5 +330,7 @@ module.exports = {
     gmail_search: searchMessages,
     gmail_get_message: getMessage,
     gmail_send: sendEmail,
+    gmail_download_attachment: downloadAttachment,
+    gmail_mark_read: markRead,
   },
 };

@@ -309,6 +309,33 @@ setInterval(() => {
   for (const [k, v] of sessionFileCache) if (v._ts < cutoff) sessionFileCache.delete(k);
 }, 5 * 60 * 1000);
 
+// ---------------------------------------------------------------------------
+// Autonomous email scan — runs every 3h on weekdays (PHT)
+// Replaces n8n workflow DbIJYYQ3FE4HKprB
+// ---------------------------------------------------------------------------
+
+function isWeekdayPHT() {
+  const day = new Date(Date.now() + 8 * 60 * 60 * 1000).getUTCDay();
+  return day >= 1 && day <= 5;
+}
+
+const EMAIL_SCAN_PROMPT = 'Autonomous task: scan john@kravemedia.co for unread emails with PDF invoice attachments (query: "is:unread has:attachment filename:pdf"). For each email found: get the full message, download each PDF attachment via gmail_download_attachment, parse it with document vision, validate it (hardstop if no bank details — reply asking to reissue; skip if no PDF), create a draft bill in Airwallex, check if sender is in the Slack workspace to determine reply tier, reply to the sender, log to the Creator & AP Bills Tracker (Sheet ID: 14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc), and mark the email as read with gmail_mark_read. Follow all creator invoice processing rules. Process every unread invoice found before stopping.';
+
+setInterval(async () => {
+  if (!isWeekdayPHT()) return;
+  const scanKey = 'autonomous:email-scan';
+  conversations.delete(scanKey);
+  try {
+    console.log('[email-scan] starting autonomous email scan');
+    await runAgent(EMAIL_SCAN_PROMPT, scanKey);
+    console.log('[email-scan] scan complete');
+  } catch (e) {
+    console.error('[email-scan] error:', e.message);
+  } finally {
+    conversations.delete(scanKey);
+  }
+}, 3 * 60 * 60 * 1000);
+
 ALL_TOOLS.push({
   name: 'get_session_file',
   description: 'Retrieve a file uploaded via the dashboard chat as base64. Use this before gmail_send when you need to attach a file that was uploaded through the ops dashboard (not Slack). Returns { name, mimetype, data_base64 }.',

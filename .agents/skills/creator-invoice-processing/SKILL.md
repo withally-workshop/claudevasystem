@@ -13,7 +13,7 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 
 **Real-time (krave-bot):** Fires automatically when John receives a Slack DM with PDF or a strategist @mentions Claude EA in #payments-invoices-updates with a PDF attached.
 
-**Scheduled (email):** n8n workflow `Krave — Creator Invoice Email Scan` (`DbIJYYQ3FE4HKprB`) runs every 3 hours Mon–Fri — scans john@kravemedia.co inbox. Manual trigger: `POST https://noatakhel.app.n8n.cloud/webhook/krave-creator-invoice-email-scan`.
+**Scheduled (email):** krave-bot internal loop — every 3h Mon–Fri PHT. No external trigger. n8n workflow `DbIJYYQ3FE4HKprB` is retired.
 
 **Manual skill run:** Follow `.claude/skills/creator-invoice-processing/SKILL.md` step-by-step.
 

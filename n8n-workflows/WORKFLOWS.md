@@ -47,7 +47,7 @@
 | 19 | LinkedIn Post Monitor | `wNXs7wqHz5d5naJN` | Inactive (needs actor verification) | Every 30min all day | Scrape Noa's LinkedIn profile via Apify every 30min, detect new posts using workflow static data, alert John in #noa-linkedin-posts with preview + link |
 | 20 | Halo - VA Slack Bot | TBD | Pending deploy | `app_mention` in #halo-home | VA @mentions bot → Claude classifies intent → Shopify API → formatted reply in thread |
 | 21 | Halo - Daily Digest | TBD | Pending deploy | Midnight UTC (8 AM PHT) daily | Pull yesterday's Shopify orders → Claude formats → post to #halo-home |
-| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Active | Every 3h Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` | Scan john@kravemedia.co for unread invoice PDFs, parse with Claude, validate bank details, create Airwallex draft bills, reply to sender, log to Creator & AP Bills Tracker |
+| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | **Retired** | — | Replaced by krave-bot internal email scan loop (server.js `setInterval`, every 3h Mon–Fri PHT) |
 | 22 | Halo - Inventory Alert | TBD | Pending deploy | Midnight UTC (8 AM PHT) daily | Compare product OOS state vs previous run, alert #halo-home on changes only |
 
 ---
@@ -1457,10 +1457,11 @@ Posts yesterday's Halo Home sales summary to #halo-home every morning. Gives the
 
 **n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/DbIJYYQ3FE4HKprB`
 **Deploy script:** `n8n-workflows/deploy-creator-invoice-email-scan.js`
+**Status: RETIRED** — logic moved into krave-bot (`projects/krave-bot/server.js`). Workflow deactivated. Deploy script kept for reference only.
 
 ### Purpose
 
-Replaces the manual email-check step for creator/AP invoice intake. Scans john@kravemedia.co every 3 hours for unread emails with PDF attachments, parses each PDF with Claude Sonnet, validates bank details (hardstop if missing), creates draft bills in Airwallex Spend, replies to the original sender, and logs to the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`). Falls back to forwarding the PDF (with attachment) to kravemedia@bills.airwallex.com and posting a prep report to #ops-command if the Spend API returns 401 or 404.
+~~Replaces the manual email-check step for creator/AP invoice intake.~~ Scans john@kravemedia.co every 3 hours for unread emails with PDF attachments, parses each PDF with Claude Sonnet, validates bank details (hardstop if missing), creates draft bills in Airwallex Spend, replies to the original sender, and logs to the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`). Falls back to forwarding the PDF (with attachment) to kravemedia@bills.airwallex.com and posting a prep report to #ops-command if the Spend API returns 401 or 404.
 
 ### Triggers
 
