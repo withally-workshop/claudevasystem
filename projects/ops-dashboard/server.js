@@ -1479,6 +1479,9 @@ function renderDashboard(d) {
   #ai-send-btn { background: var(--accent); color: #fff; border: none; border-radius: 20px; padding: 9px 16px; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity var(--dur) var(--ease); font-family: inherit; flex-shrink: 0; }
   #ai-send-btn:hover { opacity: 0.85; }
   #ai-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #ai-quick-actions { display: flex; gap: 6px; padding: 8px 14px 0; flex-wrap: wrap; }
+  .ai-quick-btn { background: var(--surface-2); border: 0.5px solid var(--border-med); color: var(--text-3); border-radius: 100px; padding: 4px 11px; font-size: 11px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: all var(--dur) var(--ease); font-family: inherit; }
+  .ai-quick-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
   /* ── Animations ── */
   @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.4); } }
@@ -1858,6 +1861,10 @@ function renderDashboard(d) {
   </div>
   <div id="ai-messages"></div>
   <div id="ai-input-area">
+    <div id="ai-quick-actions">
+      <button class="ai-quick-btn" onclick="aiQuickSend('scan email for new invoices')">Scan Email</button>
+      <button class="ai-quick-btn" onclick="aiQuickSend('run inbox triage')">Inbox Triage</button>
+    </div>
     <div id="ai-file-badge">
       <span>📎</span>
       <span id="ai-file-badge-name"></span>
@@ -2038,6 +2045,12 @@ function renderDashboard(d) {
       input.disabled = false;
       input.focus();
     }
+  };
+
+  window.aiQuickSend = function(message) {
+    const input = document.getElementById('ai-input');
+    input.value = message;
+    window.aiSend();
   };
 
   document.getElementById('ai-input').addEventListener('keydown', function(e) {
