@@ -43,6 +43,7 @@ fs.readdirSync(path.join(__dirname, 'tools'))
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const SYSTEM_PROMPT = buildSystemPrompt();
+const CACHED_SYSTEM = [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }];
 
 // conversation history per thread (keyed by channel+thread_ts or channel for DMs)
 const conversations = new Map();
@@ -137,9 +138,10 @@ async function runAgent(userContent, convKey) {
           response = await anthropic.messages.create({
             model: 'claude-sonnet-4-6',
             max_tokens: 2048,
-            system: SYSTEM_PROMPT,
-            tools: ALL_TOOLS,
+            system: CACHED_SYSTEM,
+            tools: ALL_TOOLS.map((t, i) => i === ALL_TOOLS.length - 1 ? { ...t, cache_control: { type: 'ephemeral' } } : t),
             messages,
+            betas: ['prompt-caching-2024-07-31'],
           });
           break;
         } catch (e) {
