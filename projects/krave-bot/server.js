@@ -267,7 +267,6 @@ function withContext(text, displayName, threadTs) {
 // DMs
 app.event('message', async ({ event, say, client }) => {
   if (event.bot_id || (event.subtype && event.subtype !== 'file_share')) return;
-  if (isDuplicate(event.client_msg_id || event.ts)) return;
 
   // Forward drafts channel messages to n8n approval polling workflow
   if (event.channel === DRAFTS_CHANNEL) {
@@ -275,7 +274,10 @@ app.event('message', async ({ event, say, client }) => {
     return;
   }
 
+  // Only handle DMs — channel @mentions are handled by app_mention
   if (event.channel_type !== 'im') return;
+
+  if (isDuplicate(event.client_msg_id || event.ts)) return;
 
   const convKey = getConvKey(event.channel, null);
   try {
