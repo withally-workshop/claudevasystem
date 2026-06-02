@@ -274,6 +274,24 @@ app.event('message', async ({ event, say, client }) => {
     return;
   }
 
+  // Handle thread follow-ups in channels when bot is already in that conversation
+  if (event.thread_ts && event.channel_type !== 'im') {
+    const threadKey = getConvKey(event.channel, event.thread_ts);
+    if (!conversations.has(threadKey)) return;
+    if (isDuplicate(event.client_msg_id || event.ts)) return;
+    try {
+      const displayName = await resolveDisplayName(client, event.user);
+      const contextText = withContext(event.text || '', displayName, event.thread_ts);
+      const userContent = await buildUserContent(contextText, event.files);
+      const reply = await runAgent(userContent, threadKey);
+      await say({ text: reply, thread_ts: event.thread_ts });
+    } catch (e) {
+      console.error('Thread follow-up error:', e);
+      await say({ text: `Error: ${e.message}`, thread_ts: event.thread_ts });
+    }
+    return;
+  }
+
   // Only handle DMs — channel @mentions are handled by app_mention
   if (event.channel_type !== 'im') return;
 
