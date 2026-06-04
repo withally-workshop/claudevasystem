@@ -184,7 +184,7 @@
             textEl.textContent = BADGE_MESSAGES[msgIndex];
             textEl.classList.remove('fade-out');
           }, 400);
-        }, 4000);
+        }, 8000);
       }
     } catch(e) {}
 
