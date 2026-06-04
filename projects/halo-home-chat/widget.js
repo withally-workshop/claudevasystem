@@ -9,14 +9,14 @@
   var BADGE_MESSAGES = [
     "Hey! I'm Mimi, your Halo Home guide 👋",
     "Bye bye, chlorine. Hello, healthy skin & hair 🚿",
-    "Not sure which filter is right for you? Ask me!",
+    "Not sure which filter suits you? Ask me! 💧",
     "Got a question about your order? I'm here 💬",
-    "Filters need replacing every 90 days — I can help!",
-    "New to Halo Home? Let me show you around ✨",
     "Make your home your heaven 🌿",
-    "Check out our Smart Refill Plan — never run out of filters!",
-    "Sensitive skin? Ask me about the right filter for you 💧",
-    "Free to chat — ask me anything about Halo Home!",
+    "New to Halo Home? Let me show you around ✨",
+    "Ask me anything — I'm here to help!",
+    "Sensitive skin? I'll find the right filter for you 🌸",
+    "Never run out of filters — ask me about the Refill Plan!",
+    "Free to chat anytime. What can I help with? 😊",
   ];
   var LOGO_URL = 'https://cdn.shopify.com/s/files/1/0821/7765/5106/files/HaloHomeFavicon.png?v=1755746071';
 
@@ -40,12 +40,12 @@
     #halo-chat-bubble:hover { transform: scale(1.08); }
     #halo-chat-badge {
       position: fixed; bottom: 92px; right: 24px; z-index: 9999;
-      background: #fff; border-radius: 12px 12px 4px 12px;
+      background: #fff; border-radius: 20px;
       box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-      padding: 10px 14px 10px 12px; max-width: 220px;
+      padding: 10px 14px 10px 14px; max-width: calc(100vw - 80px);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      font-size: 13px; line-height: 1.4; color: #1a1a1a;
-      display: flex; align-items: flex-start; gap: 8px; cursor: pointer;
+      font-size: 13px; line-height: 1; color: #1a1a1a; white-space: nowrap;
+      display: flex; align-items: center; gap: 10px; cursor: pointer;
       animation: halo-badge-in 0.3s ease;
     }
     #halo-chat-badge:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.16); }
