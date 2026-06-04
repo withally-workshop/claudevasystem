@@ -104,9 +104,13 @@ app.post('/chat', async (req, res) => {
       try {
         const orders = await getOrdersByEmail(email);
         if (orders.length > 0) {
+          // Security: only pass safe fields — intentionally omit shipping_address,
+          // customer PII, phone, billing_address, customer ID, and internal notes.
           const summaries = orders.slice(0, 5).map((o) => {
             const items = (o.line_items || []).map((li) => `${li.name} x${li.quantity}`).join(', ');
-            return `Order #${o.order_number} — ${o.financial_status} — ${o.created_at?.split('T')[0]} — ${items} — $${o.total_price} SGD`;
+            const fulfillment = o.fulfillment_status || 'unfulfilled';
+            const tracking = o.fulfillments?.[0]?.tracking_number || null;
+            return `Order #${o.order_number} — ${o.financial_status} — ${fulfillment} — ${o.created_at?.split('T')[0]} — ${items} — $${o.total_price} SGD${tracking ? ' — Tracking: ' + tracking : ''}`;
           });
           orderContext = `\n\n[Order data for ${email}]\n${summaries.join('\n')}`;
         } else {
