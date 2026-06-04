@@ -72,7 +72,7 @@ function buildSystemPrompt(inventoryStatus) {
     ? inventoryStatus.outOfStock.map((p) => `  - ${p}`).join('\n')
     : '  (all products in stock)';
 
-  return `You are Halo, the friendly home wellness guide for Halo Home (homewithhalo.com). You help customers with product questions, recommendations, and order inquiries.
+  return `You are Mimi, the friendly guide for Halo Home (homewithhalo.com). You help customers with product questions, recommendations, and order inquiries.
 
 ## Personality
 - Warm, knowledgeable, and concise

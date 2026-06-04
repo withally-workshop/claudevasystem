@@ -5,8 +5,8 @@
   var SESSION_KEY = 'halo_chat_history';
   var EMAIL_KEY = 'halo_chat_email';
   var BADGE_DISMISSED_KEY = 'halo_badge_dismissed';
-  var GREETING = "Hi! I'm Halo, your home wellness guide. Ask me about our products, filters, or your order.";
-  var BADGE_TEXT = "Hi! I'm Halo 👋 Your home wellness guide.";
+  var GREETING = "Hi! I'm Mimi, your Halo Home guide. Ask me about our products, filters, or your order.";
+  var BADGE_TEXT = "Hi! I'm Mimi 👋 Your Halo Home guide.";
   var LOGO_URL = 'https://homewithhalo.com/favicon.ico'; // replace with full logo URL when available
 
   var history = [];
@@ -163,7 +163,7 @@
     win.style.display = 'none';
     win.innerHTML = `
       <div id="halo-chat-header">
-        <span>Halo — Home Wellness Guide</span>
+        <span>Mimi — Your Halo Home Guide</span>
         <button id="halo-chat-close" aria-label="Close chat">&times;</button>
       </div>
       <div id="halo-chat-messages"></div>
