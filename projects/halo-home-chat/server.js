@@ -64,6 +64,28 @@ const limiter = rateLimit({
 });
 app.use('/chat', limiter);
 
+// Temporary OAuth callback — captures Shopify access token during app install
+app.get('/auth/callback', async (req, res) => {
+  const { code, shop } = req.query;
+  if (!code || !shop) return res.status(400).send('Missing code or shop');
+  try {
+    const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: process.env.SHOPIFY_CLIENT_ID,
+        client_secret: process.env.SHOPIFY_CLIENT_SECRET,
+        code,
+      }),
+    });
+    const data = await tokenRes.json();
+    if (!data.access_token) return res.send(`<pre>Error: ${JSON.stringify(data)}</pre>`);
+    res.send(`<h2>✅ Token captured</h2><p>Copy this and update SHOPIFY_ACCESS_TOKEN everywhere:</p><p style="font-size:18px;font-weight:bold;word-break:break-all;">${data.access_token}</p><p>Scopes: ${data.scope}</p>`);
+  } catch (err) {
+    res.status(500).send(`Error: ${err.message}`);
+  }
+});
+
 app.get('/widget.js', (_req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Cache-Control', 'public, max-age=300');
