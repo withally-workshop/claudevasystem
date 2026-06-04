@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const rateLimit = require('express-rate-limit');
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 const { getProducts, getOrdersByEmail, getInventoryStatus } = require('./shopify');
@@ -53,6 +54,12 @@ const limiter = rateLimit({
   message: { error: 'Too many requests — please try again in a moment.' },
 });
 app.use('/chat', limiter);
+
+app.get('/widget.js', (_req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.sendFile(path.join(__dirname, 'widget.js'));
+});
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', catalogAge: Date.now() - catalogCache.lastRefresh }));
 
