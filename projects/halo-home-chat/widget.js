@@ -6,7 +6,18 @@
   var EMAIL_KEY = 'halo_chat_email';
   var BADGE_DISMISSED_KEY = 'halo_badge_dismissed';
   var GREETING = "Hi! I'm Mimi, your Halo Home guide. Ask me about our products, filters, or your order.";
-  var BADGE_TEXT = "Hi! I'm Mimi 👋 Your Halo Home guide.";
+  var BADGE_MESSAGES = [
+    "Hey! I'm Mimi, your Halo Home guide 👋",
+    "Bye bye, chlorine. Hello, healthy skin & hair 🚿",
+    "Not sure which filter is right for you? Ask me!",
+    "Got a question about your order? I'm here 💬",
+    "Filters need replacing every 90 days — I can help!",
+    "New to Halo Home? Let me show you around ✨",
+    "Make your home your heaven 🌿",
+    "Check out our Smart Refill Plan — never run out of filters!",
+    "Sensitive skin? Ask me about the right filter for you 💧",
+    "Free to chat — ask me anything about Halo Home!",
+  ];
   var LOGO_URL = 'https://cdn.shopify.com/s/files/1/0821/7765/5106/files/HaloHomeFavicon.png?v=1755746071';
 
   var history = [];
@@ -18,7 +29,7 @@
 
   var css = `
     #halo-chat-bubble {
-      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+      position: fixed; bottom: 72px; right: 24px; z-index: 9999;
       width: 56px; height: 56px; border-radius: 50%;
       background: #1a1a1a; color: #fff; border: none; cursor: pointer;
       box-shadow: 0 4px 16px rgba(0,0,0,0.25);
@@ -28,7 +39,7 @@
     #halo-chat-bubble img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
     #halo-chat-bubble:hover { transform: scale(1.08); }
     #halo-chat-badge {
-      position: fixed; bottom: 92px; right: 24px; z-index: 9999;
+      position: fixed; bottom: 140px; right: 24px; z-index: 9999;
       background: #fff; border-radius: 12px 12px 4px 12px;
       box-shadow: 0 4px 16px rgba(0,0,0,0.12);
       padding: 10px 14px 10px 12px; max-width: 220px;
@@ -46,8 +57,13 @@
       from { opacity: 0; transform: translateY(8px); }
       to   { opacity: 1; transform: translateY(0); }
     }
+    #halo-badge-text {
+      transition: opacity 0.4s ease;
+    }
+    #halo-badge-text.fade-out { opacity: 0; }
+    #halo-badge-text.fade-in  { opacity: 1; }
     #halo-chat-window {
-      position: fixed; bottom: 94px; right: 24px; z-index: 9999;
+      position: fixed; bottom: 142px; right: 24px; z-index: 9999;
       width: 360px; max-width: calc(100vw - 32px);
       height: 520px; max-height: calc(100vh - 170px);
       background: #fff; border-radius: 16px;
@@ -143,18 +159,32 @@
     bubble.addEventListener('click', toggleWindow);
     document.body.appendChild(bubble);
 
-    // Greeting badge — shown until dismissed or chat opened
+    // Greeting badge — rotates through messages, shown until dismissed or chat opened
     try {
       var dismissed = sessionStorage.getItem(BADGE_DISMISSED_KEY);
       if (!dismissed) {
+        var msgIndex = Math.floor(Math.random() * BADGE_MESSAGES.length);
         var badge = document.createElement('div');
         badge.id = 'halo-chat-badge';
-        badge.innerHTML = '<span>' + BADGE_TEXT + '</span><button id="halo-badge-close" aria-label="Dismiss">&times;</button>';
+        badge.innerHTML = '<span id="halo-badge-text">' + BADGE_MESSAGES[msgIndex] + '</span><button id="halo-badge-close" aria-label="Dismiss">&times;</button>';
         badge.addEventListener('click', function(e) {
           if (e.target.id === 'halo-badge-close') { dismissBadge(); }
           else { dismissBadge(); toggleWindow(); }
         });
         document.body.appendChild(badge);
+
+        // Rotate message every 4 seconds
+        var rotateInterval = setInterval(function() {
+          var textEl = document.getElementById('halo-badge-text');
+          if (!textEl) { clearInterval(rotateInterval); return; }
+          textEl.classList.add('fade-out');
+          setTimeout(function() {
+            if (!textEl) return;
+            msgIndex = (msgIndex + 1) % BADGE_MESSAGES.length;
+            textEl.textContent = BADGE_MESSAGES[msgIndex];
+            textEl.classList.remove('fade-out');
+          }, 400);
+        }, 4000);
       }
     } catch(e) {}
 
