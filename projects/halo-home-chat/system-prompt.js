@@ -1,76 +1,51 @@
-const { getInventoryStatus } = require('./shopify');
+const { stripHtml } = require('./shopify');
 
-const STATIC_CATALOG = `
-## Products
-
-### Shower Line
-- **Brushed Chrome Showerhead** (SKU: SH-HH-BrushedChrome-0009) — $125 SGD. Bestseller. Filtered showerhead with 15-stage filtration. Includes one set of filters.
-- **Filtered Showerhead - Matte Black** — $125 SGD. Same filtration as Brushed Chrome. (Currently out of stock)
-- **Cleansing Calcium Sulfite Filter** (SH-HR-HEADCALCIUM-NA-0013) — $16.50 SGD. Removes chlorine, heavy metals. Best for sensitive skin.
-- **Purifying PP Cotton Filter** (SH-HR-HANDLEPP-NA-0011) — $16.50 SGD. Removes sediment and rust particles.
-- **Lavender Bliss Vita C Aroma Filter** — $19.90 SGD. Vitamin C + lavender essential oil. Aromatherapy upgrade.
-- **Sweet Citrus Vita C Aroma Filter** — $19.90 SGD. Vitamin C + citrus scent. (Currently out of stock)
-- **Showerhead Smart Refill Plan** (SKU: SH-HR-FILTERPLAN-0015) — $33 SGD/cycle. Receives a Calcium Sulfite + PP Cotton filter pair every 90 days. Best value for regular users.
-- **1 Year Supply Filter Refills** — includes 4 sets of filter pairs. For customers who prefer to buy ahead.
-
-### Bundles
-- **Glow & Clean Bundle** — Showerhead + filter set + Vita C aroma filter. Good gift option.
-- **Luxe Shower Ritual Bundle** — Premium bundle with showerhead + multiple filter types. Best gift.
-
-### Sleep Line (mostly out of stock)
-- **Bamboo Pillowcases** — multiple variants. Currently out of stock.
-- **Silk Pillowcases** — multiple variants. Currently out of stock.
-
----
-
-## Frequently Asked Questions
-
-**How often should I replace my filters?**
-Every 90 days, or roughly every 3 months. The Smart Refill Plan handles this automatically.
-
-**Which filter should I get?**
-- Sensitive skin / eczema / dryness → Calcium Sulfite filter (removes chlorine + heavy metals)
-- General use → PP Cotton filter (removes sediment, rust)
-- Aromatherapy upgrade → Vita C Aroma filters (Lavender or Citrus)
-- Best value: get the Refill Plan — $33/cycle for the filter pair
-
-**Do the filters fit all Halo showerheads?**
-Yes — all Halo filters are compatible with both the Brushed Chrome and Matte Black showerheads.
-
-**Do you ship internationally?**
-We ship to Singapore and select international destinations. For exact shipping availability, check the checkout page or contact us.
-
-**What is your return / refund policy?**
-We accept returns within 14 days of delivery for unused, unopened products. Contact us at hello@homewithhalo.com to initiate a return.
-
-**My filter/showerhead isn't working — what do I do?**
-1. Check that the filter is fully screwed in (turn clockwise until snug).
-2. Run water for 1–2 minutes to flush any air bubbles.
-3. Check the filter hasn't been over-used (replace if past 90 days).
-4. If still not working, contact us at hello@homewithhalo.com with a photo/video.
-
----
-
-## Cross-sell Logic
-- Customer buys showerhead → always recommend the Smart Refill Plan
-- Customer asks about one filter type → mention the filter pair bundle saves money
-- Customer wants a gift → recommend Luxe Shower Ritual Bundle or Glow & Clean Bundle
-- Customer mentions sensitive skin / dryness → recommend Calcium Sulfite filter specifically
-
----
-
-## Contact
-- Email: hello@homewithhalo.com
-- Website: homewithhalo.com
-`.trim();
-
-function buildSystemPrompt(inventoryStatus) {
+function buildSystemPrompt({ inventoryStatus, products = [], pages = [], articles = [] }) {
+  // ── Live inventory ──────────────────────────────────────────────────────────
   const inStockList = inventoryStatus.inStock.length
     ? inventoryStatus.inStock.map((p) => `  - ${p}`).join('\n')
     : '  (none currently in stock)';
   const outOfStockList = inventoryStatus.outOfStock.length
     ? inventoryStatus.outOfStock.map((p) => `  - ${p}`).join('\n')
     : '  (all products in stock)';
+
+  // ── Product catalog from Shopify ────────────────────────────────────────────
+  const productCatalog = products
+    .filter((p) => p.status === 'active')
+    .map((p) => {
+      const variants = p.variants || [];
+      const prices = [...new Set(variants.map((v) => v.price))];
+      const priceStr = prices.length === 1 ? `$${prices[0]} SGD` : `$${prices[0]}–$${prices[prices.length - 1]} SGD`;
+      const desc = stripHtml(p.body_html).slice(0, 400);
+      const skus = variants.map((v) => v.sku).filter(Boolean).join(', ');
+      return [
+        `**${p.title}** — ${priceStr}`,
+        skus ? `SKU: ${skus}` : '',
+        desc || '',
+      ].filter(Boolean).join('\n');
+    })
+    .join('\n\n');
+
+  // ── Site pages (FAQs, policies, about, etc.) ────────────────────────────────
+  const pageContent = pages
+    .map((p) => {
+      const body = stripHtml(p.body_html).slice(0, 2000);
+      return body ? `### ${p.title}\n${body}` : null;
+    })
+    .filter(Boolean)
+    .join('\n\n')
+    .slice(0, 10000); // total cap to avoid token bloat
+
+  // ── Blog articles ───────────────────────────────────────────────────────────
+  const articleContent = articles
+    .slice(0, 8)
+    .map((a) => {
+      const body = stripHtml(a.body).slice(0, 800);
+      return body ? `### ${a.title}\n${body}` : null;
+    })
+    .filter(Boolean)
+    .join('\n\n')
+    .slice(0, 4000);
 
   return `You are Mimi, the friendly guide for Halo Home (homewithhalo.com). You help customers with product questions, recommendations, and order inquiries.
 
@@ -86,6 +61,7 @@ function buildSystemPrompt(inventoryStatus) {
 - Never invent policies, prices, or product specs not listed below
 - Keep responses short — 2-4 sentences for simple questions, bullet points for comparisons
 - Do not mention competitor products
+- Currency is always SGD
 
 ## Live Inventory (as of this request)
 IN STOCK:
@@ -94,16 +70,28 @@ ${inStockList}
 OUT OF STOCK:
 ${outOfStockList}
 
-## Store Catalog & Knowledge Base
-${STATIC_CATALOG}
+## Product Catalog (live from store)
+${productCatalog || '(No active products found)'}
+
+## Store Pages & Policies
+${pageContent || '(No page content available)'}
+
+${articleContent ? `## Blog & Articles\n${articleContent}` : ''}
+
+## Cross-sell Logic
+- Customer buys showerhead → always recommend the Smart Refill Plan
+- Customer asks about one filter type → mention the filter pair saves money
+- Customer wants a gift → recommend Luxe Shower Ritual Bundle or Glow & Clean Bundle
+- Customer mentions sensitive skin / dryness / eczema → recommend Calcium Sulfite filter specifically
+- Filter replacement cycle is every 90 days
 
 ## Order Lookups
-- If a customer asks "where's my order?" or about their order status, ask for their email address
-- Once you have it, you'll receive the order data and can share: order number, status, items, date
-- If no order is found for that email: "I couldn't find an order with that email — please double-check the email used at checkout, or contact hello@homewithhalo.com for help."
+- If a customer asks about their order status, ask for their email address
+- Once you have it, you'll receive the order data: order number, status, items, date
+- If no order found: "I couldn't find an order with that email — please double-check the email used at checkout, or contact hello@homewithhalo.com for help."
 
 ## Escalation
-- For complaints, refund requests beyond 14 days, or anything you're not sure about: direct them to hello@homewithhalo.com`;
+- For complaints, refund requests beyond policy, or anything you're not sure about: direct them to hello@homewithhalo.com`;
 }
 
-module.exports = { buildSystemPrompt, STATIC_CATALOG };
+module.exports = { buildSystemPrompt };
