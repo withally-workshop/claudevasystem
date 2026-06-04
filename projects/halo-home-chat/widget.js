@@ -4,7 +4,10 @@
   var BACKEND_URL = 'https://halo-home-chat.onrender.com';
   var SESSION_KEY = 'halo_chat_history';
   var EMAIL_KEY = 'halo_chat_email';
+  var BADGE_DISMISSED_KEY = 'halo_badge_dismissed';
   var GREETING = "Hi! I'm Halo, your home wellness guide. Ask me about our products, filters, or your order.";
+  var BADGE_TEXT = "Hi! I'm Halo 👋 Your home wellness guide.";
+  var LOGO_URL = 'https://homewithhalo.com/favicon.ico'; // replace with full logo URL when available
 
   var history = [];
   var customerEmail = null;
@@ -15,18 +18,38 @@
 
   var css = `
     #halo-chat-bubble {
-      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+      position: fixed; bottom: 80px; right: 24px; z-index: 9999;
       width: 56px; height: 56px; border-radius: 50%;
       background: #1a1a1a; color: #fff; border: none; cursor: pointer;
       box-shadow: 0 4px 16px rgba(0,0,0,0.25);
       display: flex; align-items: center; justify-content: center;
-      font-size: 24px; transition: transform 0.2s;
+      font-size: 24px; transition: transform 0.2s; overflow: hidden; padding: 0;
     }
+    #halo-chat-bubble img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
     #halo-chat-bubble:hover { transform: scale(1.08); }
+    #halo-chat-badge {
+      position: fixed; bottom: 148px; right: 24px; z-index: 9999;
+      background: #fff; border-radius: 12px 12px 4px 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      padding: 10px 14px 10px 12px; max-width: 220px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px; line-height: 1.4; color: #1a1a1a;
+      display: flex; align-items: flex-start; gap: 8px; cursor: pointer;
+      animation: halo-badge-in 0.3s ease;
+    }
+    #halo-chat-badge:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.16); }
+    #halo-badge-close {
+      background: none; border: none; cursor: pointer; color: #999;
+      font-size: 14px; line-height: 1; padding: 0; flex-shrink: 0; margin-top: 1px;
+    }
+    @keyframes halo-badge-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
     #halo-chat-window {
-      position: fixed; bottom: 90px; right: 24px; z-index: 9999;
+      position: fixed; bottom: 150px; right: 24px; z-index: 9999;
       width: 360px; max-width: calc(100vw - 32px);
-      height: 520px; max-height: calc(100vh - 110px);
+      height: 520px; max-height: calc(100vh - 170px);
       background: #fff; border-radius: 16px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.18);
       display: flex; flex-direction: column; overflow: hidden;
@@ -90,8 +113,9 @@
     }
     #halo-chat-send:disabled { opacity: 0.4; cursor: default; }
     @media (max-width: 400px) {
-      #halo-chat-window { right: 8px; width: calc(100vw - 16px); bottom: 80px; }
-      #halo-chat-bubble { right: 16px; bottom: 16px; }
+      #halo-chat-window { right: 8px; width: calc(100vw - 16px); bottom: 148px; }
+      #halo-chat-bubble { right: 16px; bottom: 72px; }
+      #halo-chat-badge  { right: 16px; bottom: 140px; max-width: calc(100vw - 48px); }
     }
   `;
 
@@ -107,9 +131,32 @@
     var bubble = document.createElement('button');
     bubble.id = 'halo-chat-bubble';
     bubble.setAttribute('aria-label', 'Open chat');
-    bubble.innerHTML = '💬';
+    if (LOGO_URL) {
+      var img = document.createElement('img');
+      img.src = LOGO_URL;
+      img.alt = 'Halo';
+      img.onerror = function() { bubble.innerHTML = '💬'; };
+      bubble.appendChild(img);
+    } else {
+      bubble.innerHTML = '💬';
+    }
     bubble.addEventListener('click', toggleWindow);
     document.body.appendChild(bubble);
+
+    // Greeting badge — shown until dismissed or chat opened
+    try {
+      var dismissed = sessionStorage.getItem(BADGE_DISMISSED_KEY);
+      if (!dismissed) {
+        var badge = document.createElement('div');
+        badge.id = 'halo-chat-badge';
+        badge.innerHTML = '<span>' + BADGE_TEXT + '</span><button id="halo-badge-close" aria-label="Dismiss">&times;</button>';
+        badge.addEventListener('click', function(e) {
+          if (e.target.id === 'halo-badge-close') { dismissBadge(); }
+          else { dismissBadge(); toggleWindow(); }
+        });
+        document.body.appendChild(badge);
+      }
+    } catch(e) {}
 
     var win = document.createElement('div');
     win.id = 'halo-chat-window';
@@ -195,12 +242,19 @@
 
   // ─── Window toggle ────────────────────────────────────────────────────────
 
+  function dismissBadge() {
+    try { sessionStorage.setItem(BADGE_DISMISSED_KEY, '1'); } catch(e) {}
+    var badge = document.getElementById('halo-chat-badge');
+    if (badge) badge.remove();
+  }
+
   function toggleWindow() {
     isOpen ? closeWindow() : openWindow();
   }
 
   function openWindow() {
     isOpen = true;
+    dismissBadge();
     var win = document.getElementById('halo-chat-window');
     var bubble = document.getElementById('halo-chat-bubble');
     win.style.display = 'flex';
@@ -211,8 +265,19 @@
 
   function closeWindow() {
     isOpen = false;
-    document.getElementById('halo-chat-window').style.display = 'none';
-    document.getElementById('halo-chat-bubble').innerHTML = '💬';
+    var win = document.getElementById('halo-chat-window');
+    var bubble = document.getElementById('halo-chat-bubble');
+    win.style.display = 'none';
+    bubble.innerHTML = '';
+    if (LOGO_URL) {
+      var img = document.createElement('img');
+      img.src = LOGO_URL;
+      img.alt = 'Halo';
+      img.onerror = function() { bubble.innerHTML = '💬'; };
+      bubble.appendChild(img);
+    } else {
+      bubble.innerHTML = '💬';
+    }
   }
 
   // ─── Chat ─────────────────────────────────────────────────────────────────
