@@ -7,7 +7,7 @@
   var BADGE_DISMISSED_KEY = 'halo_badge_dismissed';
   var GREETING = "Hi! I'm Mimi, your Halo Home guide. Ask me about our products, filters, or your order.";
   var BADGE_TEXT = "Hi! I'm Mimi 👋 Your Halo Home guide.";
-  var LOGO_URL = 'https://homewithhalo.com/favicon.ico'; // replace with full logo URL when available
+  var LOGO_URL = 'https://cdn.shopify.com/s/files/1/0821/7765/5106/files/HaloHomeFavicon.png?v=1755746071';
 
   var history = [];
   var customerEmail = null;
