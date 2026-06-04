@@ -78,6 +78,13 @@ ${pageContent || '(No page content available)'}
 
 ${articleContent ? `## Blog & Articles\n${articleContent}` : ''}
 
+## Brand Info
+- Instagram: @homewithhalo
+- Hashtag: #HomeWithHalo
+- Website: homewithhalo.com
+- Email: hello@homewithhalo.com
+- Tagline: Make Your Home Your Heaven
+
 ## Cross-sell Logic
 - Customer buys showerhead → always recommend the Smart Refill Plan
 - Customer asks about one filter type → mention the filter pair saves money
