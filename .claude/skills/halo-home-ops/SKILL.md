@@ -1,6 +1,6 @@
 # Skill: Halo Home Ops
 
-**Trigger:** "halo home", "/halo-home", "halo orders", "halo sales", "halo inventory", "halo customers", "halo refunds", "halo revenue", "halo subscriptions", "what came in today", "halo digest"
+**Trigger:** "halo home", "/halo-home", "halo orders", "halo sales", "halo inventory", "halo customers", "halo refunds", "halo revenue", "halo subscriptions", "what came in today", "halo digest", "run digest", "daily digest", "run inventory check", "inventory status", "abandoned checkouts", "discount code", "refill due", "who needs to reorder"
 **Store:** homewithhalo.myshopify.com
 **MCP Server:** `shopify` (always-on via `.mcp.json`)
 **SOP:** `references/sops/halo-home-ops.md`
@@ -16,6 +16,38 @@ All tools are read-only. No write operations in Phase 1.
 ---
 
 ## Capabilities
+
+### 0. Daily Digest (on-demand)
+
+**Triggers:** "run digest", "daily digest", "show me the digest", "halo digest"
+
+Produces the same formatted output as the scheduled Daily Digest workflow, but on demand.
+
+**Step 1** — Call `mcp__shopify__get-orders` with:
+- `sortKey: CREATED_AT`, `reverse: true`
+- Date range: yesterday 00:00 UTC+8 → today 00:00 UTC+8
+- `status: any`, `limit: 250`
+
+**Step 2** — Calculate: total revenue, order count, AOV, top products by units, refund count + value, comped ($0) count.
+
+**Step 3** — Output format:
+```
+Halo Home — [Weekday, DD Month YYYY] Digest
+─────────────────────────────
+Revenue:     $X,XXX SGD
+Orders:      XX
+AOV:         $XXX SGD
+
+Top products:
+  [product name] — XX units
+
+Refunds:     X ($XXX SGD)   ← omit if none
+Comped ($0): X orders       ← omit if none
+```
+
+Also post to `#halo-home-shopify` via `mcp__slack-noa__slack_post_message` (channel `C0B6J5MUZCL`) after displaying inline.
+
+---
 
 ### 1. Sales Snapshot / Revenue Report
 
@@ -56,6 +88,112 @@ By product:
 
 ---
 
+### 1e. Abandoned Checkouts
+
+**Triggers:** "abandoned carts", "abandoned checkouts", "who didn't complete checkout"
+
+**Step 1** — `GET /checkouts.json?limit=50`
+
+**Step 2** — Output:
+```
+Abandoned Checkouts — X carts
+──────────────────────────────
+email@x.com  $125 SGD  Brushed Chrome x1  2 hours ago
+(Guest)       $33 SGD   Filter Refills x2  1 day ago
+```
+If none: "No abandoned checkouts."
+
+---
+
+### 1f. Discount Code Lookup
+
+**Triggers:** "check discount code X", "is code WELCOME15 valid", "how many times has X been used"
+
+**Step 1** — `GET /discount_codes/lookup.json?code={CODE}`
+
+**Step 2** — Output:
+```
+Discount Code: WELCOME15
+Valid:      Yes
+Type:       15% off
+Uses:       42 times used
+```
+If not found: "Code WELCOME15 not found or has expired."
+
+---
+
+### 1g. Filter Refill Due
+
+**Triggers:** "who needs to reorder filters", "refill due", "filter refill list", "who's due for a refill"
+
+Customers who bought filter products (SKUs: SH-HR-HEADCALCIUM, SH-HR-HANDLEPP, SH-HR-HEADVITA, SH-HR-FILTERPLAN) 75–105 days ago — in the refill window.
+
+**Step 1** — `mcp__shopify__get-orders` date range: 75–105 days ago, status: any, limit: 100
+
+**Step 2** — Filter by filter SKUs, output:
+```
+Filter Refill Due — X customers
+────────────────────────────────
+email@x.com  Calcium Filter x1  87 days ago  #4050
+email@x.com  Refill Plan x1     79 days ago  #4061
+```
+If none: "No customers in the 75–105 day refill window right now."
+
+---
+
+### 1b. Unfulfilled Orders
+
+**Triggers:** "what's unshipped", "unfulfilled orders", "what needs to go out", "pending fulfillment", "what hasn't shipped"
+
+**Step 1** — `mcp__shopify__get-orders` with `query: "fulfillment_status:unfulfilled"`, `status: open`, `limit: 50`
+
+**Step 2** — Output:
+```
+Unfulfilled Orders — X pending
+──────────────────────────────
+#XXXX  email@x.com  Brushed Chrome x1  Ordered 2 days ago
+#XXXX  email@x.com  Filter Refills x2  Ordered today
+```
+If none: "No unfulfilled orders right now."
+
+---
+
+### 1c. Order Status / Fulfillment Tracking
+
+**Triggers:** "has order #X shipped", "tracking for [email]", "did [email]'s order go out", "where is order #X"
+
+**Step 1** — Lookup by order number or email (same as Order Lookup)
+
+**Step 2** — Focus output on fulfillment fields:
+```
+Order #XXXX — email@x.com
+Status:    FULFILLED
+Paid:      $125 SGD
+Items:     Brushed Chrome Showerhead x1
+Shipped:   3 Jun 2026 via DHL — Tracking: 1Z999AA10123456784
+```
+If unfulfilled: "Not yet shipped. Ordered X days ago."
+If no tracking number: "Fulfilled but no tracking info recorded."
+
+---
+
+### 1d. Draft Orders
+
+**Triggers:** "any open quotes", "draft orders", "unpaid drafts", "open drafts"
+
+**Step 1** — `mcp__shopify__get-orders` — note: draft orders are a separate endpoint. Use Shopify admin or note this as a limitation until MCP supports draft_orders directly.
+
+**Step 2** — Output:
+```
+Open Draft Orders — X total
+────────────────────────────
+#D-001  email@x.com  $125 SGD  2 days old
+#D-002  (no customer)  $33 SGD  5 days old
+```
+If none: "No open draft orders."
+
+---
+
 ### 2. Order Lookup
 
 **Triggers:** "find order from [email]", "order #[number]", "look up [email]'s order", "what did [email] buy"
@@ -79,7 +217,7 @@ If no order found: "No order found for [email]. Check spelling or try order numb
 
 ### 3. Inventory Status
 
-**Triggers:** "what's in stock", "inventory check", "what's out of stock", "is [product] available", "stock status"
+**Triggers:** "what's in stock", "inventory check", "what's out of stock", "is [product] available", "stock status", "run inventory check", "inventory status"
 
 **Step 1** — Call `mcp__shopify__get-products` with `limit: 50`
 

@@ -1,6 +1,6 @@
 ---
 name: halo-home-ops
-description: Run Halo Home store ops queries — sales snapshots, order lookup, inventory status, refund tracking, customer history, subscription list, comped orders, revenue reports. Trigger with "halo home", "/halo-home", "halo orders", "halo sales", "halo inventory", "what came in today", "halo revenue", "halo refunds", "halo subscriptions".
+description: Run Halo Home store ops queries — sales snapshots, order lookup, inventory status, refund tracking, customer history, subscription list, comped orders, revenue reports, daily digest. Trigger with "halo home", "/halo-home", "halo orders", "halo sales", "halo inventory", "what came in today", "halo revenue", "halo refunds", "halo subscriptions", "run digest", "daily digest", "run inventory check".
 metadata:
   short-description: Halo Home Shopify store ops queries
 ---
@@ -17,6 +17,14 @@ Use `mcp__shopify__*` tools directly. The `shopify` MCP server is always-on.
 
 | Intent | Primary Tool |
 |--------|-------------|
+| Daily digest (on-demand) | `mcp__shopify__get-orders` yesterday + format as digest, post to `#halo-home-shopify` |
+| Inventory status (on-demand) | `mcp__shopify__get-products` limit 250, format full status |
+| Abandoned checkouts | `GET /checkouts.json?limit=50` |
+| Discount code lookup | `GET /discount_codes/lookup.json?code={CODE}` |
+| Filter refill due (75–105 days) | `mcp__shopify__get-orders` date range 75–105 days ago, filter by filter SKUs |
+| Unfulfilled orders | `mcp__shopify__get-orders` with `query: "fulfillment_status:unfulfilled"` + `status: open` |
+| Order status / tracking | `mcp__shopify__get-orders` by order# or email, focus on `fulfillments` array |
+| Draft orders | `/draft_orders.json?status=open` — note: not yet in MCP tool set, use Shopify admin or REST directly |
 | Sales snapshot / revenue | `mcp__shopify__get-orders` with date query |
 | Order lookup by email | `mcp__shopify__get-orders` with `query: "email:x"` |
 | Order lookup by # | `mcp__shopify__get-order` |

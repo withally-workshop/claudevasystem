@@ -2,13 +2,12 @@ const https = require('https');
 
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
 const API_KEY = process.env.N8N_API_KEY;
-const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD'; // Krave Slack Bot
+const HALO_BOT_TOKEN = process.env.HALO_HOME_BOT_TOKEN; // Halo AI bot
 const SHOPIFY_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const SHOPIFY_DOMAIN = 'homewithhalo.myshopify.com';
 
-// After first deploy, set this to update in place
-const WORKFLOW_ID = process.env.HALO_HOME_DAILY_DIGEST_WORKFLOW_ID || null;
+const WORKFLOW_ID = process.env.HALO_HOME_DAILY_DIGEST_WORKFLOW_ID || '047cSNvFvUGHaf3O';
 
 // Get channel ID: right-click #halo-home in Slack → Copy link → extract C0XXXXXXXX
 const HALO_HOME_CHANNEL_ID = process.env.HALO_HOME_SLACK_CHANNEL_ID || '';
@@ -23,7 +22,7 @@ const yesterday = yest.toISOString().split('T')[0];
 return { json: { today, yesterday, todayFormatted: now.toLocaleDateString('en-SG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Singapore' }) } };
 `.trim();
 
-const FORMAT_DIGEST_PROMPT = `You are an ops assistant for Halo Home. Format this Shopify order data into a concise daily digest for the team's Slack channel.
+const FORMAT_DIGEST_PROMPT = `You are an ops assistant for Halo Home. Format the provided data into a concise daily digest for the team's Slack channel.
 
 Format exactly like this:
 *Halo Home — [Day, Date] Digest*
@@ -39,7 +38,24 @@ Top products:
 Refunds:     X ($XXX SGD) [omit line if none]
 Comped ($0): X orders [omit line if none]
 
-Keep it tight. No preamble. If zero orders, say "No orders yesterday."`;
+*Unfulfilled — X pending*
+  #XXXX  [email]  [items]  X days old
+  #XXXX  [email]  [items]  ordered today
+[If no unfulfilled orders]: Unfulfilled: none ✓
+
+Keep it tight. No preamble. If zero orders yesterday, say "No orders yesterday." but still show unfulfilled section.`;
+
+// Aggregator: combines yesterday orders + unfulfilled orders for Format Digest.
+// $json = unfulfilled orders (from Fetch Unfulfilled Orders).
+// $('Fetch Yesterday Orders').item.json = yesterday's revenue data.
+// $('Build Date Range').item.json.todayFormatted = formatted date string.
+const COMBINE_DIGEST_DATA_CODE = `
+return [{ json: {
+  yesterday_orders: $('Fetch Yesterday Orders').item.json.orders || [],
+  unfulfilled_orders: $json.orders || [],
+  date: $('Build Date Range').item.json.todayFormatted,
+} }];
+`.trim();
 
 const workflow = {
   name: 'Halo Home - Daily Digest',
@@ -57,7 +73,7 @@ const workflow = {
       position: [240, 300],
       parameters: {
         rule: {
-          interval: [{ field: 'cronExpression', expression: '0 0 * * *' }], // midnight UTC = 8 AM PHT
+          interval: [{ field: 'cronExpression', expression: '0 2 * * *' }], // 2 AM UTC = 10 AM PHT
         },
       },
     },
@@ -87,12 +103,23 @@ const workflow = {
         },
       },
     },
+    // n3b: Fetch open unfulfilled orders (chained after Fetch Yesterday Orders)
+    { id: 'n3b', name: 'Fetch Unfulfilled Orders', type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [960, 300],
+      onError: 'continueRegularOutput',
+      parameters: { method: 'GET',
+        url: `https://${SHOPIFY_DOMAIN}/admin/api/2024-10/orders.json?fulfillment_status=unfulfilled&status=open&limit=50`,
+        sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Shopify-Access-Token', value: SHOPIFY_TOKEN }] }, options: {} } },
+
+    // n3c: Aggregator — combines yesterday orders + unfulfilled into single object for Format Digest.
+    { id: 'n3c', name: 'Combine Digest Data', type: 'n8n-nodes-base.code', typeVersion: 2, position: [1180, 300],
+      parameters: { mode: 'runOnceForAllItems', jsCode: COMBINE_DIGEST_DATA_CODE } },
+
     {
       id: 'n4',
       name: 'Format Digest',
       type: 'n8n-nodes-base.httpRequest',
       typeVersion: 4.2,
-      position: [960, 300],
+      position: [1400, 300],
       parameters: {
         method: 'POST',
         url: 'https://api.anthropic.com/v1/messages',
@@ -109,11 +136,11 @@ const workflow = {
         jsonBody: `={{
           {
             model: 'claude-haiku-4-5-20251001',
-            max_tokens: 512,
+            max_tokens: 768,
             system: ${JSON.stringify(FORMAT_DIGEST_PROMPT)},
             messages: [{
               role: 'user',
-              content: 'Date: ' + $('Build Date Range').item.json.todayFormatted + '\\n\\nOrders data:\\n' + JSON.stringify($json).slice(0, 8000)
+              content: 'Date: ' + $json.date + '\\n\\nYesterday orders:\\n' + JSON.stringify($json.yesterday_orders).slice(0, 5000) + '\\n\\nUnfulfilled orders:\\n' + JSON.stringify($json.unfulfilled_orders).slice(0, 3000)
             }]
           }
         }}`,
@@ -122,25 +149,36 @@ const workflow = {
     {
       id: 'n5',
       name: 'Post to Slack',
-      type: 'n8n-nodes-base.slack',
-      typeVersion: 2.3,
-      position: [1200, 300],
-      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
+      position: [1620, 300],
       parameters: {
-        resource: 'message',
-        operation: 'post',
-        select: 'channel',
-        channelId: { __rl: true, value: HALO_HOME_CHANNEL_ID || 'REPLACE_WITH_HALO_HOME_CHANNEL_ID', mode: 'id' },
-        text: `={{ ($json.choices && $json.choices[0]?.message?.content) || $json.content?.[0]?.text || 'Digest generation failed.' }}`,
-        otherOptions: {},
+        method: 'POST',
+        url: 'https://slack.com/api/chat.postMessage',
+        sendHeaders: true,
+        headerParameters: {
+          parameters: [
+            { name: 'Authorization', value: `=Bearer ${HALO_BOT_TOKEN}` },
+            { name: 'Content-Type', value: 'application/json; charset=utf-8' },
+          ],
+        },
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: `={{ {
+          channel: '${HALO_HOME_CHANNEL_ID}',
+          text: ($json.choices && $json.choices[0]?.message?.content) || $json.content?.[0]?.text || 'Digest generation failed.'
+        } }}`,
+        options: {},
       },
     },
   ],
   connections: {
-    'Schedule Trigger': { main: [[{ node: 'Build Date Range', type: 'main', index: 0 }]] },
-    'Build Date Range': { main: [[{ node: 'Fetch Yesterday Orders', type: 'main', index: 0 }]] },
-    'Fetch Yesterday Orders': { main: [[{ node: 'Format Digest', type: 'main', index: 0 }]] },
-    'Format Digest': { main: [[{ node: 'Post to Slack', type: 'main', index: 0 }]] },
+    'Schedule Trigger':       { main: [[{ node: 'Build Date Range',        type: 'main', index: 0 }]] },
+    'Build Date Range':       { main: [[{ node: 'Fetch Yesterday Orders',  type: 'main', index: 0 }]] },
+    'Fetch Yesterday Orders': { main: [[{ node: 'Fetch Unfulfilled Orders', type: 'main', index: 0 }]] },
+    'Fetch Unfulfilled Orders': { main: [[{ node: 'Combine Digest Data',   type: 'main', index: 0 }]] },
+    'Combine Digest Data':    { main: [[{ node: 'Format Digest',           type: 'main', index: 0 }]] },
+    'Format Digest':          { main: [[{ node: 'Post to Slack',           type: 'main', index: 0 }]] },
   },
 };
 

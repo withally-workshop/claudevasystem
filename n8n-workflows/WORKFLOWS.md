@@ -45,10 +45,11 @@
 | 17 | Crave - Status Sync | `uUGxA3GW1W0vq6el` | Inactive (warm-up) | 9AM PHT daily | Pull Smartlead lead statuses, sync opens/replies/bounces back to Sheet |
 | 18 | Krave — Price Reply Auto-Resubmit | `nzFTk4e9NRi6Jk9r` | Active | Every 10min + `POST /webhook/krave-price-reply-resubmit` | Detect bot "price missing" threads with unprocessed amount replies in #payments-invoices-updates, parse receipt + amount, resubmit to intake webhook automatically |
 | 19 | LinkedIn Post Monitor | `wNXs7wqHz5d5naJN` | Inactive (needs actor verification) | Every 30min all day | Scrape Noa's LinkedIn profile via Apify every 30min, detect new posts using workflow static data, alert John in #noa-linkedin-posts with preview + link |
-| 20 | Halo - VA Slack Bot | TBD | Pending deploy | `app_mention` in #halo-home | VA @mentions bot → Claude classifies intent → Shopify API → formatted reply in thread |
-| 21 | Halo - Daily Digest | TBD | Pending deploy | Midnight UTC (8 AM PHT) daily | Pull yesterday's Shopify orders → Claude formats → post to #halo-home |
+| 20 | Halo - VA Slack Bot | `XgHWMBeHoPWelE9r` | Active | `app_mention` in #halo-home-shopify | VA @mentions bot → Claude classifies intent → Shopify API → formatted reply in thread |
+| 21 | Halo - Daily Digest | `047cSNvFvUGHaf3O` | Active | 2 AM UTC (10 AM PHT) daily | Pull yesterday's Shopify orders + unfulfilled count → Claude formats → post to #halo-home-shopify |
 | 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Active | Every 3h Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` | Scan john@kravemedia.co for unread invoice PDFs, parse with Claude, validate bank details, create Airwallex draft bills, reply to sender, log to Creator & AP Bills Tracker |
-| 22 | Halo - Inventory Alert | TBD | Pending deploy | Midnight UTC (8 AM PHT) daily | Compare product OOS state vs previous run, alert #halo-home on changes only |
+| 23 | Halo - Inventory Alert | `NBvfYPmjdTXzrKfb` | Active | 1 AM UTC (9 AM PHT) daily | Compare product stock vs previous run; alert #halo-home-shopify on OOS changes + newly low-stock (<10 units) |
+| 24 | Halo - Weekly Report | `7N9gEZb7nDS0EDGu` | Active | 1 AM UTC Mondays (9 AM PHT) | Refill due list (filter buyers 75–105 days ago) + upsell gap (showerhead buyers without filters) → post to #halo-home-shopify |
 
 ---
 
@@ -1058,6 +1059,10 @@ node n8n-workflows/deploy-invoice-request-intake.js
 node n8n-workflows/deploy-invoice-approval-polling.js
 node n8n-workflows/deploy-linkedin-resource-post-alert.js
 node n8n-workflows/deploy-halo-intelligence-report.js
+node n8n-workflows/deploy-halo-home-slack-bot.js
+node n8n-workflows/deploy-halo-home-daily-digest.js
+node n8n-workflows/deploy-halo-home-inventory-alert.js
+node n8n-workflows/deploy-halo-home-weekly-report.js
 ```
 
 Most current deploy scripts update the matching live workflow in place and then reactivate it. Older archived copies may still exist in n8n, so confirm the non-archived workflow ID before assuming a stale link is current.
@@ -1346,7 +1351,7 @@ Workflow is deployed **inactive**. Activate in the n8n UI on ~2026-06-12 when wa
 
 ## Workflow 20 — Halo - VA Slack Bot
 
-**n8n URL:** TBD (update after first deploy)
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/XgHWMBeHoPWelE9r`
 **Deploy script:** `n8n-workflows/deploy-halo-home-slack-bot.js`
 
 ### Purpose
@@ -1383,15 +1388,51 @@ Gives the Halo Home VA Shopify store access via Slack without needing admin cred
 
 ### Intent Types Handled
 
-sales_snapshot, order_by_email, order_by_number, inventory_check, product_availability, refund_check, customer_history, subscription_list, comped_orders, revenue_report, product_info, general
+`orders_today`, `orders_week`, `orders_month`, `order_lookup_email`, `order_lookup_number`, `order_status`, `unfulfilled_orders`, `draft_orders`, `abandoned_checkouts`, `discount_lookup`, `refill_due`, `inventory`, `product_availability`, `refunds`, `customer_history`, `subscriptions`, `comped_orders`, `revenue_report`, `product_catalog`, `run_digest`, `run_inventory`, `general`
+
+### Node Flow (current)
+
+```text
+[Webhook — halo-home-bot]
+  ↓
+[Parse Slack Event] — text, userId, channel, threadTs, challenge
+  ↓
+[Is URL Verification?] — handles Slack handshake
+  ├─ true  → [Respond Challenge]
+  └─ false → [Acknowledge Event] (200 immediately, <3s)
+               ↓
+             [Is App Mention?]
+               ↓
+             [Fetch Thread Context] — conversations.replies (continueOnFail)
+               ↓
+             [Build Thread Context] — aggregator Code node, $('Parse Slack Event') ref
+               ↓
+             [Classify Intent] — Anthropic Haiku HTTP Request
+               ↓
+             [Build Shopify URL] — aggregator Code node, maps intent → REST endpoint
+               ↓
+             [Fetch Shopify Data] — HTTP Request (continueOnFail)
+               ↓
+             [Build Claude Prompt] — aggregator Code node; pre-processes run_inventory data
+               ↓
+             [Format Response] — Anthropic Haiku HTTP Request
+               ↓
+             [Extract Reply] — aggregator Code node, restores channel/threadTs
+               ↓
+             [Post Slack Reply] — chat.postMessage in thread
+```
 
 ### Outputs
 
 | Scenario | Action |
 |----------|--------|
 | Valid store query | Shopify data fetched, Claude-formatted reply posted in thread |
-| General question | Claude answers from catalog knowledge, no Shopify call needed |
-| Unknown intent | "I can help with orders, inventory, refunds, and sales data." |
+| `run_digest` | Fetches yesterday's orders, formats as daily digest |
+| `run_inventory` | Fetches all products, pre-processes stock status, posts full inventory |
+| `refill_due` | Fetches orders 75–105 days ago, filters by filter SKUs |
+| `abandoned_checkouts` | Lists open checkout sessions |
+| `discount_lookup` | Looks up code validity + usage count |
+| General question | Claude answers from catalog knowledge, no Shopify call |
 
 ### Error Handling
 
@@ -1399,51 +1440,56 @@ sales_snapshot, order_by_email, order_by_number, inventory_check, product_availa
 |---------|-----------|
 | Shopify API fails | `onError: continueRegularOutput`; Claude formats with available data |
 | Not an app_mention | If node filters it out, workflow exits silently |
+| Slack url_verification | Responds with challenge immediately, does not continue pipeline |
 
 ### Pre-deploy Setup
 
-1. Invite Krave Slack Bot to #halo-home
+1. Invite Halo AI bot to `#halo-home-shopify`
 2. In Slack App settings: Enable Event Subscriptions → Request URL: `https://noatakhel.app.n8n.cloud/webhook/halo-home-bot`
 3. Subscribe to bot event: `app_mention`
-4. Set `HALO_HOME_SLACK_CHANNEL_ID` env var after getting channel ID from Slack
+4. Set `HALO_HOME_SLACK_CHANNEL_ID=C0B6J5MUZCL` in `.env`
 
 ---
 
 ## Workflow 21 — Halo - Daily Digest
 
-**n8n URL:** TBD (update after first deploy)
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/047cSNvFvUGHaf3O`
 **Deploy script:** `n8n-workflows/deploy-halo-home-daily-digest.js`
 
 ### Purpose
 
-Posts yesterday's Halo Home sales summary to #halo-home every morning. Gives the VA and Noa/John a daily pulse without logging into Shopify.
+Posts yesterday's Halo Home sales summary + current unfulfilled orders to `#halo-home-shopify` every morning at 10 AM PHT. Gives the VA and Noa/John a daily pulse without logging into Shopify.
 
 ### Triggers
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 0 * * *` (UTC) — 8:00 AM PHT daily |
+| Schedule | `0 2 * * *` (UTC) — 10:00 AM PHT daily |
 
 ### Node Flow
 
 ```text
-[Schedule Trigger — midnight UTC]
+[Schedule Trigger — 2 AM UTC / 10 AM PHT]
   ↓
-[Build Date Range] — calculates yesterday in SGT (UTC+8)
+[Build Date Range] — calculates yesterday + today in UTC+8
   ↓
-[Fetch Yesterday Orders] — GET /admin/api/2024-10/orders.json?created_at range
+[Fetch Yesterday Orders] — GET /orders.json?created_at range
+  ↓
+[Fetch Unfulfilled Orders] — GET /orders.json?fulfillment_status=unfulfilled&status=open
+  ↓
+[Combine Digest Data] — aggregator Code node, merges both responses + date
   ↓
 [Format Digest (Claude Haiku)] — POST Anthropic API
   ↓
-[Post to Slack] — #halo-home
+[Post to Slack] — #halo-home-shopify (C0B6J5MUZCL)
 ```
 
 ### Outputs
 
 | Scenario | Action |
 |----------|--------|
-| Orders exist | Slack digest with revenue, count, AOV, top products, refunds, comped |
-| Zero orders | "No orders yesterday." |
+| Orders exist | Slack digest: revenue, count, AOV, top products, refunds, comped + unfulfilled count |
+| Zero orders | "No orders yesterday." + unfulfilled section still shown |
 
 ### Error Handling
 
@@ -1538,51 +1584,56 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
 
 ---
 
-## Workflow 22b — Halo - Inventory Alert
+## Workflow 23 — Halo - Inventory Alert
 
-**n8n URL:** TBD (update after first deploy)
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/NBvfYPmjdTXzrKfb`
 **Deploy script:** `n8n-workflows/deploy-halo-home-inventory-alert.js`
 
 ### Purpose
 
-Alerts #halo-home when Halo Home products go out of stock or come back in stock. Runs daily and only posts when there's a change — no repeat noise for already-OOS items.
+Alerts `#halo-home-shopify` when Halo Home products go out of stock, come back in stock, or newly drop below 10 units. Runs daily at 9 AM PHT and only posts when something changes — no repeat noise for already-known states.
 
 ### Triggers
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 0 * * *` (UTC) — 8:00 AM PHT daily |
+| Schedule | `0 1 * * *` (UTC) — 9:00 AM PHT daily |
 
 ### Node Flow
 
 ```text
-[Schedule Trigger]
+[Schedule Trigger — 1 AM UTC / 9 AM PHT]
   ↓
 [Load OOS State] — reads workflow static data (persisted between runs)
   ↓
-[Check Inventory] — GET /admin/api/2024-10/products.json, compare DENY policy vs saved state
+[Fetch Products] — HTTP Request: GET /products.json?limit=250 (not a Code node — sandbox fix)
+  ↓
+[Check Inventory] — Code node: compare DENY/qty vs saved state; detect OOS + low-stock changes
   ↓
 [Has Changes?] — IF node: has_changes = true
   ↓ true                       ↓ false
 [Build Message]           [Save OOS State]
   ↓
-[Post to Slack] — #halo-home
+[Post to Slack] — #halo-home-shopify (C0B6J5MUZCL)
   ↓
-[Save OOS State] — persist current OOS map to workflow static data
+[Save OOS State] — persist current state to workflow static data
 ```
 
 ### Key Logic
 
-- `inventory_policy: DENY` + `inventory_quantity <= 0` = out of stock
-- First run saves baseline; no alert fires until second run detects a delta
-- Known pre-existing OOS products (Matte Black, Sweet Citrus, pillowcases, bundles) will not alert after the first run establishes baseline
+- OOS: `inventory_management = shopify` + `inventory_policy = deny` + `inventory_quantity <= 0`
+- Low stock: `inventory_management = shopify` + not OOS + `inventory_quantity < 10`
+- State keys: `oos_{variantId}` and `low_{variantId}` stored in workflow static data
+- First run saves baseline; alerts only fire when state changes from the previous run
 
 ### Outputs
 
 | Scenario | Action |
 |----------|--------|
-| New OOS detected | Posts `⚠ [Product]` alert to #halo-home |
-| Product back in stock | Posts `✓ [Product]` alert to #halo-home |
+| New OOS detected | Posts `✗ [Product]` to #halo-home-shopify |
+| Product back in stock | Posts `✓ [Product]` to #halo-home-shopify |
+| Newly low stock (<10 units) | Posts `⚠ [Product] — X units left` to #halo-home-shopify |
+| Back above threshold | Posts `✓ [Product] (restocked)` to #halo-home-shopify |
 | No change | Silent — no Slack post |
 
 ### Error Handling
@@ -1590,7 +1641,62 @@ Alerts #halo-home when Halo Home products go out of stock or come back in stock.
 | Failure | Behaviour |
 |---------|-----------|
 | Shopify API fails | `onError: continueRegularOutput`; Save OOS State still runs if it receives input |
-| Static data unavailable | `prevOos` defaults to `{}` — first run is always treated as baseline |
+| Static data unavailable | `prevState` defaults to `{}` — first run is treated as baseline |
+
+---
+
+## Workflow 24 — Halo - Weekly Report
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/7N9gEZb7nDS0EDGu`
+**Deploy script:** `n8n-workflows/deploy-halo-home-weekly-report.js`
+
+### Purpose
+
+Every Monday at 9 AM PHT, posts two proactive lists to `#halo-home-shopify`: (1) customers in the 75–105 day refill window (due to reorder filters), and (2) showerhead buyers in the last 14–120 days who never bought a filter in the same order (upsell gap). Replaces manual Shopify export and customer segmentation.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Schedule | `0 1 * * 1` (UTC) — 9:00 AM PHT every Monday |
+
+### Node Flow
+
+```text
+[Schedule Trigger — 1 AM UTC Monday / 9 AM PHT]
+  ↓
+[Build Date Ranges] — Code node: calculates 75/105-day and 14/120-day windows in UTC+8
+  ↓
+[Fetch Refill Due Orders] — GET /orders.json?created_at 75–105 days ago
+  ↓
+[Fetch Showerhead Orders] — GET /orders.json?created_at 14–120 days ago
+  ↓
+[Build Report Data] — Code node: filters refill orders by filter SKUs; filters showerhead orders by showerhead SKU + no-filter-in-same-order
+  ↓
+[Format Report (Claude Haiku)] — POST Anthropic API
+  ↓
+[Post to Slack] — #halo-home-shopify (C0B6J5MUZCL)
+```
+
+### Key Logic
+
+- **Refill due:** orders containing SKUs `SH-HR-HEADCALCIUM-NA-0013`, `SH-HR-HANDLEPP-NA-0011`, `SH-HR-HEADVITA-LAVENDER-0014`, `SH-HR-FILTERPLAN-0015` created 75–105 days ago
+- **Upsell gap:** orders containing showerhead SKUs (`SH-HH-BrushedChrome-0009`, `SH-HH-MATTEBLACK-0010`) created 14–120 days ago where the same order had no filter SKU
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| Refill-due customers found | Lists email, items, days since order, order # |
+| Upsell gap found | Lists email, showerhead product, days ago, order # |
+| Either section empty | Shows "none this week ✓" for that section |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| Shopify API fails | `onError: continueRegularOutput`; corresponding section shows empty data |
+| No orders in window | Build Report Data returns empty arrays; Claude formats gracefully |
 
 ---
 
@@ -1619,5 +1725,6 @@ Alerts #halo-home when Halo Home products go out of stock or come back in stock.
 - [ ] **Halo VA Bot:** After deploy, set `HALO_HOME_SLACK_BOT_WORKFLOW_ID` in deploy script env for future redeploys
 - [ ] **Halo Digest:** After deploy, set `HALO_HOME_DAILY_DIGEST_WORKFLOW_ID` in deploy script env for future redeploys
 - [ ] **Halo Inventory Alert:** After deploy, set `HALO_HOME_INVENTORY_ALERT_WORKFLOW_ID` in deploy script env for future redeploys; first run establishes baseline OOS state (no alert), second run onward alerts on changes
+- [ ] **Halo Weekly Report:** After deploy, set `HALO_HOME_WEEKLY_REPORT_WORKFLOW_ID=7N9gEZb7nDS0EDGu` in `.env`; requires `HALO_HOME_BOT_TOKEN`, `SHOPIFY_ACCESS_TOKEN`, `ANTHROPIC_API_KEY`, `HALO_HOME_SLACK_CHANNEL_ID`
 - [ ] **Halo Chatbot (Render):** Deploy `projects/halo-home-chat/` to Render → set env vars `SHOPIFY_ACCESS_TOKEN`, `MYSHOPIFY_DOMAIN`, `ANTHROPIC_API_KEY`; update `BACKEND_URL` in `widget.js` with the live Render URL
 - [ ] **Halo Chatbot (Widget):** Inject `widget.js` into Shopify theme → Online Store → Themes → Edit code → `layout/theme.liquid` → add `<script src="...">` before `</body>`

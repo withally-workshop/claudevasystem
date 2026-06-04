@@ -24,9 +24,10 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Crave - Daily Lead Push | Inactive (warm-up) | 9AM PHT daily | [deploy-crave-lead-push.js](deploy-crave-lead-push.js) |
 | Crave - Status Sync | Inactive (warm-up) | 9AM PHT daily | [deploy-crave-status-sync.js](deploy-crave-status-sync.js) |
 | LinkedIn Post Monitor | Inactive (needs actor verification) | Every 30min all day | [deploy-linkedin-post-monitor.js](deploy-linkedin-post-monitor.js) |
-| Halo - VA Slack Bot | Pending deploy | Slack `app_mention` in #halo-home | [deploy-halo-home-slack-bot.js](deploy-halo-home-slack-bot.js) |
-| Halo - Daily Digest | Pending deploy | Midnight UTC (8 AM PHT) daily | [deploy-halo-home-daily-digest.js](deploy-halo-home-daily-digest.js) |
-| Halo - Inventory Alert | Pending deploy | Midnight UTC (8 AM PHT) daily | [deploy-halo-home-inventory-alert.js](deploy-halo-home-inventory-alert.js) |
+| Halo - VA Slack Bot | Active | Slack `app_mention` in #halo-home-shopify | [deploy-halo-home-slack-bot.js](deploy-halo-home-slack-bot.js) |
+| Halo - Daily Digest | Active | 2 AM UTC (10 AM PHT) daily | [deploy-halo-home-daily-digest.js](deploy-halo-home-daily-digest.js) |
+| Halo - Inventory Alert | Active | 1 AM UTC (9 AM PHT) daily | [deploy-halo-home-inventory-alert.js](deploy-halo-home-inventory-alert.js) |
+| Halo - Weekly Report | Active | 1 AM UTC Mondays (9 AM PHT) | [deploy-halo-home-weekly-report.js](deploy-halo-home-weekly-report.js) |
 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Every 3h Mon–Fri + webhook | [deploy-creator-invoice-email-scan.js](deploy-creator-invoice-email-scan.js) |
 
 ---
@@ -323,64 +324,68 @@ node n8n-workflows/deploy-slack-invoice-handler.js
 
 ## Halo - VA Slack Bot
 
-VA-facing Shopify ops bot for #halo-home. VA @mentions the bot to query orders, inventory, refunds, revenue, and more. Claude Haiku classifies intent → Shopify REST API → formatted thread reply.
+VA-facing Shopify ops bot for `#halo-home-shopify`. VA @mentions the bot to query orders, inventory, refunds, revenue, fulfillment, drafts, abandoned checkouts, discount codes, and refill due list. Claude Haiku classifies intent → Shopify REST API → formatted thread reply.
 
-**Workflow ID:** TBD (update after first deploy)
+**Workflow ID:** `XgHWMBeHoPWelE9r`
 **Webhook:** `POST https://noatakhel.app.n8n.cloud/webhook/halo-home-bot`
-
-**Pre-deploy setup:**
-1. Invite Krave Slack Bot to #halo-home
-2. Slack App: Event Subscriptions → Request URL → `https://noatakhel.app.n8n.cloud/webhook/halo-home-bot`
-3. Subscribe to bot event: `app_mention`
+**Channel:** `#halo-home-shopify` (`C0B6J5MUZCL`)
 
 **Deploy:**
 ```bash
-SHOPIFY_ACCESS_TOKEN=... HALO_HOME_SLACK_CHANNEL_ID=... node n8n-workflows/deploy-halo-home-slack-bot.js
+node n8n-workflows/deploy-halo-home-slack-bot.js
 ```
 
-**Credentials required:**
-- `Krave Slack Bot` — `Bn2U6Cwe1wdiCXzD`
-- `SHOPIFY_ACCESS_TOKEN` — n8n environment variable
-- `ANTHROPIC_API_KEY` — n8n environment variable
+**Credentials required:** `HALO_HOME_BOT_TOKEN`, `SHOPIFY_ACCESS_TOKEN`, `ANTHROPIC_API_KEY`, `HALO_HOME_SLACK_CHANNEL_ID`
 
 ---
 
 ## Halo - Daily Digest
 
-Posts yesterday's Halo Home revenue and order summary to #halo-home every morning at 8 AM PHT.
+Posts yesterday's Halo Home revenue + unfulfilled orders to `#halo-home-shopify` every morning at 10 AM PHT.
 
-**Workflow ID:** TBD (update after first deploy)
-**Schedule:** `0 0 * * *` UTC (8 AM PHT)
+**Workflow ID:** `047cSNvFvUGHaf3O`
+**Schedule:** `0 2 * * *` UTC (10 AM PHT)
 
 **Deploy:**
 ```bash
-SHOPIFY_ACCESS_TOKEN=... HALO_HOME_SLACK_CHANNEL_ID=... node n8n-workflows/deploy-halo-home-daily-digest.js
+node n8n-workflows/deploy-halo-home-daily-digest.js
 ```
 
-**Credentials required:**
-- `Krave Slack Bot` — `Bn2U6Cwe1wdiCXzD`
-- `SHOPIFY_ACCESS_TOKEN` — n8n environment variable
-- `ANTHROPIC_API_KEY` — n8n environment variable
+**Credentials required:** `HALO_HOME_BOT_TOKEN`, `SHOPIFY_ACCESS_TOKEN`, `ANTHROPIC_API_KEY`, `HALO_HOME_SLACK_CHANNEL_ID`
 
 ---
 
 ## Halo - Inventory Alert
 
-Detects when Halo Home products go OOS or come back in stock. Compares against previous run's state — only posts to #halo-home when there's a change.
+Detects when Halo Home products go OOS, come back in stock, or newly drop below 10 units. Only posts to `#halo-home-shopify` when something changes.
 
-**Workflow ID:** TBD (update after first deploy)
-**Schedule:** `0 0 * * *` UTC (8 AM PHT)
+**Workflow ID:** `NBvfYPmjdTXzrKfb`
+**Schedule:** `0 1 * * *` UTC (9 AM PHT)
 
-**Note:** First run establishes baseline OOS state (no alert). Alerts fire from second run onward.
+**Note:** First run establishes baseline state (no alert). Alerts fire from second run onward.
 
 **Deploy:**
 ```bash
-SHOPIFY_ACCESS_TOKEN=... HALO_HOME_SLACK_CHANNEL_ID=... node n8n-workflows/deploy-halo-home-inventory-alert.js
+node n8n-workflows/deploy-halo-home-inventory-alert.js
 ```
 
-**Credentials required:**
-- `Krave Slack Bot` — `Bn2U6Cwe1wdiCXzD`
-- `SHOPIFY_ACCESS_TOKEN` — n8n environment variable
+**Credentials required:** `HALO_HOME_BOT_TOKEN`, `SHOPIFY_ACCESS_TOKEN`, `HALO_HOME_SLACK_CHANNEL_ID`
+
+---
+
+## Halo - Weekly Report
+
+Posts refill due list + upsell gap to `#halo-home-shopify` every Monday at 9 AM PHT.
+
+**Workflow ID:** `7N9gEZb7nDS0EDGu`
+**Schedule:** `0 1 * * 1` UTC (9 AM PHT Mondays)
+
+**Deploy:**
+```bash
+node n8n-workflows/deploy-halo-home-weekly-report.js
+```
+
+**Credentials required:** `HALO_HOME_BOT_TOKEN`, `SHOPIFY_ACCESS_TOKEN`, `ANTHROPIC_API_KEY`, `HALO_HOME_SLACK_CHANNEL_ID`
 
 ---
 
