@@ -18,7 +18,7 @@
 
   var css = `
     #halo-chat-bubble {
-      position: fixed; bottom: 48px; right: 24px; z-index: 9999;
+      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
       width: 56px; height: 56px; border-radius: 50%;
       background: #1a1a1a; color: #fff; border: none; cursor: pointer;
       box-shadow: 0 4px 16px rgba(0,0,0,0.25);
@@ -28,7 +28,7 @@
     #halo-chat-bubble img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
     #halo-chat-bubble:hover { transform: scale(1.08); }
     #halo-chat-badge {
-      position: fixed; bottom: 116px; right: 24px; z-index: 9999;
+      position: fixed; bottom: 92px; right: 24px; z-index: 9999;
       background: #fff; border-radius: 12px 12px 4px 12px;
       box-shadow: 0 4px 16px rgba(0,0,0,0.12);
       padding: 10px 14px 10px 12px; max-width: 220px;
@@ -47,7 +47,7 @@
       to   { opacity: 1; transform: translateY(0); }
     }
     #halo-chat-window {
-      position: fixed; bottom: 118px; right: 24px; z-index: 9999;
+      position: fixed; bottom: 94px; right: 24px; z-index: 9999;
       width: 360px; max-width: calc(100vw - 32px);
       height: 520px; max-height: calc(100vh - 170px);
       background: #fff; border-radius: 16px;
