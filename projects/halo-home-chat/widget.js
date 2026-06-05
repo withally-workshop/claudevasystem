@@ -406,8 +406,9 @@
   }
 
   function sendMessage(content) {
+    // If socket not ready, fall back to HTTP so the bot still works
     if (!socket || !socket.connected) {
-      appendMessage('Connection issue — please try again in a moment.', 'bot');
+      sendViaHTTP(content);
       return;
     }
 
@@ -419,6 +420,35 @@
       content: content,
       email: customerEmail || undefined,
     });
+  }
+
+  function sendViaHTTP(message) {
+    isLoading = true;
+    document.getElementById('halo-chat-send').disabled = true;
+    showTyping();
+
+    var payload = { message: message, conversation_history: history.slice(-10, -1) };
+    if (customerEmail) payload.email = customerEmail;
+
+    fetch(BACKEND_URL + '/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        hideTyping();
+        var reply = data.response || data.error || 'Something went wrong — please try again.';
+        var parts = reply.split('|||').map(function(s) { return s.trim(); }).filter(Boolean);
+        history.push({ role: 'assistant', content: parts.join(' ') });
+        saveSession();
+        displayParts(parts, 0);
+      })
+      .catch(function() {
+        hideTyping();
+        appendMessage('Connection issue — please try again in a moment.', 'bot');
+        unlockInput();
+      });
   }
 
   function displayParts(parts, index) {
@@ -456,10 +486,16 @@
   function loadSocketIO(cb) {
     if (window.io) return cb();
     var s = document.createElement('script');
-    s.src = BACKEND_URL + '/socket.io/socket.io.js';
+    // Load from CDN — avoids Render cold-start blocking the script load
+    s.src = 'https://cdn.socket.io/4.7.5/socket.io.min.js';
     s.onload = cb;
     s.onerror = function() {
-      console.warn('[halo] Socket.io failed to load — falling back to HTTP');
+      // CDN failed — try local fallback
+      var s2 = document.createElement('script');
+      s2.src = BACKEND_URL + '/socket.io/socket.io.js';
+      s2.onload = cb;
+      s2.onerror = function() { console.warn('[halo] Socket.io unavailable — HTTP mode'); };
+      document.head.appendChild(s2);
     };
     document.head.appendChild(s);
   }
