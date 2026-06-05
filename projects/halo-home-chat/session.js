@@ -1,4 +1,5 @@
-const { nanoid } = require('nanoid');
+const { customAlphabet } = require('nanoid');
+const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', 12);
 const { getRedis } = require('./redis');
 
 const TTL = parseInt(process.env.SESSION_TTL_SECONDS || '86400', 10);
@@ -9,7 +10,7 @@ function historyKey(id) { return `session:${id}:history`; }
 function socketKey(id) { return `session:${id}:socket`; }
 
 async function createSession(email) {
-  const id = nanoid(12);
+  const id = nanoid();
   const now = new Date().toISOString();
   const redis = getRedis();
   await redis.hset(metaKey(id),

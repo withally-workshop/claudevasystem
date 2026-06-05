@@ -8,7 +8,7 @@ const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...ar
 const { getProducts, getPages, getBlogArticles, getOrdersByEmail, getInventoryStatus, getAllRenderedPages } = require('./shopify');
 const { buildSystemPrompt } = require('./system-prompt');
 const { createSession, getSession, updateSessionEmail, setOwner, appendHistory, getHistory, registerSocket, getSocketId, touchSession } = require('./session');
-const { notifyEscalation, relayCustomerMessage, verifySlackSignature, handleSlashReply, handleSlashHandback } = require('./slack');
+const { notifyEscalation, relayCustomerMessage, verifySlackSignature, handleInteraction, handleSlashReply, handleSlashHandback } = require('./slack');
 
 const app = express();
 const server = http.createServer(app);
@@ -355,6 +355,7 @@ const captureRawBody = express.urlencoded({
   verify: (req, _res, buf) => { req.rawBody = buf.toString(); },
 });
 
+app.post('/slack/interactions', captureRawBody, verifySlackSignature, (req, res) => handleInteraction(req, res, io));
 app.post('/slack/commands/reply', captureRawBody, verifySlackSignature, (req, res) => handleSlashReply(req, res, io));
 app.post('/slack/commands/handback', captureRawBody, verifySlackSignature, (req, res) => handleSlashHandback(req, res, io));
 

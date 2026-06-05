@@ -5,6 +5,27 @@ const { getSession, setSlackThread, getSocketId, setOwner, appendHistory } = req
 const SLACK_CHANNEL = process.env.SLACK_ESCALATION_CHANNEL;
 const web = process.env.SLACK_BOT_TOKEN ? new WebClient(process.env.SLACK_BOT_TOKEN) : null;
 
+function actionButtons(sessionId) {
+  return {
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Reply', emoji: true },
+        action_id: 'reply_button',
+        value: sessionId,
+        style: 'primary',
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Hand back to bot', emoji: true },
+        action_id: 'handback_button',
+        value: sessionId,
+      },
+    ],
+  };
+}
+
 async function notifyEscalation(sessionId, { email, transcript, isBusinessHours, triggeredBy }) {
   if (!web) {
     console.warn('[Slack] SLACK_BOT_TOKEN not set — skipping escalation notification');
@@ -34,15 +55,7 @@ async function notifyEscalation(sessionId, { email, transcript, isBusinessHours,
       },
     },
     { type: 'divider' },
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: isBusinessHours
-          ? `Type in the *main channel* (not this thread):\n\`/reply ${sessionId} <message>\`   •   \`/handback ${sessionId}\``
-          : `Customer notified of 24h response window.\nWhen ready, type in the *main channel*: \`/reply ${sessionId} <message>\``,
-      },
-    },
+    actionButtons(sessionId),
   ];
 
   try {
@@ -64,7 +77,14 @@ async function relayCustomerMessage(sessionId, { content, email }) {
     await web.chat.postMessage({
       channel: session.slackChannel,
       thread_ts: session.slackThreadTs,
-      text: `*Customer${email ? ` (${email})` : ''}:* ${content}`,
+      blocks: [
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*Customer${email ? ` (${email})` : ''}:* ${content}` },
+        },
+        actionButtons(sessionId),
+      ],
+      text: `Customer${email ? ` (${email})` : ''}: ${content}`,
     });
   } catch (err) {
     console.error('[Slack] relay failed:', err.message);
@@ -79,7 +99,6 @@ function verifySlackSignature(req, res, next) {
   const signature = req.headers['x-slack-signature'];
   if (!timestamp || !signature) return res.status(400).send('Missing Slack headers');
 
-  // Reject requests older than 5 minutes
   if (Math.abs(Date.now() / 1000 - parseInt(timestamp, 10)) > 300) {
     return res.status(400).send('Request timestamp too old');
   }
@@ -95,6 +114,121 @@ function verifySlackSignature(req, res, next) {
   next();
 }
 
+async function handleInteraction(req, res, io) {
+  let payload;
+  try {
+    payload = JSON.parse(req.body.payload);
+  } catch {
+    return res.status(400).send('Invalid payload');
+  }
+
+  // Button clicks
+  if (payload.type === 'block_actions') {
+    const action = payload.actions?.[0];
+    if (!action) return res.status(200).send('');
+
+    const sessionId = action.value;
+
+    if (action.action_id === 'reply_button') {
+      if (!web) return res.status(200).send('');
+      try {
+        await web.views.open({
+          trigger_id: payload.trigger_id,
+          view: {
+            type: 'modal',
+            callback_id: `reply_modal:${sessionId}`,
+            title: { type: 'plain_text', text: 'Reply to customer' },
+            submit: { type: 'plain_text', text: 'Send' },
+            close: { type: 'plain_text', text: 'Cancel' },
+            blocks: [
+              {
+                type: 'input',
+                block_id: 'message_block',
+                element: {
+                  type: 'plain_text_input',
+                  action_id: 'message_input',
+                  multiline: true,
+                  placeholder: { type: 'plain_text', text: 'Type your reply to the customer...' },
+                },
+                label: { type: 'plain_text', text: 'Message' },
+              },
+            ],
+          },
+        });
+      } catch (err) {
+        console.error('[Slack] views.open failed:', err.message);
+      }
+      return res.status(200).send('');
+    }
+
+    if (action.action_id === 'handback_button') {
+      const session = await getSession(sessionId);
+      if (session) {
+        await setOwner(sessionId, 'bot');
+        const socketId = await getSocketId(sessionId);
+        if (socketId && io) {
+          io.to(socketId).emit('handback', { message: "You're back with Mimi. How else can I help?" });
+        }
+        if (web && session.slackThreadTs) {
+          try {
+            await web.chat.postMessage({
+              channel: session.slackChannel,
+              thread_ts: session.slackThreadTs,
+              text: `Session handed back to bot by ${payload.user?.name || 'team'}.`,
+            });
+          } catch (err) {
+            console.error('[Slack] handback thread reply failed:', err.message);
+          }
+        }
+      }
+      return res.status(200).send('');
+    }
+
+    return res.status(200).send('');
+  }
+
+  // Modal submission
+  if (payload.type === 'view_submission') {
+    const callbackId = payload.view?.callback_id || '';
+    if (!callbackId.startsWith('reply_modal:')) {
+      return res.status(200).json({ response_action: 'clear' });
+    }
+
+    const sessionId = callbackId.slice('reply_modal:'.length);
+    const message = payload.view.state.values?.message_block?.message_input?.value?.trim();
+
+    if (!message || !sessionId) return res.status(200).json({ response_action: 'clear' });
+
+    const session = await getSession(sessionId);
+    if (!session) return res.status(200).json({ response_action: 'clear' });
+
+    await appendHistory(sessionId, { role: 'human_agent', content: message });
+
+    const socketId = await getSocketId(sessionId);
+    if (socketId && io) {
+      io.to(socketId).emit('human_message', { content: message });
+    }
+
+    // Mirror the reply back to the Slack thread for a full record
+    if (web && session.slackThreadTs) {
+      try {
+        await web.chat.postMessage({
+          channel: session.slackChannel,
+          thread_ts: session.slackThreadTs,
+          text: `*${payload.user?.name || 'Team'}:* ${message}`,
+        });
+      } catch (err) {
+        console.error('[Slack] thread mirror failed:', err.message);
+      }
+    }
+
+    return res.status(200).json({ response_action: 'clear' });
+  }
+
+  res.status(200).send('');
+}
+
+// Kept as fallback for power users who prefer slash commands
 async function handleSlashReply(req, res, io) {
   const text = (req.body.text || '').trim();
   const spaceIdx = text.indexOf(' ');
@@ -148,7 +282,6 @@ async function handleSlashHandback(req, res, io) {
     io.to(socketId).emit('handback', { message: "You're back with Mimi. How else can I help?" });
   }
 
-  // Post to Slack thread
   if (web && session.slackThreadTs) {
     try {
       await web.chat.postMessage({
@@ -164,4 +297,4 @@ async function handleSlashHandback(req, res, io) {
   res.json({ response_type: 'ephemeral', text: `Handback complete for \`${sessionId}\`.` });
 }
 
-module.exports = { notifyEscalation, relayCustomerMessage, verifySlackSignature, handleSlashReply, handleSlashHandback };
+module.exports = { notifyEscalation, relayCustomerMessage, verifySlackSignature, handleInteraction, handleSlashReply, handleSlashHandback };
