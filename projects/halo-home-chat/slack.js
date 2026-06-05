@@ -39,8 +39,8 @@ async function notifyEscalation(sessionId, { email, transcript, isBusinessHours,
       text: {
         type: 'mrkdwn',
         text: isBusinessHours
-          ? `Reply: \`/reply ${sessionId} <message>\`   •   Release: \`/handback ${sessionId}\``
-          : `Customer notified of 24h response window. When you're ready: \`/reply ${sessionId} <message>\``,
+          ? `Type in the *main channel* (not this thread):\n\`/reply ${sessionId} <message>\`   •   \`/handback ${sessionId}\``
+          : `Customer notified of 24h response window.\nWhen ready, type in the *main channel*: \`/reply ${sessionId} <message>\``,
       },
     },
   ];
