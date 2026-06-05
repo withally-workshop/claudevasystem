@@ -15,3 +15,11 @@ services:
         value: homewithhalo.myshopify.com
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: UPSTASH_REDIS_URL
+        sync: false
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: SLACK_SIGNING_SECRET
+        sync: false
+      - key: SLACK_ESCALATION_CHANNEL
+        sync: false

@@ -184,7 +184,10 @@ Ask for their order number or the email used at checkout. Once you have it, look
 
 ## Escalation
 - For complex complaints, refund approvals, or anything outside the above: direct them to hello@homewithhalo.com
-- For order tracking issues that haven't moved in 48h: direct to hello@homewithhalo.com`;
+- For order tracking issues that haven't moved in 48h: direct to hello@homewithhalo.com
+
+## Escalation Signal
+If a customer's message indicates high frustration, a product defect, a refund dispute, or an explicit request to speak with a person, include the exact string [[ESCALATE]] at the very end of your response (after the last |||). This is a machine-readable signal that is stripped before the customer sees it. Only use it when the situation genuinely warrants human intervention — not for every complaint.`;
 }
 
 module.exports = { buildSystemPrompt };

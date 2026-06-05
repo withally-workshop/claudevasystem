@@ -1,16 +1,36 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
 const rateLimit = require('express-rate-limit');
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 const { getProducts, getPages, getBlogArticles, getOrdersByEmail, getInventoryStatus, getAllRenderedPages } = require('./shopify');
 const { buildSystemPrompt } = require('./system-prompt');
+const { createSession, getSession, updateSessionEmail, setOwner, appendHistory, getHistory, registerSocket, getSocketId, touchSession } = require('./session');
+const { notifyEscalation, relayCustomerMessage, verifySlackSignature, handleSlashReply, handleSlashHandback } = require('./slack');
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 
-// Catalog cache — refresh every 6 hours
+const ALLOWED_ORIGINS = [
+  'https://homewithhalo.com',
+  'https://www.homewithhalo.com',
+  'https://homewithhalo.myshopify.com',
+];
+
+// ── Socket.io ────────────────────────────────────────────────────────────────
+const io = new Server(server, {
+  cors: {
+    origin: ALLOWED_ORIGINS,
+    methods: ['GET', 'POST'],
+  },
+  transports: ['websocket', 'polling'],
+});
+
+// ── Catalog cache ─────────────────────────────────────────────────────────────
 let catalogCache = {
   products: [],
   inventoryStatus: { inStock: [], outOfStock: [] },
@@ -43,22 +63,268 @@ async function ensureCatalog() {
   if (Date.now() - catalogCache.lastRefresh > CACHE_TTL) await refreshCatalog();
 }
 
+// ── Escalation helpers ────────────────────────────────────────────────────────
+const ESCALATION_KEYWORDS = [
+  'refund', 'broken', 'complaint', 'unhappy', 'frustrated', 'frustrating',
+  'cancel', 'return', 'defective', 'not working', 'damaged', 'wrong item',
+];
+
+function detectEscalation(message) {
+  const lower = message.toLowerCase();
+  if (/talk\s+to\s+(a\s+|the\s+)?(human|person|agent|someone|team)|speak\s+to\s+(a\s+|the\s+)?(human|person|agent|team)|real\s+person|connect\s+me\s+(with|to)\s+(a\s+)?(human|agent|team|person)/i.test(lower)) {
+    return { escalate: true, trigger: 'explicit_request', keyword: null };
+  }
+  for (const kw of ESCALATION_KEYWORDS) {
+    if (lower.includes(kw)) {
+      return { escalate: true, trigger: 'keyword', keyword: kw };
+    }
+  }
+  return { escalate: false, trigger: null, keyword: null };
+}
+
+function isBusinessHours() {
+  const now = new Date();
+  const sgtHour = (now.getUTCHours() + 8) % 24;
+  const sgtDay = new Date(now.getTime() + 8 * 60 * 60 * 1000).getUTCDay(); // 0=Sun, 6=Sat
+  if (sgtDay === 0 || sgtDay === 6) return false;
+  return sgtHour >= 9 && sgtHour < 18;
+}
+
+function formatTranscript(history) {
+  return history.slice(-12).map(entry => {
+    const label = entry.role === 'user' ? 'Customer' : entry.role === 'human_agent' ? 'Agent' : 'Mimi';
+    return `${label}: ${entry.content}`;
+  }).join('\n');
+}
+
+// ── Claude API call (shared by socket handler and /chat HTTP endpoint) ────────
+async function callClaude({ content, historyEntries = [], email }) {
+  await ensureCatalog();
+
+  const systemPrompt = buildSystemPrompt({
+    inventoryStatus: catalogCache.inventoryStatus,
+    products: catalogCache.products,
+    pages: catalogCache.pages,
+    articles: catalogCache.articles,
+    renderedPages: catalogCache.renderedPages,
+  });
+
+  let orderContext = '';
+  if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    try {
+      const orders = await getOrdersByEmail(email);
+      if (orders.length > 0) {
+        const summaries = orders.slice(0, 5).map((o) => {
+          const items = (o.line_items || []).map((li) => `${li.name} x${li.quantity}`).join(', ');
+          const fulfillment = o.fulfillment_status || 'unfulfilled';
+          const tracking = o.fulfillments?.[0]?.tracking_number || null;
+          return `Order #${o.order_number} — ${o.financial_status} — ${fulfillment} — ${o.created_at?.split('T')[0]} — ${items} — $${o.total_price} SGD${tracking ? ' — Tracking: ' + tracking : ''}`;
+        });
+        orderContext = `\n\n[Order data for ${email}]\n${summaries.join('\n')}`;
+      } else {
+        orderContext = `\n\n[No orders found for email: ${email}]`;
+      }
+    } catch {
+      orderContext = '\n\n[Could not retrieve order data — please contact hello@homewithhalo.com]';
+    }
+  }
+
+  const userMessage = content + orderContext;
+  const messages = [...historyEntries.slice(-10), { role: 'user', content: userMessage }];
+
+  const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': ANTHROPIC_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 512,
+      system: systemPrompt,
+      messages,
+    }),
+  });
+
+  if (!claudeRes.ok) {
+    const err = await claudeRes.text();
+    console.error('Claude error:', err);
+    throw new Error('Claude API error');
+  }
+
+  const data = await claudeRes.json();
+  return data.content?.[0]?.text || "I'm having trouble responding right now. Please contact hello@homewithhalo.com for help.";
+}
+
+// ── Socket.io rate limiter ────────────────────────────────────────────────────
+const socketMessageCounts = new Map();
+const SOCKET_RATE_LIMIT = 20;
+const SOCKET_WINDOW_MS = 60 * 1000;
+
+function checkSocketRateLimit(socketId) {
+  const now = Date.now();
+  const entry = socketMessageCounts.get(socketId) || { count: 0, windowStart: now };
+  if (now - entry.windowStart > SOCKET_WINDOW_MS) {
+    socketMessageCounts.set(socketId, { count: 1, windowStart: now });
+    return true;
+  }
+  entry.count++;
+  socketMessageCounts.set(socketId, entry);
+  return entry.count <= SOCKET_RATE_LIMIT;
+}
+
+// ── Socket.io connection handler ──────────────────────────────────────────────
+io.on('connection', (socket) => {
+  let activeSessionId = null;
+
+  socket.on('session_init', async ({ sessionId, email } = {}) => {
+    try {
+      let sid = sessionId;
+      if (sid) {
+        const existing = await getSession(sid);
+        if (!existing) sid = null;
+      }
+      if (!sid) sid = await createSession(email || '');
+      activeSessionId = sid;
+      await registerSocket(sid, socket.id);
+      socket.emit('session_ready', { sessionId: sid });
+    } catch (err) {
+      console.error('[Socket] session_init error:', err.message);
+      socket.emit('error', { message: 'Failed to initialize session.' });
+    }
+  });
+
+  socket.on('heartbeat', async () => {
+    if (activeSessionId) {
+      try { await registerSocket(activeSessionId, socket.id); } catch {}
+    }
+  });
+
+  socket.on('message', async ({ content, email } = {}) => {
+    if (!activeSessionId) {
+      socket.emit('error', { message: 'No active session.' });
+      return;
+    }
+    if (!content || typeof content !== 'string' || content.trim().length === 0) return;
+    if (content.length > 2000) {
+      socket.emit('error', { message: 'Message too long.' });
+      return;
+    }
+
+    if (!checkSocketRateLimit(socket.id)) {
+      socket.emit('rate_limited', { message: 'Too many messages — please wait a moment.' });
+      return;
+    }
+
+    let session;
+    try {
+      session = await getSession(activeSessionId);
+    } catch (err) {
+      socket.emit('error', { message: 'Session error — please refresh.' });
+      return;
+    }
+    if (!session) {
+      socket.emit('error', { message: 'Session expired.' });
+      return;
+    }
+
+    if (email && email !== session.email) {
+      try { await updateSessionEmail(activeSessionId, email); } catch {}
+    }
+
+    try {
+      await appendHistory(activeSessionId, { role: 'user', content });
+      await touchSession(activeSessionId);
+    } catch {}
+
+    // Human-owned session — relay to Slack, ack to browser
+    if (session.owner === 'human') {
+      try { await relayCustomerMessage(activeSessionId, { content, email: session.email || email }); } catch {}
+      socket.emit('relay_ack', {});
+      return;
+    }
+
+    // Keyword / explicit escalation check before calling Claude
+    const escalationCheck = detectEscalation(content);
+
+    socket.emit('typing', { typing: true });
+
+    let botReply;
+    try {
+      const history = await getHistory(activeSessionId);
+      const historyEntries = history.slice(0, -1).map(e => ({ role: e.role === 'human_agent' ? 'assistant' : e.role, content: e.content }));
+      botReply = await callClaude({ content, historyEntries, email: session.email || email });
+    } catch (err) {
+      socket.emit('typing', { typing: false });
+      socket.emit('bot_message', {
+        content: "I'm having trouble right now. Please contact hello@homewithhalo.com for help.",
+        parts: ["I'm having trouble right now. Please contact hello@homewithhalo.com for help."],
+      });
+      return;
+    }
+
+    socket.emit('typing', { typing: false });
+
+    // Claude escalation signal
+    const claudeEscalate = botReply.includes('[[ESCALATE]]');
+    const shouldEscalate = escalationCheck.escalate || claudeEscalate;
+    const cleanReply = botReply.replace(/\[\[ESCALATE\]\]/g, '').trim();
+
+    const parts = cleanReply.split('|||').map(s => s.trim()).filter(Boolean);
+    socket.emit('bot_message', { content: cleanReply, parts });
+
+    try { await appendHistory(activeSessionId, { role: 'assistant', content: cleanReply }); } catch {}
+
+    if (shouldEscalate) {
+      const bh = isBusinessHours();
+      const handoffMessage = bh
+        ? "One moment — I'm connecting you with a team member who can help further. They'll be with you shortly."
+        : "Our team is offline right now, but I've flagged your message and a team member will follow up within 24 hours.";
+
+      socket.emit('bot_message', { content: handoffMessage, parts: [handoffMessage] });
+      socket.emit('escalated', { sessionId: activeSessionId, businessHours: bh });
+
+      try {
+        await setOwner(activeSessionId, 'human');
+        await appendHistory(activeSessionId, { role: 'assistant', content: handoffMessage });
+
+        const fullHistory = await getHistory(activeSessionId);
+        const transcript = formatTranscript(fullHistory);
+        const triggeredBy = escalationCheck.escalate
+          ? (escalationCheck.trigger === 'explicit_request' ? 'explicit request' : `keyword: ${escalationCheck.keyword}`)
+          : 'Claude judgment';
+
+        await notifyEscalation(activeSessionId, {
+          email: session.email || email || '',
+          transcript,
+          isBusinessHours: bh,
+          triggeredBy,
+        });
+      } catch (err) {
+        console.error('[Socket] escalation error:', err.message);
+      }
+    }
+  });
+
+  socket.on('disconnect', () => {
+    socketMessageCounts.delete(socket.id);
+  });
+});
+
+// ── Express middleware ─────────────────────────────────────────────────────────
 app.use(express.json());
 
 app.use(cors({
   origin: (origin, cb) => {
-    const allowed = [
-      'https://homewithhalo.com',
-      'https://www.homewithhalo.com',
-      'https://homewithhalo.myshopify.com',
-    ];
-    if (!origin || allowed.includes(origin)) return cb(null, true);
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
     cb(new Error('Not allowed by CORS'));
   },
   methods: ['POST', 'GET', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
 }));
 
+// ── HTTP rate limiter (existing /chat endpoint) ───────────────────────────────
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
@@ -68,7 +334,7 @@ const limiter = rateLimit({
 });
 app.use('/chat', limiter);
 
-
+// ── Static files ──────────────────────────────────────────────────────────────
 app.get('/widget.js', (_req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Cache-Control', 'public, max-age=300');
@@ -83,6 +349,16 @@ app.get('/health', (_req, res) => res.json({
   articles: catalogCache.articles.length,
 }));
 
+// ── Slack slash commands ──────────────────────────────────────────────────────
+const captureRawBody = express.urlencoded({
+  extended: true,
+  verify: (req, _res, buf) => { req.rawBody = buf.toString(); },
+});
+
+app.post('/slack/commands/reply', captureRawBody, verifySlackSignature, (req, res) => handleSlashReply(req, res, io));
+app.post('/slack/commands/handback', captureRawBody, verifySlackSignature, (req, res) => handleSlashHandback(req, res, io));
+
+// ── Legacy /chat HTTP endpoint (kept for backward compatibility) ───────────────
 app.post('/chat', async (req, res) => {
   const { message, email, conversation_history = [] } = req.body || {};
 
@@ -94,74 +370,18 @@ app.post('/chat', async (req, res) => {
   }
 
   try {
-    await ensureCatalog();
-
-    const systemPrompt = buildSystemPrompt({
-      inventoryStatus: catalogCache.inventoryStatus,
-      products: catalogCache.products,
-      pages: catalogCache.pages,
-      articles: catalogCache.articles,
-      renderedPages: catalogCache.renderedPages,
-    });
-
-    let orderContext = '';
-    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      try {
-        const orders = await getOrdersByEmail(email);
-        if (orders.length > 0) {
-          // Security: only pass safe fields — intentionally omit shipping_address,
-          // customer PII, phone, billing_address, customer ID, and internal notes.
-          const summaries = orders.slice(0, 5).map((o) => {
-            const items = (o.line_items || []).map((li) => `${li.name} x${li.quantity}`).join(', ');
-            const fulfillment = o.fulfillment_status || 'unfulfilled';
-            const tracking = o.fulfillments?.[0]?.tracking_number || null;
-            return `Order #${o.order_number} — ${o.financial_status} — ${fulfillment} — ${o.created_at?.split('T')[0]} — ${items} — $${o.total_price} SGD${tracking ? ' — Tracking: ' + tracking : ''}`;
-          });
-          orderContext = `\n\n[Order data for ${email}]\n${summaries.join('\n')}`;
-        } else {
-          orderContext = `\n\n[No orders found for email: ${email}]`;
-        }
-      } catch {
-        orderContext = '\n\n[Could not retrieve order data — please contact hello@homewithhalo.com]';
-      }
-    }
-
-    const userMessage = message + orderContext;
-    const history = conversation_history.slice(-10);
-    const messages = [...history, { role: 'user', content: userMessage }];
-
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 512,
-        system: systemPrompt,
-        messages,
-      }),
-    });
-
-    if (!claudeRes.ok) {
-      const err = await claudeRes.text();
-      console.error('Claude error:', err);
-      return res.status(502).json({ error: 'AI service unavailable — please try again.' });
-    }
-
-    const data = await claudeRes.json();
-    const response = data.content?.[0]?.text || "I'm having trouble responding right now. Please contact hello@homewithhalo.com for help.";
-
-    res.json({ response });
+    const historyEntries = conversation_history.slice(-10);
+    const response = await callClaude({ content: message, historyEntries, email });
+    const cleanResponse = response.replace(/\[\[ESCALATE\]\]/g, '').trim();
+    res.json({ response: cleanResponse });
   } catch (err) {
     console.error('Chat error:', err.message);
     res.status(500).json({ error: 'Something went wrong — please try again.' });
   }
 });
 
-app.listen(PORT, async () => {
+// ── Start ──────────────────────────────────────────────────────────────────────
+server.listen(PORT, async () => {
   console.log(`Halo Home Chat backend running on port ${PORT}`);
   await refreshCatalog();
 });

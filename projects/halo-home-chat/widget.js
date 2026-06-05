@@ -4,6 +4,7 @@
   var BACKEND_URL = 'https://halo-home-chat.onrender.com';
   var SESSION_KEY = 'halo_chat_history';
   var EMAIL_KEY = 'halo_chat_email';
+  var SESSION_ID_KEY = 'halo_chat_session_id';
   var BADGE_DISMISSED_KEY = 'halo_badge_dismissed';
   var GREETING = "Hi! I'm Mimi, your Halo Home guide. Ask me about our products, filters, or your order.";
   var BADGE_MESSAGES = [
@@ -24,6 +25,12 @@
   var customerEmail = null;
   var isOpen = false;
   var isLoading = false;
+
+  // Socket.io state
+  var socket = null;
+  var sessionId = null;
+  var owner = 'bot';
+  var heartbeatInterval = null;
 
   // ─── Styles ───────────────────────────────────────────────────────────────
 
@@ -82,6 +89,12 @@
       background: none; border: none; color: #fff; cursor: pointer;
       font-size: 20px; line-height: 1; padding: 0;
     }
+    #halo-escalation-banner {
+      background: #e8f5e9; color: #2e7d32;
+      font-size: 12px; font-weight: 600; text-align: center;
+      padding: 6px 12px; flex-shrink: 0;
+      border-bottom: 1px solid #c8e6c9;
+    }
     #halo-chat-messages {
       flex: 1; overflow-y: auto; padding: 16px;
       display: flex; flex-direction: column; gap: 4px;
@@ -94,11 +107,18 @@
       background: #f2f2f2; color: #1a1a1a; align-self: flex-start;
       border-bottom-left-radius: 4px; margin-bottom: 2px;
     }
+    .halo-msg-human {
+      background: #e3f2fd; color: #1a1a1a; align-self: flex-start;
+      border-bottom-left-radius: 4px; margin-bottom: 2px;
+    }
     .halo-msg-bot + .halo-msg-user,
-    .halo-msg-user + .halo-msg-bot {
+    .halo-msg-user + .halo-msg-bot,
+    .halo-msg-human + .halo-msg-user,
+    .halo-msg-user + .halo-msg-human {
       margin-top: 10px;
     }
-    .halo-msg-bot + .halo-msg-bot {
+    .halo-msg-bot + .halo-msg-bot,
+    .halo-msg-human + .halo-msg-human {
       border-top-left-radius: 4px; margin-top: 3px;
     }
     .halo-msg-user {
@@ -180,7 +200,7 @@
         });
         document.body.appendChild(badge);
 
-        // Rotate message every 4 seconds
+        // Rotate message every 8 seconds
         var rotateInterval = setInterval(function() {
           var textEl = document.getElementById('halo-badge-text');
           if (!textEl) { clearInterval(rotateInterval); return; }
@@ -231,6 +251,7 @@
       var raw = sessionStorage.getItem(SESSION_KEY);
       if (raw) history = JSON.parse(raw);
       customerEmail = sessionStorage.getItem(EMAIL_KEY) || null;
+      sessionId = sessionStorage.getItem(SESSION_ID_KEY) || null;
     } catch {}
   }
 
@@ -238,6 +259,7 @@
     try {
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(history.slice(-20)));
       if (customerEmail) sessionStorage.setItem(EMAIL_KEY, customerEmail);
+      if (sessionId) sessionStorage.setItem(SESSION_ID_KEY, sessionId);
     } catch {}
   }
 
@@ -246,11 +268,18 @@
   function appendMessage(text, role) {
     var container = document.getElementById('halo-chat-messages');
     var el = document.createElement('div');
-    el.className = 'halo-msg ' + (role === 'user' ? 'halo-msg-user' : 'halo-msg-bot');
     if (role === 'user') {
+      el.className = 'halo-msg halo-msg-user';
       el.textContent = text;
+    } else if (role === 'human_agent') {
+      el.className = 'halo-msg halo-msg-human';
+      el.innerHTML = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
     } else {
-      // Render newlines as line breaks; escape everything else to prevent XSS
+      el.className = 'halo-msg halo-msg-bot';
       el.innerHTML = text
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -280,10 +309,34 @@
   function renderHistory() {
     var container = document.getElementById('halo-chat-messages');
     container.innerHTML = '';
+    // Restore escalation banner if session is human-owned
+    if (owner === 'human') showEscalationBanner(null);
     appendMessage(GREETING, 'bot');
     history.forEach(function (m) {
-      appendMessage(m.content, m.role === 'user' ? 'user' : 'bot');
+      var role = m.role === 'user' ? 'user' : m.role === 'human_agent' ? 'human_agent' : 'bot';
+      appendMessage(m.content, role);
     });
+  }
+
+  function showEscalationBanner(isBusinessHours) {
+    var existing = document.getElementById('halo-escalation-banner');
+    if (existing) return;
+    var banner = document.createElement('div');
+    banner.id = 'halo-escalation-banner';
+    if (isBusinessHours === null) {
+      banner.textContent = 'Connected to team';
+    } else {
+      banner.textContent = isBusinessHours
+        ? 'Connected to a team member'
+        : 'Team notified — reply within 24 hours';
+    }
+    var messages = document.getElementById('halo-chat-messages');
+    if (messages) messages.parentNode.insertBefore(banner, messages);
+  }
+
+  function removeEscalationBanner() {
+    var b = document.getElementById('halo-escalation-banner');
+    if (b) b.remove();
   }
 
   // ─── Window toggle ────────────────────────────────────────────────────────
@@ -339,7 +392,6 @@
     var text = input.value.trim();
     if (!text) return;
 
-    // Detect email in message
     var detectedEmail = extractEmail(text);
     if (detectedEmail) customerEmail = detectedEmail;
 
@@ -350,41 +402,23 @@
     history.push({ role: 'user', content: text });
     saveSession();
 
-    sendToBackend(text);
+    sendMessage(text);
   }
 
-  function sendToBackend(message) {
+  function sendMessage(content) {
+    if (!socket || !socket.connected) {
+      appendMessage('Connection issue — please try again in a moment.', 'bot');
+      return;
+    }
+
     isLoading = true;
     document.getElementById('halo-chat-send').disabled = true;
-    showTyping();
+    if (owner === 'bot') showTyping();
 
-    var payload = {
-      message: message,
-      conversation_history: history.slice(-10, -1), // exclude the just-added message
-    };
-    if (customerEmail) payload.email = customerEmail;
-
-    fetch(BACKEND_URL + '/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        hideTyping();
-        var reply = data.response || data.error || 'Something went wrong — please try again.';
-        var parts = reply.split('|||').map(function(s) { return s.trim(); }).filter(Boolean);
-        history.push({ role: 'assistant', content: parts.join(' ') });
-        saveSession();
-        displayParts(parts, 0);
-      })
-      .catch(function () {
-        hideTyping();
-        appendMessage('Connection issue — please try again in a moment.', 'bot');
-        isLoading = false;
-        document.getElementById('halo-chat-send').disabled = false;
-        document.getElementById('halo-chat-input').focus();
-      });
+    socket.emit('message', {
+      content: content,
+      email: customerEmail || undefined,
+    });
   }
 
   function displayParts(parts, index) {
@@ -409,12 +443,112 @@
     }
   }
 
+  function unlockInput() {
+    isLoading = false;
+    var send = document.getElementById('halo-chat-send');
+    var input = document.getElementById('halo-chat-input');
+    if (send) send.disabled = false;
+    if (input) input.focus();
+  }
+
+  // ─── Socket.io ────────────────────────────────────────────────────────────
+
+  function loadSocketIO(cb) {
+    if (window.io) return cb();
+    var s = document.createElement('script');
+    s.src = BACKEND_URL + '/socket.io/socket.io.js';
+    s.onload = cb;
+    s.onerror = function() {
+      console.warn('[halo] Socket.io failed to load — falling back to HTTP');
+    };
+    document.head.appendChild(s);
+  }
+
+  function initSocket() {
+    socket = window.io(BACKEND_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,
+    });
+
+    socket.on('connect', function() {
+      socket.emit('session_init', { sessionId: sessionId, email: customerEmail || undefined });
+    });
+
+    socket.on('session_ready', function(data) {
+      sessionId = data.sessionId;
+      saveSession();
+    });
+
+    socket.on('typing', function(data) {
+      if (data.typing) showTyping(); else hideTyping();
+    });
+
+    socket.on('bot_message', function(data) {
+      hideTyping();
+      var parts = data.parts && data.parts.length ? data.parts : [data.content];
+      var stored = parts.join(' ');
+      history.push({ role: 'assistant', content: stored });
+      saveSession();
+      displayParts(parts, 0);
+    });
+
+    socket.on('human_message', function(data) {
+      hideTyping();
+      appendMessage(data.content, 'human_agent');
+      history.push({ role: 'human_agent', content: data.content });
+      saveSession();
+      unlockInput();
+    });
+
+    socket.on('relay_ack', function() {
+      unlockInput();
+    });
+
+    socket.on('escalated', function(data) {
+      owner = 'human';
+      if (isOpen) showEscalationBanner(data.businessHours);
+    });
+
+    socket.on('handback', function(data) {
+      owner = 'bot';
+      removeEscalationBanner();
+      appendMessage(data.message, 'bot');
+      history.push({ role: 'assistant', content: data.message });
+      saveSession();
+    });
+
+    socket.on('rate_limited', function(data) {
+      hideTyping();
+      appendMessage(data.message, 'bot');
+      unlockInput();
+    });
+
+    socket.on('error', function(data) {
+      hideTyping();
+      appendMessage(data.message || 'Something went wrong — please try again.', 'bot');
+      unlockInput();
+    });
+
+    // Heartbeat — refreshes Redis socket TTL every 20s
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    heartbeatInterval = setInterval(function() {
+      if (socket && socket.connected && sessionId) {
+        socket.emit('heartbeat');
+      }
+    }, 20000);
+  }
+
   // ─── Init ─────────────────────────────────────────────────────────────────
 
   function init() {
     injectStyles();
     loadSession();
     buildUI();
+    loadSocketIO(function() {
+      if (window.io) initSocket();
+    });
   }
 
   if (document.readyState === 'loading') {
