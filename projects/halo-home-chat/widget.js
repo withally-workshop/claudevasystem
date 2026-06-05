@@ -357,19 +357,40 @@
       .then(function (data) {
         hideTyping();
         var reply = data.response || data.error || 'Something went wrong — please try again.';
-        appendMessage(reply, 'bot');
-        history.push({ role: 'assistant', content: reply });
+        var parts = reply.split('|||').map(function(s) { return s.trim(); }).filter(Boolean);
+        history.push({ role: 'assistant', content: parts.join(' ') });
         saveSession();
+        displayParts(parts, 0);
       })
       .catch(function () {
         hideTyping();
         appendMessage('Connection issue — please try again in a moment.', 'bot');
-      })
-      .finally(function () {
         isLoading = false;
         document.getElementById('halo-chat-send').disabled = false;
         document.getElementById('halo-chat-input').focus();
       });
+  }
+
+  function displayParts(parts, index) {
+    if (index >= parts.length) {
+      isLoading = false;
+      document.getElementById('halo-chat-send').disabled = false;
+      document.getElementById('halo-chat-input').focus();
+      return;
+    }
+    appendMessage(parts[index], 'bot');
+    if (index + 1 < parts.length) {
+      setTimeout(function() {
+        showTyping();
+        var delay = Math.min(600 + parts[index + 1].length * 18, 1800);
+        setTimeout(function() {
+          hideTyping();
+          displayParts(parts, index + 1);
+        }, delay);
+      }, 300);
+    } else {
+      displayParts(parts, index + 1);
+    }
   }
 
   // ─── Init ─────────────────────────────────────────────────────────────────
