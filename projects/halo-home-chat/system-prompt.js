@@ -1,6 +1,6 @@
 const { stripHtml } = require('./shopify');
 
-function buildSystemPrompt({ inventoryStatus, products = [], pages = [], articles = [] }) {
+function buildSystemPrompt({ inventoryStatus, products = [], pages = [], articles = [], renderedPages = [] }) {
   // ── Live inventory ──────────────────────────────────────────────────────────
   const inStockList = inventoryStatus.inStock.length
     ? inventoryStatus.inStock.map((p) => `  - ${p}`).join('\n')
@@ -26,16 +26,6 @@ function buildSystemPrompt({ inventoryStatus, products = [], pages = [], article
     })
     .join('\n\n');
 
-  // ── Site pages (FAQs, policies, about, etc.) ────────────────────────────────
-  const pageContent = pages
-    .map((p) => {
-      const body = stripHtml(p.body_html).slice(0, 2000);
-      return body ? `### ${p.title}\n${body}` : null;
-    })
-    .filter(Boolean)
-    .join('\n\n')
-    .slice(0, 10000); // total cap to avoid token bloat
-
   // ── Blog articles ───────────────────────────────────────────────────────────
   const articleContent = articles
     .slice(0, 8)
@@ -59,6 +49,7 @@ function buildSystemPrompt({ inventoryStatus, products = [], pages = [], article
 - Never make up inventory or stock levels — always use the live inventory data provided below
 - For order lookups, you MUST have the customer's email address first. Ask for it politely if not provided.
 - Never invent policies, prices, or product specs not listed below
+- **Never quote specific shipping or restock dates from product descriptions** — those may be stale. For availability, use the live inventory section above. For specific restock timelines, say "check homewithhalo.com or contact hello@homewithhalo.com for the latest"
 - Keep responses short — 2-4 sentences for simple questions, bullet points for comparisons
 - Do not mention competitor products
 - Currency is always SGD
@@ -80,10 +71,9 @@ ${outOfStockList}
 ## Product Catalog (live from store)
 ${productCatalog || '(No active products found)'}
 
-## Store Pages & Policies
-${pageContent || '(No page content available)'}
-
 ${articleContent ? `## Blog & Articles\n${articleContent}` : ''}
+
+${renderedPages.length ? renderedPages.map(p => `## ${p.title}\n${p.text}`).join('\n\n') : ''}
 
 ## Brand Info
 - Instagram: @homewithhalo
@@ -180,10 +170,9 @@ Warm regards,
 Mimi
 Team HALO Home
 
-## Tone & Sign-off
+## Tone
 - Warm, friendly, helpful. Never robotic.
-- Sign off responses as: **Mimi from Halo Home**
-- Example: "Hope that helps! Mimi from Halo Home 😊"
+- Do NOT sign off chat messages — no "Mimi from Halo Home", no emoji sign-offs. Sign-offs are for email only.
 
 ## Escalation
 - For complex complaints, refund approvals, or anything outside the above: direct them to hello@homewithhalo.com

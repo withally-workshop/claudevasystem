@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
-const { getProducts, getPages, getBlogArticles, getOrdersByEmail, getInventoryStatus } = require('./shopify');
+const { getProducts, getPages, getBlogArticles, getOrdersByEmail, getInventoryStatus, getAllRenderedPages } = require('./shopify');
 const { buildSystemPrompt } = require('./system-prompt');
 
 const app = express();
@@ -16,6 +16,7 @@ let catalogCache = {
   inventoryStatus: { inStock: [], outOfStock: [] },
   pages: [],
   articles: [],
+  renderedPages: [],
   lastRefresh: 0,
 };
 const CACHE_TTL = 6 * 60 * 60 * 1000;
@@ -27,8 +28,11 @@ async function refreshCatalog() {
       getPages(),
       getBlogArticles(),
     ]);
-    const inventoryStatus = await getInventoryStatus(products);
-    catalogCache = { products, inventoryStatus, pages, articles, lastRefresh: Date.now() };
+    const [inventoryStatus, renderedPages] = await Promise.all([
+      getInventoryStatus(products),
+      getAllRenderedPages(pages),
+    ]);
+    catalogCache = { products, inventoryStatus, pages, articles, renderedPages, lastRefresh: Date.now() };
     console.log(`Catalog refreshed: ${products.length} products, ${pages.length} pages, ${articles.length} articles`);
   } catch (err) {
     console.error('Catalog refresh failed:', err.message);
@@ -97,6 +101,7 @@ app.post('/chat', async (req, res) => {
       products: catalogCache.products,
       pages: catalogCache.pages,
       articles: catalogCache.articles,
+      renderedPages: catalogCache.renderedPages,
     });
 
     let orderContext = '';

@@ -42,6 +42,40 @@ async function getPages() {
   return (data.pages || []).filter(p => p.published_at);
 }
 
+// Fetches the rendered storefront HTML for a page slug.
+// Used because accordion/section FAQ content lives in theme data, not body_html.
+async function getRenderedPageText(slug) {
+  try {
+    const url = `https://homewithhalo.com/pages/${slug}`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'HaloHomeChatBot/1.0' },
+    });
+    if (!res.ok) return '';
+    const html = await res.text();
+    const main = html
+      .replace(/<header[\s\S]*?<\/header>/gi, '')
+      .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '');
+    return stripHtml(main).replace(/\s{3,}/g, '\n').trim().slice(0, 4000);
+  } catch {
+    return '';
+  }
+}
+
+// Fetches rendered text for all published pages (handles theme-section content).
+async function getAllRenderedPages(pages) {
+  const results = await Promise.all(
+    pages.map(async (p) => {
+      const text = await getRenderedPageText(p.handle);
+      return text ? { title: p.title, handle: p.handle, text } : null;
+    })
+  );
+  return results.filter(Boolean);
+}
+
 async function getBlogArticles() {
   try {
     const blogsData = await shopifyGet('/blogs.json');
@@ -79,4 +113,4 @@ async function getInventoryStatus(products) {
   return { inStock, outOfStock };
 }
 
-module.exports = { getProducts, getPages, getBlogArticles, getOrdersByEmail, getInventoryStatus, stripHtml };
+module.exports = { getProducts, getPages, getBlogArticles, getOrdersByEmail, getInventoryStatus, getAllRenderedPages, stripHtml };
