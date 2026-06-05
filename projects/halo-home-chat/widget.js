@@ -84,19 +84,26 @@
     }
     #halo-chat-messages {
       flex: 1; overflow-y: auto; padding: 16px;
-      display: flex; flex-direction: column; gap: 10px;
+      display: flex; flex-direction: column; gap: 4px;
     }
     .halo-msg {
-      max-width: 85%; padding: 10px 14px; border-radius: 12px; line-height: 1.45;
+      max-width: 85%; padding: 10px 14px; border-radius: 12px; line-height: 1.5;
       word-break: break-word;
     }
     .halo-msg-bot {
       background: #f2f2f2; color: #1a1a1a; align-self: flex-start;
-      border-bottom-left-radius: 4px;
+      border-bottom-left-radius: 4px; margin-bottom: 2px;
+    }
+    .halo-msg-bot + .halo-msg-user,
+    .halo-msg-user + .halo-msg-bot {
+      margin-top: 10px;
+    }
+    .halo-msg-bot + .halo-msg-bot {
+      border-top-left-radius: 4px; margin-top: 3px;
     }
     .halo-msg-user {
       background: #1a1a1a; color: #fff; align-self: flex-end;
-      border-bottom-right-radius: 4px;
+      border-bottom-right-radius: 4px; margin-bottom: 2px;
     }
     .halo-msg-typing {
       background: #f2f2f2; align-self: flex-start;
