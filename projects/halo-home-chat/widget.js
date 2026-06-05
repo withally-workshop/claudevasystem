@@ -240,7 +240,16 @@
     var container = document.getElementById('halo-chat-messages');
     var el = document.createElement('div');
     el.className = 'halo-msg ' + (role === 'user' ? 'halo-msg-user' : 'halo-msg-bot');
-    el.textContent = text;
+    if (role === 'user') {
+      el.textContent = text;
+    } else {
+      // Render newlines as line breaks; escape everything else to prevent XSS
+      el.innerHTML = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+    }
     container.appendChild(el);
     container.scrollTop = container.scrollHeight;
     return el;
