@@ -59,7 +59,7 @@ async function getRenderedPageText(slug) {
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/<!--[\s\S]*?-->/g, '');
-    return stripHtml(main).replace(/\s{3,}/g, '\n').trim().slice(0, 4000);
+    return stripHtml(main).replace(/\s{3,}/g, '\n').trim().slice(0, 8000);
   } catch {
     return '';
   }
