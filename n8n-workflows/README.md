@@ -28,7 +28,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Halo - Daily Digest | Active | 2 AM UTC (10 AM PHT) daily | [deploy-halo-home-daily-digest.js](deploy-halo-home-daily-digest.js) |
 | Halo - Inventory Alert | Active | 1 AM UTC (9 AM PHT) daily | [deploy-halo-home-inventory-alert.js](deploy-halo-home-inventory-alert.js) |
 | Halo - Weekly Report | Active | 1 AM UTC Mondays (9 AM PHT) | [deploy-halo-home-weekly-report.js](deploy-halo-home-weekly-report.js) |
-| Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Every 3h Mon–Fri + webhook | [deploy-creator-invoice-email-scan.js](deploy-creator-invoice-email-scan.js) |
+| Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | 09:00/12:00/15:00/18:00 PHT Mon–Fri + webhook | [deploy-creator-invoice-email-scan.js](deploy-creator-invoice-email-scan.js) |
 
 ---
 
@@ -36,7 +36,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 
 Weekly social intelligence pipeline for Halo Home's US market entry. Scrapes TikTok and Instagram for top-performing content in Halo's niche hashtag clusters (sensitive skin, hair loss, hard water, clean beauty), scores and ranks posts by engagement × ICP relevance, analyzes with Claude, and delivers a structured report.
 
-**Workflow ID:** TBD (update after first deploy)
+**Workflow ID:** `5ZqTSaUEtxnAndiY`
 **Schedule:** Every Monday 7:00 AM ICT (Asia/Manila)
 
 **Deploy:**

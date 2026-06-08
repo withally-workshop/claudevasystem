@@ -701,14 +701,14 @@ Weekly social intelligence pipeline for Halo Home's US market entry. Replaces ma
 ```text
 [Schedule Trigger — Mon 7AM ICT]
         |
-[Fetch Social Data]
-  Promise.all: Apify TikTok Scraper + Apify Instagram Scraper
+[Fetch TikTok] + [Fetch Instagram]  (parallel Apify HTTP Request nodes)
+  Instagram runs in reels mode (resultsType: 'reels'); TikTok scrapes video posts
   Hashtag clusters: skin, hair, shower/water, wellness/clean beauty
         |
-[Score and Rank Posts]
-  Filter: video only, min 5K likes, last 14 days
+[Merge] → [Score and Rank Posts]
+  Filter: video/reels only; last 14 days; TikTok >=5,000 likes; Instagram >=10,000 views
   Score: Engagement Rate (40%) + Saves/Shares (35%) + Views Normalized (25%) × ICP multiplier
-  Select Top 10 per platform: max 2 per creator, min 3 niche categories
+  Select Top 10 per platform: max 2 per creator; >=3 distinct niche categories (best effort)
         |
 [Claude Analysis]
   Per post: hook, why it performed, ICP match, content pillar, Halo angle
@@ -758,10 +758,18 @@ Each matched group adds +0.1 to the multiplier (1.0 base → max 1.3).
 
 | Failure | Behaviour |
 |---------|-----------|
-| APIFY_API_KEY not set | Code node throws — n8n execution marked failed |
-| ANTHROPIC_API_KEY not set | Code node throws — n8n execution marked failed |
-| Actor timeout (>300s) | $helpers.httpRequest errors; actor returns []; report delivers with fewer posts |
+| APIFY_API_KEY / ANTHROPIC_API_KEY missing at deploy | Deploy script throws (keys are read from local `.env` and baked into nodes); workflow is not updated |
+| Invalid Apify/Anthropic key at runtime | HTTP Request returns 401; `continueOnFail: true` → node returns empty; report delivers with fewer/no posts |
+| Actor timeout (>300s) | HTTP Request errors; `continueOnFail` → actor returns []; report delivers with fewer posts |
 | Google Sheets append fails per row | `continueOnFail: true`; remaining rows still process |
+
+### Runbook — Resolved Issues
+
+| Symptom | Cause | Resolution |
+|---------|-------|------------|
+| Report ships TikTok-only; Instagram section empty | Instagram Apify body omitted `resultsType`, so the actor defaulted to `posts` (static photos, near-zero engagement) and all results failed the quality gate | Set `resultsType: 'reels'` in `INSTAGRAM_APIFY_BODY`; gate Instagram on views (>=10,000), not likes; redeploy |
+| `Posts` sheet stays empty despite a successful run | `Prepare Sheet Rows` read `$json.sheetRows`, but its upstream node is `Send Email` (Gmail) whose output has no `sheetRows` | Read `$('Format Report').first().json.sheetRows` explicitly; redeploy |
+| A platform returns fewer than 10 posts | Recency (14-day) + quality gates legitimately filtered the pool; best-effort diversity floor cannot fabricate posts | Expected — widen `MAX_AGE_DAYS` or lower the gate only if the team prefers volume over freshness/quality |
 
 ### Google Sheet Setup (manual, one-time)
 
@@ -772,7 +780,7 @@ Columns (in order): Week | Platform | Creator | URL | Likes | Views | Saves | Sh
 ### Apify Actor Verification (before first deploy)
 
 Verify actor IDs at https://apify.com/store:
-- TikTok: search "tiktok hashtag scraper" — confirm `clockworks~tiktok-scraper` is the active actor
+- TikTok: search "tiktok hashtag scraper" — confirm `clockworks~tiktok-hashtag-scraper` is the active actor
 - Instagram: search "instagram hashtag scraper" — confirm `apify~instagram-hashtag-scraper` is correct
 Update `TIKTOK_ACTOR_ID` and `INSTAGRAM_ACTOR_ID` in the deploy script if different.
 
@@ -787,8 +795,8 @@ Update `TIKTOK_ACTOR_ID` and `INSTAGRAM_ACTOR_ID` in the deploy script if differ
 | Google Sheets account | Google Sheets OAuth2 | `83MQOm78gYDvziTO` | Payment Detection, Invoice Reminder Cron, Invoice Request Intake | `noa@kravemedia.co` |
 | Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | Slack-facing workflow posts, modal handling, and SOD local/manual runs | Krave Slack workspace |
 | OpenAI account | OpenAI API | `UIREXIYn59JOH1zU` | Inbox Triage Daily | OpenAI API |
-| APIFY_API_KEY | Environment variable (n8n) | — | Halo Intelligence Report | Apify account (apify.com) |
-| ANTHROPIC_API_KEY | Environment variable (n8n) | — | Halo Intelligence Report | Anthropic API |
+| APIFY_API_KEY | Baked into workflow nodes at deploy time (n8n Starter has no env vars) — sourced from local `.env`; rotate by redeploying | — | Halo Intelligence Report | Apify account (apify.com) |
+| ANTHROPIC_API_KEY | Baked into workflow nodes at deploy time (n8n Starter has no env vars) — sourced from local `.env`; rotate by redeploying | — | Halo Intelligence Report | Anthropic API |
 
 ### Airwallex
 
@@ -1713,10 +1721,9 @@ Every Monday at 9 AM PHT, posts two proactive lists to `#halo-home-shopify`: (1)
 - [ ] Treat repo deploy scripts as the source of truth
 - [ ] Create a `Header Auth` credential in n8n named `ClickUp Header Auth` (Header Name: `Authorization`, Header Value: ClickUp API token from app.clickup.com/settings/account) before the LinkedIn Resource Post Alert workflow will run correctly
 - [ ] Configure the Kit webhook (Kit → Settings → Webhooks → `subscriber.tag_add` → URL: `https://noatakhel.app.n8n.cloud/webhook/krave-kit-subscriber`) before the Kit Subscriber Alert workflow will receive events
-- [ ] Set `APIFY_API_KEY` in n8n Settings → Environment Variables before the Halo Intelligence Report workflow will run
-- [ ] Set `ANTHROPIC_API_KEY` in n8n Settings → Environment Variables before the Halo Intelligence Report workflow will run
+- [ ] Ensure `APIFY_API_KEY` and `ANTHROPIC_API_KEY` are in local `.env` — the deploy script bakes them into the workflow nodes at deploy time (n8n Starter has no env-var support); rotate by redeploying
 - [ ] Create the `Posts` tab in the Halo Intelligence Report Google Sheet (`1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4`) with the required columns before the first run
-- [ ] Verify Apify actor IDs (`clockworks~tiktok-scraper`, `apify~instagram-hashtag-scraper`) at apify.com/store before first deploy
+- [ ] Verify Apify actor IDs (`clockworks~tiktok-hashtag-scraper`, `apify~instagram-hashtag-scraper`) at apify.com/store
 - [ ] Activate Crave - Daily Lead Push (workflow 16) and Crave - Status Sync (workflow 17) in n8n UI after warm-up completes (~2026-06-12) — both are deployed inactive
 - [ ] After deploying crave workflows, set the returned WORKFLOW_ID in `deploy-crave-lead-push.js` and `deploy-crave-status-sync.js` for future redeploys
 - [ ] Test by webhook after any workflow change

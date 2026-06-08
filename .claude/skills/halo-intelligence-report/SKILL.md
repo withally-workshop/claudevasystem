@@ -13,7 +13,7 @@ Triggers the n8n Halo Weekly Intelligence Report workflow, which:
 - Delivers report to Slack, Google Sheets, and email
 
 ## n8n Workflow
-- **ID:** 5ZqTSaUEtxnAndiY (update after first deploy)
+- **ID:** 5ZqTSaUEtxnAndiY
 - **URL:** `https://noatakhel.app.n8n.cloud/workflow/5ZqTSaUEtxnAndiY`
 - **Deploy script:** `n8n-workflows/deploy-halo-intelligence-report.js`
 - **Schedule:** Every Monday, 7:00 AM ICT (Asia/Manila)
@@ -23,8 +23,8 @@ Triggers the n8n Halo Weekly Intelligence Report workflow, which:
 - **Google Sheet:** `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4` — sheet tab: `Posts`
 - **Email recipients:** shin@kravemedia.co, noa@kravemedia.co, john@kravemedia.co, alleahvargas@gmail.com
 - **Email sender:** john@kravemedia.co (gmail-john credential)
-- **Apify TikTok actor:** `clockworks~tiktok-scraper` (verify at apify.com/store)
-- **Apify Instagram actor:** `apify~instagram-hashtag-scraper` (verify at apify.com/store)
+- **Apify TikTok actor:** `clockworks~tiktok-hashtag-scraper` (resultsType: posts)
+- **Apify Instagram actor:** `apify~instagram-hashtag-scraper` (resultsType: reels)
 
 ## Hashtag Clusters Scraped
 - **Skin:** sensitiveskin, skintok, skinbarrier, eczema, rosacea, acneskin
@@ -47,11 +47,14 @@ Final Score = (Engagement Rate × 0.40 + Saves/Shares Rate × 0.35 + Views Norma
 ```
 
 ## Filters Applied
-- Last 14 days only
-- Minimum 5,000 likes
-- Video/Reels only (no static posts or carousels)
+- **TikTok:** minimum 5,000 likes (top/trending only)
+- **Instagram:** minimum 10,000 views — IG reels earn thousands of likes, not millions, so the gate is views-based, not likes
+- Instagram is scraped in **reels** mode (`resultsType: 'reels'`); the actor default `posts` returns static photos with near-zero engagement and is not used
+- Video/Reels only — static posts and carousels are dropped (`isVideo` check)
+- Last 14 days only — posts older than 14 days are dropped (posts with no parseable date are kept)
 - Max 2 posts per creator across Top 10
-- Min 3 different niche categories per platform
+- Top 10 per platform
+- Diversity floor — best effort to include ≥3 distinct niche categories (skin / hair / shower / wellness) in each Top 10 when the data allows; cannot fabricate categories that aren't present
 
 ## Claude Output Per Post
 - Hook breakdown

@@ -20,8 +20,8 @@ const SHEETS_CRED_ID = '83MQOm78gYDvziTO';
 const SLACK_CRED_ID = 'Bn2U6Cwe1wdiCXzD';
 const GMAIL_JOHN_CRED = 'vsDW3WpKXqS9HUs3';
 
-// TESTING: using #ops-command (C0AQZGJDR38) — switch to C0A22NPLV38 (halo channel) once confirmed working
-const SLACK_CHANNEL_ID = 'C0AQZGJDR38';
+// Posts to the Halo Home channel (C0A22NPLV38). #ops-command (C0AQZGJDR38) was the testing channel.
+const SLACK_CHANNEL_ID = 'C0A22NPLV38';
 const GOOGLE_SHEET_ID = '1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4';
 const GOOGLE_SHEET_NAME = 'Posts';
 const REPORT_EMAILS = 'shin@kravemedia.co,noa@kravemedia.co,john@kravemedia.co,alleahvargas@gmail.com';
@@ -45,6 +45,7 @@ const TIKTOK_APIFY_BODY = JSON.stringify({
 
 const INSTAGRAM_APIFY_BODY = JSON.stringify({
   hashtags: HASHTAGS,
+  resultsType: 'reels', // reels only — 'posts' (the actor default) returns static photos with near-zero engagement
   resultsLimit: 20,
 });
 
@@ -52,9 +53,12 @@ const INSTAGRAM_APIFY_BODY = JSON.stringify({
 // Reads raw posts from the two upstream HTTP Request nodes (Fetch TikTok,
 // Fetch Instagram). No HTTP calls here — pure scoring logic.
 const SCORE_AND_RANK_CODE = `
-const MIN_LIKES = 500;
+const TIKTOK_MIN_LIKES = 5000;   // TikTok: top/trending posts pull millions of likes — keep the bar high
+const IG_MIN_VIEWS = 10000;      // Instagram reels get thousands of likes, not millions — gate on views (plays) instead
 const TOP_N = 10;
 const MAX_PER_CREATOR = 2;
+const MAX_AGE_DAYS = 14;         // recency: only surface content from the last 14 days
+const MIN_CATEGORIES = 3;        // diversity floor: aim for >=3 distinct niche categories in the Top N (best effort)
 
 const ICP = {
   skinConditions: {
@@ -194,25 +198,73 @@ function scorePost(post, maxViews) {
   };
 }
 
+function ageDays(post) {
+  let t = post.createdAt;
+  if (t === '' || t == null) return null;                  // unknown date → don't drop on recency
+  let ms;
+  if (typeof t === 'number') ms = t < 1e12 ? t * 1000 : t;  // unix seconds vs ms
+  else { const parsed = Date.parse(t); ms = isNaN(parsed) ? null : parsed; }
+  if (ms == null) return null;
+  return (Date.now() - ms) / 86400000;
+}
+
+function nicheOf(post) {
+  return (post.categories || []).find(c => c !== 'general') || 'general';
+}
+
 function filterAndRank(rawPosts, platform) {
   const normalized = rawPosts.map(p => normalizePost(p, platform));
   const filtered = normalized.filter(post => {
-    if (post.likes < MIN_LIKES && post.comments < 50) return false;
-    return true;
+    // Video/Reels only — removes Instagram static photos & carousels (TikTok is always video)
+    if (!post.isVideo) return false;
+    // Recency: last 14 days only (skip the check only when the post has no parseable date)
+    const age = ageDays(post);
+    if (age != null && age > MAX_AGE_DAYS) return false;
+    // Platform-specific quality gate: TikTok by likes, Instagram by views (plays)
+    if (platform === 'tiktok') return post.likes >= TIKTOK_MIN_LIKES;
+    return post.views >= IG_MIN_VIEWS;
   });
   const maxViews = Math.max(...filtered.map(p => p.views), 1);
   const scored = filtered.map(p => scorePost(p, maxViews)).filter(Boolean);
   scored.sort((a, b) => b.finalScore - a.finalScore);
-  const selected = [];
+
   const creatorCount = {};
+  const creatorKey = (p) => p.creatorHandle || p.creator;
+
+  // Primary selection: top by score, capped at MAX_PER_CREATOR per creator
+  const selected = [];
   for (const post of scored) {
-    if (selected.length >= 10) break;
-    const key = post.creatorHandle || post.creator;
-    const count = creatorCount[key] || 0;
-    if (count >= 2) continue;
-    creatorCount[key] = count + 1;
+    if (selected.length >= TOP_N) break;
+    const key = creatorKey(post);
+    if ((creatorCount[key] || 0) >= MAX_PER_CREATOR) continue;
+    creatorCount[key] = (creatorCount[key] || 0) + 1;
     selected.push(post);
   }
+
+  // Diversity floor: aim for >= MIN_CATEGORIES distinct niche categories when the data allows.
+  // Best effort — swap the lowest-scoring post from an over-represented niche for the top post
+  // of a still-missing niche, respecting the per-creator cap.
+  const present = () => new Set(selected.map(nicheOf).filter(c => c !== 'general'));
+  for (const cand of scored) {
+    if (present().size >= MIN_CATEGORIES) break;
+    if (selected.includes(cand)) continue;
+    const c = nicheOf(cand);
+    if (c === 'general' || present().has(c)) continue;
+    for (let i = selected.length - 1; i >= 0; i--) {
+      const outNiche = nicheOf(selected[i]);
+      const reps = selected.filter(s => nicheOf(s) === outNiche).length;
+      if (outNiche !== 'general' && reps <= 1) continue;     // keep sole representatives of a niche
+      const inKey = creatorKey(cand);
+      const outKey = creatorKey(selected[i]);
+      const inCountExclusive = (creatorCount[inKey] || 0) - (inKey === outKey ? 1 : 0);
+      if (inCountExclusive >= MAX_PER_CREATOR) continue;      // swap would breach the creator cap
+      creatorCount[outKey] = (creatorCount[outKey] || 1) - 1;
+      creatorCount[inKey] = (creatorCount[inKey] || 0) + 1;
+      selected[i] = cand;
+      break;
+    }
+  }
+
   return selected;
 }
 
@@ -405,8 +457,9 @@ return [{
 
 // ─── Code node: Prepare Sheet Rows ────────────────────────────────────────────
 const PREPARE_SHEET_ROWS_CODE = `
-const rows = $json.sheetRows || [];
-if (rows.length === 0) return [{ json: { _skip: true } }];
+// Read from Format Report explicitly — \$json here is the upstream Gmail node's
+// response (no sheetRows), which is why the Posts tab was never populated.
+const rows = $('Format Report').first().json.sheetRows || [];
 return rows.map(row => ({ json: row }));
 `.trim();
 

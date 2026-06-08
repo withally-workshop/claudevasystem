@@ -9,7 +9,7 @@ metadata:
 
 This skill runs the n8n workflow via the n8n MCP or direct webhook once the workflow ID is confirmed.
 
-- **n8n Workflow ID:** 5ZqTSaUEtxnAndiY (update after first deploy)
+- **n8n Workflow ID:** 5ZqTSaUEtxnAndiY
 - **Manual test:** Execute workflow in n8n UI or via n8n MCP `execute_workflow`
 - **Deploy script:** `n8n-workflows/deploy-halo-intelligence-report.js`
 
@@ -21,8 +21,8 @@ This skill runs the n8n workflow via the n8n MCP or direct webhook once the work
 
 ## Pipeline Summary
 
-1. Fetch Social Data — Apify TikTok + Instagram scrapers run in parallel
-2. Score & Rank — weighted engagement formula × ICP relevance multiplier, top 10 per platform
+1. Fetch Social Data — Apify TikTok + Instagram scrapers run in parallel (Instagram in `reels` mode, not static posts)
+2. Score & Rank — video/reels only; last 14 days; gate TikTok ≥5,000 likes, Instagram ≥10,000 views; weighted engagement formula × ICP relevance multiplier; top 10 per platform (max 2 per creator, ≥3 niche categories best effort)
 3. Claude Analysis — hook, why it performed, ICP match, content pillar, Halo angle per post + 2-paragraph trend synthesis
 4. Format + Deliver — Slack digest, email HTML, Sheet rows
 
