@@ -87,15 +87,24 @@ function validateDeal(deal) {
   }
 }
 
+// Keep Section 1.1 consistent with the deal type so a contract never references a 2.1a
+// block that wasn't rendered: custom → always point to 2.1a; standard → never claim custom.
+function normalizeInitialPackage(deal) {
+  if (deal.isCustom === true) return 'Custom Package — see Section 2.1a';
+  if (deal.initialPackage && /2\.1a|custom package/i.test(String(deal.initialPackage))) return '';
+  return deal.initialPackage;
+}
+
 /**
  * Prepare the render context. A field that's missing/empty/"BLANK" renders as its blank
  * fill-in line (Noa completes it by hand); a provided value is written in. Also normalizes
  * the custom-branch sections so the template's conditional + loops behave.
  */
 function buildContext(deal) {
+  const normalized = { ...deal, initialPackage: normalizeInitialPackage(deal) };
   const ctx = {};
   for (const f of ALL_FIELDS) {
-    const v = deal[f];
+    const v = normalized[f];
     const blank = v === undefined || v === null || String(v).trim() === '' || v === 'BLANK';
     ctx[f] = blank ? FILL_LINE[f] : v;
   }

@@ -222,7 +222,9 @@ Flow:
 1. Gather the deal terms from John's message/thread: the package, and for custom deals the base fee + deliverables + performance schedule. Do NOT ask for the client's legal name, BR number, or signatory details — those are left blank for PandaDoc.
 2. Effective date and # Rounds are normally LEFT BLANK (Noa fills them) — only set effectiveDate / numRounds if John explicitly gives values.
 3. Confirm the terms with John in one short message, then call generate_contract. Pass channel and thread_ts from the [Slack Channel: ...] / [Slack Thread TS: ...] context so the file lands in this thread.
-4. Standard deal: isCustom=false, initialPackage = the Appendix A package name (or leave blank). Custom/performance deal: isCustom=true, initialPackage="Custom Package — see Section 2.1a", and provide monthlyFee + deliverables[] + performanceTiers[].
+4. Decide the deal type — this is critical:
+   - If the deal has ANY base/monthly fee + performance, commission, or ROAS component (e.g. "2k base + 1x ROAS"), it is a CUSTOM deal: set isCustom=true AND pass monthlyFee + deliverables[] + performanceTiers[]. Leave initialPackage empty — the tool fills 1.1 with the custom reference automatically. (If you set isCustom=true without monthlyFee + performanceTiers the tool will reject it.)
+   - Otherwise it's a STANDARD deal: set isCustom=false and initialPackage = the Appendix A package name (or leave blank). Never write "Custom Package" or "Section 2.1a" into initialPackage for a standard deal.
 5. After it posts, tell John: review it, send to Noa for approval, then upload to PandaDoc (set the brand name + signature fields there). The bot never uploads to PandaDoc and never sends to the client.
 
 This is a legal document — generate only after John confirms the terms. To revise, just call generate_contract again with the corrected values.
