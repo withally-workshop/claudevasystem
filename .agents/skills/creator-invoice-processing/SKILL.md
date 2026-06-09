@@ -29,11 +29,11 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 1. Scans email (john@kravemedia.co) and #payments-invoices-updates for unprocessed invoice PDFs (respects Slack cursor + ✅ dedup)
 2. Parses each PDF via document vision — extracts creator name, invoice number, dates, amount, currency, line items, bank details
 3. Validates: hardstop if no bank details (return to sender), hardstop if no PDF. Generates invoice number if missing (`MMDDYYYY-[FirstInitial][LastName]`). Uses Friday of current week if no due date.
-4. Looks up or creates vendor in Airwallex Spend (`airwallex_list_vendors` → `airwallex_create_vendor` if not found — name + email only)
-5. Creates draft bill via `airwallex_create_bill` (external_id, vendor_id, invoice_number, issued_date, due_date, currency, line_items)
+4. Forwards each valid PDF to `kravemedia@bills.airwallex.com` via `gmail_send` with the PDF attached (`attachment_base64`) — Airwallex auto-creates the draft. **No Spend/Bills API** (`airwallex_create_bill`/`list_vendors`/`create_vendor` not released for us — do not call them).
+5. Posts a bill prep report to John's channel (C0AQZGJDR38)
 6. Replies to requester:
-   - **Slack:** "Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD."
-   - **Email:** "Hi [First Name], Received. Staged for payment — John will review by EOD. Cheers, John / Krave Media"
+   - **Slack:** "Received! Invoice for [Creator] — [Amount] [Currency] forwarded to Airwallex billing. John will review by EOD."
+   - **Email:** "Hi [First Name], Received. Staged for payment. Cheers, John / Krave Media"
 7. Reacts ✅ to Slack message; replies in email thread for email-sourced invoices
 8. Logs to Creator & AP Bills Tracker (Sheet ID: `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`)
 
@@ -45,12 +45,13 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 
 ## Validation Hardstops
 
+- **Blocked sender** → drop entirely. Never parse, reply to, forward, log, or mark read any email from `airwallex.com` (+ subdomains), `no-reply`/`noreply`, `notifications@`, or `mailer-daemon`. Leave untouched in inbox. **NEVER reply to Airwallex.** Do **not** block `kravemedia.co` — strategists manage creators and send/forward invoices, sometimes from that domain. Enforced by `-from:airwallex.com` query + `isBlockedSender()` backstop in the email-scan workflow.
 - **No PDF** → reply asking for invoice, do nothing else
 - **No bank details in PDF** → return to sender, ask to reissue
 
 ## Codex Invocation Notes
 
-- Run order: dedup check → parse → vendor lookup → create bill → reply → log → update cursor
-- API fallback if Spend returns 401 or 404: call `slack_download_file(url_private)` first to get `{ base64 }`, then forward to kravemedia@bills.airwallex.com via `gmail_send(attachment_base64=<that base64>)`. NEVER call gmail_send without attachment_base64 — an email without the PDF is useless. If download fails, post a Slack message instead asking for manual forwarding. Post prep report to C0AQZGJDR38.
-- Multiple PDFs in one email = one bill per PDF, one consolidated reply
-- legal_entity_id is TBD — omit until confirmed in the skill file
+- Run order: dedup check → parse → validate → forward to Airwallex billing → reply → log → update cursor
+- Forward step: call `slack_download_file(url_private)` first to get `{ base64 }` (Slack-sourced) or use PDF bytes in memory (email-sourced), then forward to kravemedia@bills.airwallex.com via `gmail_send(attachment_base64=<that base64>)`. NEVER call gmail_send without attachment_base64 — an email without the PDF is useless. If download fails, post a Slack message instead asking for manual forwarding. Post prep report to C0AQZGJDR38.
+- Multiple PDFs in one email = one bill per PDF, each forwarded/logged/replied independently (no merging, no vendor lookup)
+- **No Spend/Bills API** — forward-by-email is the only path until Airwallex releases Spend API access to us

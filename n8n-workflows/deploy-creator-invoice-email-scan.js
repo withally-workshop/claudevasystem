@@ -44,6 +44,27 @@ const AW_API_KEY      = '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af
 const EXTRACT_PDF_ATTACHMENTS = `
 // Runs once across all input items.
 // Accepts PDF and image (PNG/JPG) invoice attachments.
+
+// ── Sender blocklist (HARD GUARD) ──────────────────────────────────────────
+// Creator invoices come from real people — strategists/team forwarding on behalf
+// of creators, or creators directly — never from the payment platform itself.
+// Do NOT block kravemedia.co: strategists manage the creators and send/forward
+// invoices, sometimes from that domain. Any email from a blocked sender is
+// dropped here: NOT downloaded, parsed, replied to, forwarded, logged, or marked
+// read — it stays untouched in the inbox. Backstop for the -from: query
+// exclusion. NEVER reply to Airwallex.
+function isBlockedSender(email) {
+  const e = String(email || '').toLowerCase().trim();
+  if (!e) return true; // no parseable sender → don't auto-reply into the void
+  const patterns = [
+    /(^|@)([a-z0-9-]+\\.)*airwallex\\.com$/,  // airwallex.com + any subdomain (bills., notifications., etc.)
+    /no-?reply@/,                              // automated no-reply senders
+    /notifications?@/,                         // automated notification senders
+    /^(mailer-daemon|postmaster)@/,            // bounce / delivery-failure notices
+  ];
+  return patterns.some(re => re.test(e));
+}
+
 function findAttachments(parts, found) {
   if (!parts) return found;
   for (const p of parts) {
@@ -86,6 +107,10 @@ for (const item of $input.all()) {
   const fromName  = mf ? mf[1].trim().replace(/^["']|["']$/g, '') : rawFrom.trim();
   const fromEmail = (mf ? mf[2] : rawFrom).trim().toLowerCase();
   const subject   = getHeader(msg, 'subject') || '(no subject)';
+
+  // HARD GUARD: never process or reply to Airwallex / automated senders.
+  // Skip the whole message — leaves it untouched (unread) in the inbox.
+  if (isBlockedSender(fromEmail)) continue;
 
   for (const att of attachments) {
     output.push({ json: {
@@ -195,61 +220,94 @@ $input.all().forEach((item, i) => {
 return output;
 `.trim();
 
-const RESOLVE_VENDOR = `
+
+const BUILD_FORWARD_CONTEXT = `
 const contexts = $('Parse & Validate').all();
 const output = [];
 $input.all().forEach((item, i) => {
   const ctx = (contexts[i] || { json: {} }).json;
-  const vendors = item.json.items || item.json.data || [];
-  const q = (ctx.creatorName || '').toLowerCase();
-  const match = vendors.find(v => {
-    const n = (v.short_name || v.name || '').toLowerCase();
-    return n.includes(q) || q.includes(n);
-  });
-  output.push({ json: { ...ctx, vendorFound: !!match, vendorId: match ? (match.vendor_id || match.id || null) : null } });
-});
-return output;
-`.trim();
 
-const SET_VENDOR_ID = `
-const contexts = $('Resolve Vendor').all();
-const output = [];
-$input.all().forEach((item, i) => {
-  const ctx = (contexts[i] || { json: {} }).json;
-  const vendorId = item.json.vendor_id || item.json.id || null;
-  output.push({ json: { ...ctx, vendorId } });
-});
-return output;
-`.trim();
-
-const BUILD_SLACK_FALLBACK = `
-const contexts = $('Parse & Validate').all();
-const output = [];
-$input.all().forEach((item, i) => {
-  const ctx = (contexts[i] || { json: {} }).json;
+  // Slack notification text
   const lines = [
-    '*Creator Invoice - Manual Entry Required*',
+    '*Invoice received & forwarded to Airwallex* :white_check_mark:',
     '- Creator: ' + (ctx.creatorName || 'Unknown'),
     '- Email: ' + (ctx.creatorEmail || 'Unknown'),
     '- Invoice #: ' + (ctx.invoiceNumber || 'Unknown'),
     '- Amount: ' + (ctx.currency || '') + ' ' + (ctx.amount || ''),
-    '- Issued: ' + (ctx.issuedDate || 'Unknown'),
     '- Due: ' + (ctx.dueDate || 'Unknown'),
-    '',
-    'Airwallex Spend API unavailable - please create this bill manually or forward the PDF to kravemedia@bills.airwallex.com.',
-    '',
-    'Bank Details:',
+    '- Source: ' + (ctx.fromEmail || '') + ' — ' + (ctx.subject || ''),
   ];
-  const bd = ctx.bankDetails || {};
-  if (bd.bank_name) lines.push('  Bank: ' + bd.bank_name);
-  if (bd.account_name) lines.push('  Account Name: ' + bd.account_name);
-  if (bd.account_number) lines.push('  Account #: ' + bd.account_number);
-  if (bd.swift) lines.push('  SWIFT: ' + bd.swift);
-  if (bd.bsb) lines.push('  BSB: ' + bd.bsb);
-  if (bd.iban) lines.push('  IBAN: ' + bd.iban);
-  lines.push('', 'Source: ' + (ctx.fromEmail || '') + ' - ' + (ctx.subject || ''));
-  output.push({ json: { ...ctx, slackText: lines.join('\\n') } });
+
+  // Build RFC822 MIME email here to avoid n8n expression size limits on pdfBase64
+  const boundary = 'boundary_aw_' + Date.now();
+  const subject = 'Creator Invoice - ' + (ctx.creatorName || 'Unknown') + ' | ' + (ctx.invoiceNumber || 'Unknown') + ' | ' + (ctx.currency || '') + ' ' + (ctx.amount || '');
+  const bodyText = [
+    'Please process the attached creator invoice.',
+    '',
+    'Creator: ' + (ctx.creatorName || ''),
+    'Invoice #: ' + (ctx.invoiceNumber || ''),
+    'Amount: ' + (ctx.currency || '') + ' ' + (ctx.amount || ''),
+    'Line Items: ' + (ctx.lineItems || []).map(li => li.description).join(', '),
+    'Bank: ' + JSON.stringify(ctx.bankDetails || {}),
+    'Issued: ' + (ctx.issuedDate || ''),
+    'Due: ' + (ctx.dueDate || ''),
+  ].join('\\n');
+
+  const mimeParts = [
+    'From: john@kravemedia.co',
+    'To: kravemedia@bills.airwallex.com',
+    'Subject: ' + subject,
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/mixed; boundary="' + boundary + '"',
+    '',
+    '--' + boundary,
+    'Content-Type: text/plain; charset=UTF-8',
+    '',
+    bodyText,
+    '',
+    '--' + boundary,
+    'Content-Type: application/pdf',
+    'Content-Transfer-Encoding: base64',
+    'Content-Disposition: attachment; filename="' + (ctx.invoiceNumber || 'invoice') + '.pdf"',
+    '',
+    ctx.pdfBase64 || '',
+    '',
+    '--' + boundary + '--',
+  ];
+  const rawMessage = Buffer.from(mimeParts.join('\\r\\n')).toString('base64url');
+
+  output.push({ json: { ...ctx, slackText: lines.join('\\n'), rawMessage } });
 });
+return output;
+`.trim();
+
+const DEDUP_FILTER = `
+// Tracker dedup BACKSTOP. Primary dedup is still the is:unread search + mark-as-read
+// at the end of each path. This catches the gap: a run that forwarded/logged a bill
+// but failed before marking the email read, or a schedule + manual webhook overlap.
+//
+// Key = Gmail messageId, matched against column I ("Slack Thread TS") of the Bills
+// tracker, which the Log node writes for every email-sourced bill.
+//
+// FAIL-OPEN: if the tracker read errored (continueOnFail), process everything — we
+// never drop a real invoice because of a transient read failure. Worst case the
+// is:unread/mark-as-read layer still prevents most repeats.
+const keys = new Set();
+try {
+  const fetched = $('Fetch Existing Bills').first();
+  const rows = (fetched && fetched.json && fetched.json.values) || [];
+  for (const r of rows) {
+    const v = String((r && r[0]) || '').trim();
+    if (v) keys.add(v);
+  }
+} catch (_) { /* fail-open */ }
+
+const output = [];
+for (const item of $input.all()) {
+  const mid = String(item.json.messageId || '').trim();
+  if (mid && keys.has(mid)) continue; // already in tracker → skip, do not reprocess
+  output.push(item);
+}
 return output;
 `.trim();
 
@@ -265,7 +323,7 @@ const workflow = {
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [240, 200],
       parameters: {
-        rule: { interval: [{ field: 'cronExpression', expression: '0 */3 * * 1-5' }] },
+        rule: { interval: [{ field: 'cronExpression', expression: '0 9,12,15,18 * * 1-5' }] },
       },
     },
     {
@@ -280,6 +338,23 @@ const workflow = {
       },
     },
 
+    // ── Dedup: load existing tracker keys (one item out, so it does NOT multiply
+    //    the Gmail search the way a native Sheets-read node would) ───────────────
+    {
+      id: 'n30', name: 'Fetch Existing Bills',
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+      position: [360, 300],
+      continueOnFail: true,
+      parameters: {
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'googleSheetsOAuth2Api',
+        method: 'GET',
+        url: 'https://sheets.googleapis.com/v4/spreadsheets/' + BILLS_SHEET_ID + '/values/' + encodeURIComponent(BILLS_SHEET_TAB + '!I:I'),
+        options: {},
+      },
+      credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
+    },
+
     // ── Email intake ──────────────────────────────────────────────────────────
     {
       id: 'n3', name: 'Search Inbox',
@@ -292,7 +367,13 @@ const workflow = {
         returnAll: false,
         limit: 20,
         simple: true,
-        filters: { q: 'is:unread has:attachment in:inbox (invoice OR bill OR creator OR payment) (filename:pdf OR filename:png OR filename:jpg OR filename:jpeg)' },
+        // Sender exclusion is the FIRST line of defense — keep Airwallex platform
+        // mail (receipts/statements/notices) out of the pipeline entirely, so
+        // Claude is never even called on them. We do NOT exclude kravemedia.co:
+        // strategists (the team managing creators) send/forward invoices and may
+        // use that domain. See the BLOCKED_SENDER backstop in Extract PDF
+        // Attachments for the hard guard.
+        filters: { q: 'is:unread has:attachment in:inbox (invoice OR bill OR creator OR payment) (filename:pdf OR filename:png OR filename:jpg OR filename:jpeg) -from:airwallex.com' },
       },
     },
     {
@@ -313,6 +394,12 @@ const workflow = {
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [980, 300],
       parameters: { mode: 'runOnceForAllItems', jsCode: EXTRACT_PDF_ATTACHMENTS },
+    },
+    {
+      id: 'n31', name: 'Dedup Filter',
+      type: 'n8n-nodes-base.code', typeVersion: 2,
+      position: [1100, 300],
+      parameters: { mode: 'runOnceForAllItems', jsCode: DEDUP_FILTER },
     },
 
     // ── Download & parse ──────────────────────────────────────────────────────
@@ -439,187 +526,12 @@ const workflow = {
       },
     },
 
-    // ── [true] Airwallex bill creation path ───────────────────────────────────
+    // ── [true] Email forward path ─────────────────────────────────────────────
     {
-      id: 'n14', name: 'Airwallex Auth',
-      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-      position: [2660, 200],
-      continueOnFail: true,
-      parameters: {
-        method: 'POST',
-        url: 'https://api.airwallex.com/api/v1/authentication/login',
-        sendHeaders: true,
-        headerParameters: { parameters: [
-          { name: 'x-client-id', value: AW_CLIENT_ID },
-          { name: 'x-api-key',   value: AW_API_KEY },
-        ]},
-        options: {},
-      },
-    },
-    {
-      id: 'n15', name: 'List Vendors',
-      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+      id: 'n25', name: 'Build Forward Context',
+      type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [2900, 200],
-      continueOnFail: true,
-      parameters: {
-        method: 'GET',
-        url: '={{ "https://api.airwallex.com/api/v1/spend/vendors?name=" + encodeURIComponent($("Parse & Validate").item.json.creatorName || "") }}',
-        sendHeaders: true,
-        headerParameters: { parameters: [
-          { name: 'Authorization', value: '={{ "Bearer " + $("Airwallex Auth").item.json.token }}' },
-          { name: 'x-on-behalf-of', value: 'acct_lxLSJm7fTpuMpnGEgIAkHQ' },
-        ]},
-        options: {},
-      },
-    },
-    {
-      id: 'n16', name: 'Resolve Vendor',
-      type: 'n8n-nodes-base.code', typeVersion: 2,
-      position: [3140, 200],
-      parameters: { mode: 'runOnceForAllItems', jsCode: RESOLVE_VENDOR },
-    },
-    {
-      id: 'n17', name: 'Need Create Vendor?',
-      type: 'n8n-nodes-base.if', typeVersion: 2.1,
-      position: [3380, 200],
-      parameters: {
-        conditions: {
-          options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
-          conditions: [{ id: 'c1', leftValue: '={{ $json.vendorFound }}', rightValue: false, operator: { type: 'boolean', operation: 'equals' } }],
-          combinator: 'and',
-        },
-        options: {},
-      },
-    },
-    {
-      id: 'n18', name: 'Create Vendor',
-      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-      position: [3620, 100],
-      continueOnFail: true,
-      parameters: {
-        method: 'POST',
-        url: 'https://api.airwallex.com/api/v1/spend/vendors/create',
-        sendHeaders: true,
-        headerParameters: { parameters: [
-          { name: 'Authorization',  value: '={{ "Bearer " + $("Airwallex Auth").item.json.token }}' },
-          { name: 'x-on-behalf-of', value: 'acct_lxLSJm7fTpuMpnGEgIAkHQ' },
-          { name: 'Content-Type',   value: 'application/json' },
-        ]},
-        sendBody: true,
-        specifyBody: 'json',
-        jsonBody: '={{ { name: $("Resolve Vendor").item.json.creatorName, email: $("Resolve Vendor").item.json.creatorEmail } }}',
-        options: {},
-      },
-    },
-    {
-      id: 'n19', name: 'Set Vendor ID',
-      type: 'n8n-nodes-base.code', typeVersion: 2,
-      position: [3860, 100],
-      parameters: { mode: 'runOnceForAllItems', jsCode: SET_VENDOR_ID },
-    },
-
-    // ── Create Bill (reached from n19 and from n17-false) ─────────────────────
-    {
-      id: 'n20', name: 'Create Bill',
-      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-      position: [4100, 200],
-      continueOnFail: true,
-      parameters: {
-        method: 'POST',
-        url: 'https://api.airwallex.com/api/v1/spend/bills/create',
-        sendHeaders: true,
-        headerParameters: { parameters: [
-          { name: 'Authorization',  value: '={{ "Bearer " + $("Airwallex Auth").item.json.token }}' },
-          { name: 'x-on-behalf-of', value: 'acct_lxLSJm7fTpuMpnGEgIAkHQ' },
-          { name: 'Content-Type',   value: 'application/json' },
-        ]},
-        sendBody: true,
-        specifyBody: 'json',
-        jsonBody: '={{ { request_id: $json.messageId + "-" + $json.attachmentId, external_id: $json.messageId, vendor_id: $json.vendorId, invoice_number: $json.invoiceNumber, issued_date: $json.issuedDate, due_date: $json.dueDate, currency: $json.currency, line_items: $json.lineItems } }}',
-        options: {},
-      },
-    },
-
-    // ── Bill result routing ────────────────────────────────────────────────────
-    {
-      id: 'n21', name: 'Bill Created?',
-      type: 'n8n-nodes-base.if', typeVersion: 2.1,
-      position: [4340, 200],
-      parameters: {
-        conditions: {
-          options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
-          conditions: [{ id: 'c1', leftValue: '={{ !!$json.id || !!$json.bill_id }}', rightValue: true, operator: { type: 'boolean', operation: 'equals' } }],
-          combinator: 'and',
-        },
-        options: {},
-      },
-    },
-
-    // ── [true] Success path ───────────────────────────────────────────────────
-    {
-      id: 'n22', name: 'Reply Staged',
-      type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
-      position: [4580, 100],
-      continueOnFail: true,
-      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
-      parameters: {
-        resource: 'message',
-        operation: 'reply',
-        messageId: '={{ $("Parse & Validate").item.json.messageId }}',
-        emailType: 'text',
-        message: '={{ "Hi " + ($("Parse & Validate").item.json.fromName || "there").split(" ")[0] + ",\\n\\nReceived. Staged for payment — John will review by EOD.\\n\\nCheers,\\nJohn\\nKrave Media" }}',
-        options: {},
-      },
-    },
-    {
-      id: 'n23', name: 'Log to Bills Tab',
-      type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5,
-      position: [4820, 100],
-      continueOnFail: true,
-      credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
-      parameters: {
-        resource: 'sheet',
-        operation: 'append',
-        documentId: { __rl: true, value: BILLS_SHEET_ID, mode: 'id' },
-        sheetName:  { __rl: true, value: BILLS_SHEET_TAB, mode: 'name' },
-        columns: {
-          mappingMode: 'defineBelow',
-          value: {
-            'Date Received':     '={{ new Date().toISOString().split("T")[0] }}',
-            'Creator / Vendor':  '={{ $("Parse & Validate").item.json.creatorName }}',
-            'Invoice #':         '={{ $("Parse & Validate").item.json.invoiceNumber }}',
-            'Airwallex Bill ID': '={{ $json.id || $json.bill_id || "" }}',
-            'Amount':            '={{ $("Parse & Validate").item.json.amount }}',
-            'Currency':          '={{ $("Parse & Validate").item.json.currency }}',
-            'Due Date':          '={{ $("Parse & Validate").item.json.dueDate }}',
-            'Status':            'Staged in Airwallex',
-            'Slack Thread TS':   '={{ $("Parse & Validate").item.json.messageId }}',
-            'Notes':             'Source: Email',
-          },
-          schema: [],
-        },
-        options: {},
-      },
-    },
-    {
-      id: 'n24', name: 'Mark Read (success)',
-      type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
-      position: [5060, 100],
-      continueOnFail: true,
-      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
-      parameters: {
-        resource: 'message',
-        operation: 'markAsRead',
-        messageId: '={{ $("Parse & Validate").item.json.messageId }}',
-      },
-    },
-
-    // ── [false] Fallback path (Spend API 401/404) ─────────────────────────────
-    {
-      id: 'n25', name: 'Build Slack Fallback',
-      type: 'n8n-nodes-base.code', typeVersion: 2,
-      position: [4580, 340],
-      parameters: { mode: 'runOnceForAllItems', jsCode: BUILD_SLACK_FALLBACK },
+      parameters: { mode: 'runOnceForAllItems', jsCode: BUILD_FORWARD_CONTEXT },
     },
     {
       id: 'n25b', name: 'Forward PDF to Airwallex Email',
@@ -634,44 +546,7 @@ const workflow = {
         sendBody: true,
         contentType: 'raw',
         rawContentType: 'message/rfc822',
-        body: `={{ (() => {
-  const ctx = $input.item.json;
-  const boundary = 'boundary_' + Date.now();
-  const subject = 'Creator Invoice - ' + ctx.creatorName + ' | ' + ctx.invoiceNumber + ' | ' + ctx.currency + ' ' + ctx.amount;
-  const bodyText = [
-    'Please process the attached creator invoice.',
-    '',
-    'Creator: ' + ctx.creatorName,
-    'Invoice #: ' + ctx.invoiceNumber,
-    'Amount: ' + ctx.currency + ' ' + ctx.amount,
-    'Line Item: ' + (ctx.lineItems || []).map(i => i.description).join(', '),
-    'Bank: ' + JSON.stringify(ctx.bankDetails || {}),
-    'Issued: ' + ctx.issuedDate,
-    'Due: ' + ctx.dueDate,
-  ].join('\\n');
-  const parts = [
-    'From: john@kravemedia.co',
-    'To: kravemedia@bills.airwallex.com',
-    'Subject: ' + subject,
-    'MIME-Version: 1.0',
-    'Content-Type: multipart/mixed; boundary="' + boundary + '"',
-    '',
-    '--' + boundary,
-    'Content-Type: text/plain; charset=UTF-8',
-    '',
-    bodyText,
-    '',
-    '--' + boundary,
-    'Content-Type: application/pdf',
-    'Content-Transfer-Encoding: base64',
-    'Content-Disposition: attachment; filename="' + ctx.invoiceNumber + '.pdf"',
-    '',
-    ctx.pdfBase64,
-    '',
-    '--' + boundary + '--',
-  ];
-  return Buffer.from(parts.join('\\r\\n')).toString('base64url');
-})() }}`,
+        body: '={{ $json.rawMessage }}',
         options: {},
       },
       credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
@@ -704,7 +579,7 @@ const workflow = {
         operation: 'reply',
         messageId: '={{ $("Parse & Validate").item.json.messageId }}',
         emailType: 'text',
-        message: '={{ "Hi " + ($("Parse & Validate").item.json.fromName || "there").split(" ")[0] + ",\\n\\nReceived. Staged for payment — John will review by EOD.\\n\\nCheers,\\nJohn\\nKrave Media" }}',
+        message: '={{ "Hi " + ($("Parse & Validate").item.json.fromName || "there").split(" ")[0] + ",\\n\\nReceived. Staged for payment.\\n\\nCheers,\\nJohn\\nKrave Media" }}',
         options: {},
       },
     },
@@ -731,7 +606,7 @@ const workflow = {
             'Due Date':          '={{ $("Parse & Validate").item.json.dueDate }}',
             'Status':            'Forwarded via Email',
             'Slack Thread TS':   '={{ $("Parse & Validate").item.json.messageId }}',
-            'Notes':             'Source: Email — Airwallex Spend API unavailable',
+            'Notes':             'Source: Email — forwarded to kravemedia@bills.airwallex.com',
           },
           schema: [],
         },
@@ -753,13 +628,17 @@ const workflow = {
   ],
 
   connections: {
-    // Triggers → Search
-    'Schedule Trigger': { main: [[{ node: 'Search Inbox',       type: 'main', index: 0 }]] },
-    'Webhook Trigger':  { main: [[{ node: 'Search Inbox',       type: 'main', index: 0 }]] },
+    // Triggers → Fetch existing tracker keys → Search (Fetch runs once, upstream of
+    // everything, so Dedup Filter can reference it and ordering is guaranteed)
+    'Schedule Trigger': { main: [[{ node: 'Fetch Existing Bills', type: 'main', index: 0 }]] },
+    'Webhook Trigger':  { main: [[{ node: 'Fetch Existing Bills', type: 'main', index: 0 }]] },
+    'Fetch Existing Bills': { main: [[{ node: 'Search Inbox',     type: 'main', index: 0 }]] },
     // Email intake chain
     'Search Inbox':               { main: [[{ node: 'Get Message Details',     type: 'main', index: 0 }]] },
     'Get Message Details':        { main: [[{ node: 'Extract PDF Attachments', type: 'main', index: 0 }]] },
-    'Extract PDF Attachments':    { main: [[{ node: 'Download Attachment',     type: 'main', index: 0 }]] },
+    'Extract PDF Attachments':    { main: [[{ node: 'Dedup Filter',           type: 'main', index: 0 }]] },
+    'Dedup Filter':               { main: [[{ node: 'Download Attachment',     type: 'main', index: 0 }]] },
+    'Download Attachment':        { main: [[{ node: 'Merge Attachment Data',   type: 'main', index: 0 }]] },
     'Download Attachment':        { main: [[{ node: 'Merge Attachment Data',   type: 'main', index: 0 }]] },
     'Merge Attachment Data':      { main: [[{ node: 'Prepare Claude Request',  type: 'main', index: 0 }]] },
     'Prepare Claude Request':     { main: [[{ node: 'Call Claude API',         type: 'main', index: 0 }]] },
@@ -772,36 +651,17 @@ const workflow = {
     ]},
     // Validation branch
     'Has Bank Details?': { main: [
-      [{ node: 'Airwallex Auth',             type: 'main', index: 0 }],  // true
+      [{ node: 'Build Forward Context',      type: 'main', index: 0 }],  // true
       [{ node: 'Reply Missing Bank Details', type: 'main', index: 0 }],  // false
     ]},
     // Missing bank details path
     'Reply Missing Bank Details': { main: [[{ node: 'Mark Read (missing bank details)', type: 'main', index: 0 }]] },
-    // Airwallex flow
-    'Airwallex Auth':  { main: [[{ node: 'List Vendors',   type: 'main', index: 0 }]] },
-    'List Vendors':    { main: [[{ node: 'Resolve Vendor', type: 'main', index: 0 }]] },
-    'Resolve Vendor':  { main: [[{ node: 'Need Create Vendor?', type: 'main', index: 0 }]] },
-    'Need Create Vendor?': { main: [
-      [{ node: 'Create Vendor', type: 'main', index: 0 }],  // true — needs creating
-      [{ node: 'Create Bill',   type: 'main', index: 0 }],  // false — vendor found
-    ]},
-    'Create Vendor':  { main: [[{ node: 'Set Vendor ID', type: 'main', index: 0 }]] },
-    'Set Vendor ID':  { main: [[{ node: 'Create Bill',   type: 'main', index: 0 }]] },
-    // Bill creation
-    'Create Bill': { main: [[{ node: 'Bill Created?', type: 'main', index: 0 }]] },
-    'Bill Created?': { main: [
-      [{ node: 'Reply Staged',       type: 'main', index: 0 }],  // true — success
-      [{ node: 'Build Slack Fallback', type: 'main', index: 0 }],  // false — 401
-    ]},
-    // Success path
-    'Reply Staged':      { main: [[{ node: 'Log to Bills Tab',    type: 'main', index: 0 }]] },
-    'Log to Bills Tab':  { main: [[{ node: 'Mark Read (success)', type: 'main', index: 0 }]] },
-    // Fallback path
-    'Build Slack Fallback':          { main: [[{ node: 'Forward PDF to Airwallex Email', type: 'main', index: 0 }]] },
-    'Forward PDF to Airwallex Email': { main: [[{ node: 'Post Slack Prep Report',         type: 'main', index: 0 }]] },
-    'Post Slack Prep Report':        { main: [[{ node: 'Reply Fallback',                  type: 'main', index: 0 }]] },
-    'Reply Fallback':          { main: [[{ node: 'Log to Bills Tab (pending)', type: 'main', index: 0 }]] },
-    'Log to Bills Tab (pending)': { main: [[{ node: 'Mark Read (fallback)', type: 'main', index: 0 }]] },
+    // Email forward path
+    'Build Forward Context':           { main: [[{ node: 'Forward PDF to Airwallex Email', type: 'main', index: 0 }]] },
+    'Forward PDF to Airwallex Email':  { main: [[{ node: 'Post Slack Prep Report',         type: 'main', index: 0 }]] },
+    'Post Slack Prep Report':          { main: [[{ node: 'Reply Fallback',                  type: 'main', index: 0 }]] },
+    'Reply Fallback':                  { main: [[{ node: 'Log to Bills Tab (pending)',       type: 'main', index: 0 }]] },
+    'Log to Bills Tab (pending)':      { main: [[{ node: 'Mark Read (fallback)',             type: 'main', index: 0 }]] },
   },
 };
 

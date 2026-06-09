@@ -47,7 +47,7 @@
 | 19 | LinkedIn Post Monitor | `wNXs7wqHz5d5naJN` | Inactive (needs actor verification) | Every 30min all day | Scrape Noa's LinkedIn profile via Apify every 30min, detect new posts using workflow static data, alert John in #noa-linkedin-posts with preview + link |
 | 20 | Halo - VA Slack Bot | `XgHWMBeHoPWelE9r` | Active | `app_mention` in #halo-home-shopify | VA @mentions bot → Claude classifies intent → Shopify API → formatted reply in thread |
 | 21 | Halo - Daily Digest | `047cSNvFvUGHaf3O` | Active | 2 AM UTC (10 AM PHT) daily | Pull yesterday's Shopify orders + unfulfilled count → Claude formats → post to #halo-home-shopify |
-| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Active | Every 3h Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` | Scan john@kravemedia.co for unread invoice PDFs, parse with Claude, validate bank details, create Airwallex draft bills, reply to sender, log to Creator & AP Bills Tracker |
+| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Active | 09:00/12:00/15:00/18:00 PHT Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` | Scan john@kravemedia.co for unread invoice PDFs, parse with Claude, block Airwallex/automated senders, dedup vs tracker, validate bank details, forward to kravemedia@bills.airwallex.com, reply to sender, log to Creator & AP Bills Tracker |
 | 23 | Halo - Inventory Alert | `NBvfYPmjdTXzrKfb` | Active | 1 AM UTC (9 AM PHT) daily | Compare product stock vs previous run; alert #halo-home-shopify on OOS changes + newly low-stock (<10 units) |
 | 24 | Halo - Weekly Report | `7N9gEZb7nDS0EDGu` | Active | 1 AM UTC Mondays (9 AM PHT) | Refill due list (filter buyers 75–105 days ago) + upsell gap (showerhead buyers without filters) → post to #halo-home-shopify |
 
@@ -711,15 +711,17 @@ Weekly social intelligence pipeline for Halo Home's US market entry. Replaces ma
   Select Top 10 per platform: max 2 per creator; >=3 distinct niche categories (best effort)
         |
 [Claude Analysis]
-  Per post: hook, why it performed, ICP match, content pillar, Halo angle
+  Per post: hook, hook type, format, visual style, keyword, CTA/ending,
+            why it works, ICP match, content pillar, Halo adaptation
   Plus: 2-paragraph trend synthesis
+  Hook Type + Format constrained to fixed option lists (aligned to Alleah's manual inspo sheet)
         |
 [Format Report]
   Slack text, email HTML, sheet rows
         |
 [Post to Slack] → C0A22NPLV38
         |
-[Send Email] → shin@kravemedia.co, noa@kravemedia.co, john@kravemedia.co, alleahvargas@gmail.com
+[Send Email] → shin@kravemedia.co, noa@kravemedia.co, john@kravemedia.co, alleahvargas@gmail.com, basteperez021198@gmail.com (Baste — ads inspo)
         |
 [Prepare Sheet Rows] — splits into 20 items (one per post)
         |
@@ -749,7 +751,8 @@ Each matched group adds +0.1 to the multiplier (1.0 base → max 1.3).
 
 | Scenario | Action |
 |----------|--------|
-| Top posts scored + analyzed | Slack digest to `C0A22NPLV38`, HTML email to 4 recipients, 20 rows appended to Posts sheet |
+| Top posts scored + analyzed | Slack digest to `C0A22NPLV38`, HTML email to 5 recipients (incl. Baste for ads inspo), 20 rows appended to Posts sheet |
+| Team access | Posts sheet is linked in the "Halo Post Inspiration Library" table of the **Ideas & Moodboard** Slack canvas (`F0A2ATP4D5L`) as the auto-updated TikTok feed; Alleah's manual sheet there is the IG-focused complement |
 | Apify actor fails | Returns empty array; scoring continues with whatever is available; no hard failure |
 | Claude parse error | Fallback to empty analysis fields; report still delivers |
 | Slack/email send fails | `continueOnFail: true`; Sheet append still runs |
@@ -775,7 +778,8 @@ Each matched group adds +0.1 to the multiplier (1.0 base → max 1.3).
 
 Sheet ID: `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4`
 Tab name: `Posts`
-Columns (in order): Week | Platform | Creator | URL | Likes | Views | Saves | Shares | Engagement Rate (%) | ICP Group | Content Pillar | Score | Hook | Why It Performed | ICP Match Detail | Halo Angle
+Columns: Week | Platform | Creator | Post URL | Likes | Views | Saves | Shares | Engagement Rate (%) | ICP Group | Content Pillar | Hook (0–3s) | Why It Works | ICP Match Detail | Halo Adaptation | Keyword | Format | Visual Style | Hook Type | CTA / Ending | Score
+Columns are aligned to Alleah's manual inspo sheet format (Format, Hook Type, Visual Style, CTA/Ending, Keyword added; Hook→Hook (0–3s), Why It Performed→Why It Works, Halo Angle→Halo Adaptation, URL→Post URL). The n8n append maps by header name, so physical column order need not match this list. `Transcript` is intentionally omitted (scraper does not return reliable transcripts).
 
 ### Apify Actor Verification (before first deploy)
 
@@ -1396,7 +1400,7 @@ Gives the Halo Home VA Shopify store access via Slack without needing admin cred
 
 ### Intent Types Handled
 
-`orders_today`, `orders_week`, `orders_month`, `order_lookup_email`, `order_lookup_number`, `order_status`, `unfulfilled_orders`, `draft_orders`, `abandoned_checkouts`, `discount_lookup`, `refill_due`, `inventory`, `product_availability`, `refunds`, `customer_history`, `subscriptions`, `comped_orders`, `revenue_report`, `product_catalog`, `run_digest`, `run_inventory`, `general`
+`orders_today`, `orders_week`, `orders_month`, `order_lookup_email`, `order_lookup_number`, `order_status`, `unfulfilled_orders`, `draft_orders`, `abandoned_checkouts`, `discount_lookup`, `orders_by_discount`, `refill_due`, `compare_periods`, `inventory`, `product_availability`, `refunds`, `customer_history`, `subscriptions`, `subscription_charges_today`, `subscription_shipping_exceptions`, `order_by_sku`, `comped_orders`, `revenue_report`, `product_catalog`, `run_digest`, `run_inventory`, `general`
 
 ### Node Flow (current)
 
@@ -1421,7 +1425,7 @@ Gives the Halo Home VA Shopify store access via Slack without needing admin cred
                ↓
              [Fetch Shopify Data] — HTTP Request (continueOnFail)
                ↓
-             [Build Claude Prompt] — aggregator Code node; pre-processes run_inventory data
+             [Build Claude Prompt] — aggregator Code node; pre-processes run_inventory, compare_periods, order_by_sku, orders_by_discount, subscription_charges_today & subscription_shipping_exceptions data
                ↓
              [Format Response] — Anthropic Haiku HTTP Request
                ↓
@@ -1439,7 +1443,12 @@ Gives the Halo Home VA Shopify store access via Slack without needing admin cred
 | `run_inventory` | Fetches all products, pre-processes stock status, posts full inventory |
 | `refill_due` | Fetches orders 75–105 days ago, filters by filter SKUs |
 | `abandoned_checkouts` | Lists open checkout sessions |
-| `discount_lookup` | Looks up code validity + usage count |
+| `discount_lookup` | Looks up code validity + usage count (does NOT list orders) |
+| `orders_by_discount` | Lists orders that exact-matched a discount code + revenue (default 90-day window, override with date_from/date_to) |
+| `order_by_sku` | Lists orders whose line items match a SKU or product name (default 30-day window) |
+| `subscription_charges_today` | Lists subscription/Smart Refill orders charged in range (default today). Sub ID + next charge date come from Seal, not Shopify |
+| `subscription_shipping_exceptions` | Flags subscription orders wrongly charged shipping — the $5 refund report (default 7-day window) |
+| `compare_periods` | This-week vs last-week revenue/orders/AOV with % change |
 | General question | Claude answers from catalog knowledge, no Shopify call |
 
 ### Error Handling
@@ -1514,13 +1523,13 @@ Posts yesterday's Halo Home sales summary + current unfulfilled orders to `#halo
 
 ### Purpose
 
-Replaces the manual email-check step for creator/AP invoice intake. Scans john@kravemedia.co every 3 hours for unread emails with PDF attachments, parses each PDF with Claude Sonnet, validates bank details (hardstop if missing), creates draft bills in Airwallex Spend, replies to the original sender, and logs to the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`). Falls back to forwarding the PDF (with attachment) to kravemedia@bills.airwallex.com and posting a prep report to #ops-command if the Spend API returns 401 or 404.
+Replaces the manual email-check step for creator/AP invoice intake. Scans john@kravemedia.co four times a day for unread emails with PDF/image attachments, parses each with Claude Sonnet, guards against non-invoices and Airwallex/automated senders, validates bank details (hardstop if missing), **forwards the invoice PDF to the Airwallex bills inbox** (`kravemedia@bills.airwallex.com`), replies to the original sender, posts a prep report to `#ops-command`, and logs to the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`). This workflow does **not** call the Airwallex Spend API directly — bill creation happens on the Airwallex side from the forwarded email; John reviews/finalizes drafts there.
 
 ### Triggers
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 */3 * * 1-5` — every 3 hours Mon–Fri (Asia/Manila) |
+| Schedule | `0 9,12,15,18 * * 1-5` — 09:00, 12:00, 15:00, 18:00 PHT, Mon–Fri (Asia/Manila) |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/krave-creator-invoice-email-scan` |
 
 ### Node Flow
@@ -1528,67 +1537,69 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
 ```text
 [Schedule / Webhook Trigger]
   ↓
-[Search Inbox] — Gmail getAll, is:unread has:attachment filename:pdf, john@kravemedia.co
+[Fetch Existing Bills] — HTTP GET Sheets values, column I (Slack Thread TS) — one item out, dedup source
+  ↓
+[Search Inbox] — Gmail getAll, is:unread has:attachment in:inbox (invoice|bill|creator|payment) filename:(pdf|png|jpg), -from:airwallex.com
   ↓
 [Get Message Details] — full payload per email
   ↓
-[Extract PDF Attachments] — Code, splits into one item per PDF
+[Extract PDF Attachments] — Code, splits into one item per PDF/image; SENDER BLOCKLIST drops Airwallex/no-reply/notifications/mailer-daemon (left untouched)
+  ↓
+[Dedup Filter] — Code, drops candidates whose messageId already has a row in the tracker (fail-open)
   ↓
 [Download Attachment] — Gmail OAuth HTTP Request, returns base64url
   ↓
 [Merge Attachment Data] — combines base64 + email context
   ↓
-[Prepare Claude Request] — builds document API payload with PDF
+[Prepare Claude Request] — builds document/image API payload with the file
   ↓
 [Call Claude API] — claude-sonnet-4-6, extracts invoice fields as JSON
   ↓
-[Parse & Validate] — derives invoice number (MMDDYYYY-FLast), Friday due date, bank details check
+[Parse & Validate] — derives invoice number (MMDDYYYY-FLast), Friday due date, bank details check, isInvoice flag
   ↓
-[Has Bank Details?]
-  ├─ false → [Reply Missing Bank Details] → [Mark Read]
-  └─ true  → [Airwallex Auth]
-               ↓
-             [List Vendors] → [Resolve Vendor]
-               ↓
-             [Need Create Vendor?]
-               ├─ true  → [Create Vendor] → [Set Vendor ID]
-               └─ false → [Create Bill] ←─────────────────┘
-               ↓
-             [Create Bill]
-               ↓
-             [Bill Created?]
-               ├─ true  → [Reply Staged] → [Log to Bills Tab] → [Mark Read]
-               └─ false → [Build Slack Fallback] → [Forward PDF to Airwallex Email]
-                          → [Post Slack Prep Report] → [Reply Fallback]
-                          → [Log to Bills Tab (pending)] → [Mark Read]
+[Is Invoice?]
+  ├─ false → [Mark Read (not invoice)]   (silent skip — no reply)
+  └─ true  → [Has Bank Details?]
+               ├─ false → [Reply Missing Bank Details] → [Mark Read (missing bank details)]
+               └─ true  → [Build Forward Context] (builds Slack text + RFC822 MIME w/ PDF)
+                          → [Forward PDF to Airwallex Email] (→ kravemedia@bills.airwallex.com)
+                          → [Post Slack Prep Report] (→ #ops-command C0AQZGJDR38)
+                          → [Reply Fallback] (→ sender: "Received. Staged for payment.")
+                          → [Log to Bills Tab (pending)] (status: Forwarded via Email)
+                          → [Mark Read (fallback)]
 ```
 
 ### Key Logic
 
-- **Dedup:** `is:unread` search + mark as read at end of each path. Airwallex `request_id` = `messageId + attachmentId` prevents duplicate bills.
-- **Multiple PDFs per email:** Extract Attachments splits one email into N items (one per PDF). Each PDF is processed independently.
+- **Sender blocklist (NEVER reply to Airwallex):** Two layers. (1) `-from:airwallex.com` in the Search Inbox query keeps platform mail out of the pipeline (saves Claude calls). (2) `isBlockedSender()` in Extract PDF Attachments hard-drops any email from `airwallex.com` (+ subdomains), `no-reply`/`noreply`, `notifications@`, or `mailer-daemon`/`postmaster` — never parsed, replied to, forwarded, logged, or marked read; left untouched in the inbox. `kravemedia.co` is **not** blocked — strategists send/forward invoices and may use that domain.
+- **Is Invoice? guard:** `isInvoice` is true only when Claude returns a creator name AND amount > 0. Anything else (statements, receipts, random PDFs) is silently marked read with no reply.
+- **Dedup (3 layers):** (1) `is:unread` search + mark-as-read at the end of every path. (2) **Tracker dedup** — `Fetch Existing Bills` reads column I of the tracker once at the top; `Dedup Filter` drops any candidate whose Gmail messageId already has a row. Fail-open: if the read errors, everything is processed. (3) Multiple PDFs in one email each get their own item but share the messageId (see limitation below).
+- **Multiple PDFs per email:** Extract Attachments splits one email into N items (one per PDF). Each PDF is processed independently. *Limitation:* tracker dedup keys on messageId only, so if a run forwards PDF A but fails before PDF B, a later run skips both (messageId already present). Mark-as-read mitigates in practice.
 - **Invoice number:** Auto-generated as `MMDDYYYY-[FirstInitialLastName]` if missing.
 - **Due date:** Defaults to Friday of current week (PHT) if not on invoice.
-- **Bank details hardstop:** Replies asking to reissue; logs nothing; marks email read.
-- **Airwallex 401/404 fallback:** Forwards the PDF (with attachment) to kravemedia@bills.airwallex.com, posts structured bill prep report to #ops-command, logs as "Forwarded via Email."
+- **Bank details hardstop:** Replies asking to reissue; marks email read; does not forward.
+- **Forward-by-email (not Spend API):** On a valid invoice, the PDF is rebuilt into an RFC822 MIME message and sent to `kravemedia@bills.airwallex.com`; a prep report goes to `#ops-command`; the sender gets a confirmation reply; a row is logged as "Forwarded via Email."
 
 ### Outputs
 
 | Scenario | Action |
 |----------|--------|
-| Valid invoice, Spend API active | Bill created in Airwallex, reply sent, logged to Creator & AP Bills Tracker, email marked read |
-| Missing bank details | Reply sent asking to reissue, email marked read |
-| Spend API returns 401 or 404 | PDF forwarded to kravemedia@bills.airwallex.com with attachment, Slack prep report to #ops-command, fallback reply to sender, logged as "Forwarded via Email" |
+| Valid invoice with bank details | PDF forwarded to kravemedia@bills.airwallex.com, Slack prep report to #ops-command, confirmation reply to sender, logged to tracker as "Forwarded via Email", email marked read |
+| Not an invoice (no name/amount) | Email marked read silently — no reply, no forward, no log |
+| Missing bank details | Reply sent asking to reissue, email marked read, not forwarded |
+| Blocked sender (Airwallex / no-reply / notifications / mailer-daemon) | Dropped at Extract — left untouched in inbox |
+| Already in tracker (duplicate messageId) | Dropped at Dedup Filter — not reprocessed |
 | No unread PDF emails | Workflow exits with 0 items, nothing happens |
 
 ### Error Handling
 
 | Failure | Behaviour |
 |---------|-----------|
-| Claude API fails | `continueOnFail` — Parse & Validate gets empty response, falls through with minimal data |
+| Tracker read (`Fetch Existing Bills`) fails | `continueOnFail` — Dedup Filter fails open, processes everything |
+| Claude API fails | Parse & Validate gets empty response → `isInvoice` false → marked read, no reply |
+| Forward to Airwallex email fails | `continueOnFail` — downstream Slack/reply/log/mark-read still run |
 | Gmail reply fails | `continueOnFail` — mark read still runs |
 | Sheets append fails | `continueOnFail` — email still marked read |
-| Vendor create returns 401 | `continueOnFail` — Create Bill runs with null vendorId, fails, routes to fallback |
 
 ---
 

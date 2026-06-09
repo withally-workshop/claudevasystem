@@ -40,5 +40,20 @@
         "GMAIL_IMPERSONATE_EMAIL": "john@kravemedia.co"
       }
     }
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/hooks/doc-sync-reminder.js"],
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }

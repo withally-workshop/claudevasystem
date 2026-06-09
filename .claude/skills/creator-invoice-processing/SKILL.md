@@ -6,7 +6,7 @@
 ---
 
 ## What This Skill Does
-Receives creator/vendor invoices from three channels (email, Slack channel, Slack DMs), validates each PDF, and creates draft bills in Airwallex Spend via API. John reviews and finalizes all drafts by EOD. No automated payment — Noa handles payments every Thursday.
+Receives creator/vendor invoices from three channels (email, Slack channel, Slack DMs), validates each PDF, and **forwards each valid invoice to Airwallex billing** (`kravemedia@bills.airwallex.com`), which auto-creates a draft. John reviews and finalizes all drafts by EOD on the Airwallex side. No automated payment — Noa handles payments every Thursday. **The Airwallex Spend/Bills API is not released for us — there is no direct bill-creation call; forwarding is the only path.**
 
 ---
 
@@ -29,7 +29,7 @@ Receives creator/vendor invoices from three channels (email, Slack channel, Slac
 
 - **#payments-invoices-updates:** C09HN2EBPR7
 - **Creator & AP Bills Tracker:** `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`, tab: `Krave — Creator & AP Bills Tracker`
-- **Airwallex legal_entity_id:** TBD — discover via Airwallex dashboard → Settings → Legal Entities once Spend API access is granted. Add here as a constant once confirmed.
+- **Airwallex billing inbox:** `kravemedia@bills.airwallex.com` — forward valid invoice PDFs here; Airwallex auto-creates the draft. (No Spend/Bills API access yet, so there is no `legal_entity_id` / vendor / bill API to call.)
 - **Strategists:** Shin, Amanda, Sybil, Jeneena (Slack channel); editors/internal staff (John DMs)
 
 ---
@@ -45,10 +45,24 @@ All four layers apply on every run:
 
 ---
 
+## Sender Blocklist — Never Reply to Airwallex
+
+**Hard rule:** Creator invoices come from real people — strategists/team forwarding on behalf of creators, or creators directly. They never come from the payment platform itself.
+
+Drop (do not parse, reply to, forward, log, or mark read) any email from:
+- `airwallex.com` and any subdomain (e.g. `bills.airwallex.com`, `notifications.airwallex.com`)
+- `no-reply` / `noreply` / `notifications@` automated senders
+- `mailer-daemon` bounce notifications
+
+These are left **untouched** in the inbox. Do **not** block `kravemedia.co` — strategists manage the creators and send/forward invoices, sometimes from that domain. The email-scan workflow enforces this via a `-from:airwallex.com` query exclusion plus an `isBlockedSender()` backstop in `Extract PDF Attachments`.
+
+---
+
 ## Validation Rules
 
 | Field | Rule |
 |-------|------|
+| Sender | **Hardstop** — block Airwallex / no-reply / notification / mailer-daemon senders (see Sender Blocklist). Never block kravemedia.co. |
 | Invoice attachment | **Hardstop** — no PDF = no bill. Reply asking for invoice before doing anything. |
 | Bank details | **Hardstop** — if no bank account details found in PDF (IBAN, SWIFT, account number, BSB, etc.), return to sender and ask them to reissue with bank details. Do NOT create the bill. |
 | Invoice number | If missing: generate as `MMDDYYYY-[FirstInitial][LastName]` — e.g. `5282026-AGMapula` for Alleah Grace Mapula on May 28 2026 |
@@ -117,46 +131,31 @@ Apply validation rules. If any hardstop condition is triggered → skip bill cre
 **Due date (if blank):** Next Friday in PHT (UTC+8)
 - If today is already Friday → use today
 
-### Step 6 — Create Bill in Airwallex
+### Step 6 — Forward to Airwallex Billing
 
-**6a — Vendor lookup:**
-`mcp__krave-airwallex__airwallex_list_vendors(name: creator_name)`
-- If found → extract `vendor_id`
-- If not found → `mcp__krave-airwallex__airwallex_create_vendor(name: creator_name, email: creator_email)` → get `vendor_id`
+> **No Spend API.** The Airwallex Spend/Bills API is not released for us yet. Do **not** call `airwallex_create_bill`, `airwallex_list_vendors`, or `airwallex_create_vendor`. The only path is forward-by-email — Airwallex auto-creates the draft from the forwarded PDF, and John finalizes it on the Airwallex side.
 
-**6b — Create bill:**
-`mcp__krave-airwallex__airwallex_create_bill`:
-```
-external_id:    <Slack thread_ts or Gmail message_id>
-vendor_id:      <from 6a>
-invoice_number: <from PDF or generated>
-issued_date:    <from PDF or today YYYY-MM-DD>
-due_date:       <from PDF or Friday of current week YYYY-MM-DD>
-currency:       <from PDF>
-line_items:     [{description, quantity, unit_price}, ...]
-legal_entity_id: <TBD — add once confirmed, omit until then>
-```
+For each validated invoice PDF:
 
-Bill status will be DRAFT or AWAITING_APPROVAL.
+1. Get the PDF bytes — `slack_download_file(url_private)` for Slack-sourced, or the `pdfBase64` already in memory for email-sourced.
+2. Forward the PDF to `kravemedia@bills.airwallex.com` from john@kravemedia.co, with the PDF **attached** (`attachment_base64`). Subject: `Creator Invoice - [Creator] | [Invoice #] | [Currency] [Amount]`.
+3. Post a bill prep report to John's channel (C0AQZGJDR38): creator, amount, currency, invoice number, due date, source.
+4. Log to the Creator & AP Bills Tracker with status `Forwarded via Email` (Step 8).
 
-**API fallback (Spend API returns 401 or 404):**
-- Call `slack_download_file(url_private)` using the url_private from the attached file metadata in context (for Slack-sourced invoices), or use the pdfBase64 already in memory (for email-sourced invoices)
-- Forward PDF to `kravemedia@bills.airwallex.com` via john@kravemedia.co with the PDF attached as `attachment_base64`
-- Post bill prep report to John's channel (C0AQZGJDR38): creator, amount, currency, invoice number, due date, source
-- Log to Creator & AP Bills Tracker with status `Forwarded via Email`
+The forwarded email must actually carry the PDF — an email without the attachment is useless to Airwallex.
 
 ### Step 7 — Confirmation Replies
 
 **On success:**
 
 Slack (reply in origin thread + react ✅):
-> Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD.
+> Received! Invoice for [Creator] — [Amount] [Currency] forwarded to Airwallex billing. Staged for payment.
 
 Email (reply in same thread via `in_reply_to_message_id`):
 
 > Hi [First Name],
 >
-> Received. Staged for payment — John will review by EOD.
+> Received. Staged for payment.
 >
 > Cheers,
 > John
@@ -188,11 +187,11 @@ Append row to Creator & AP Bills Tracker (Sheet ID: `14kiX9MnWyel_4_OxvL2TlnOAqB
 | A | Date Received (YYYY-MM-DD) |
 | B | Creator / Vendor name |
 | C | Invoice # |
-| D | Airwallex Bill ID (from API response, blank if fallback) |
+| D | Airwallex Bill ID (leave blank — set later from the Airwallex side once the draft exists) |
 | E | Amount (numeric only) |
 | F | Currency |
 | G | Due Date (YYYY-MM-DD) |
-| H | Status (`Staged in Airwallex` / `Forwarded via Email` / `On hold — missing bank details`) |
+| H | Status (`Forwarded via Email` / `On hold — missing bank details`) |
 | I | Slack Thread TS (or Gmail message_id for email-sourced) |
 | J | Notes (fallback reason, currency conversion rate, etc.) |
 
@@ -214,7 +213,14 @@ Append row to Creator & AP Bills Tracker (Sheet ID: `14kiX9MnWyel_4_OxvL2TlnOAqB
 
 ## Multiple PDFs Per Email
 
-One email with 2+ PDF attachments → one bill per PDF. Each gets its own vendor lookup and bill creation. Send one consolidated reply covering all bills.
+One email with 2+ invoice attachments = **2+ separate bills**. Each attachment is handled fully independently:
+
+1. Parsed and validated on its own (an email can have one good invoice and one missing bank details — handle each per its own outcome).
+2. Forwarded to `kravemedia@bills.airwallex.com` separately, so Airwallex creates **one draft per PDF**.
+3. Logged as its own row in the tracker.
+4. Gets its own brief confirmation reply to the sender.
+
+No vendor lookup or merging — each PDF stands alone. This is exactly how the n8n workflow behaves (it splits one email into one item per attachment). Validation is per-attachment: if PDF A is valid and PDF B has no bank details, A is forwarded and B gets the reissue reply.
 
 ---
 

@@ -51,7 +51,9 @@ node n8n-workflows/deploy-halo-intelligence-report.js
 - `APIFY_API_KEY` — set in n8n environment variables
 - `ANTHROPIC_API_KEY` — set in n8n environment variables
 
-**Google Sheet:** `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4` — create `Posts` tab with columns: Week | Platform | Creator | URL | Likes | Views | Saves | Shares | Engagement Rate (%) | ICP Group | Content Pillar | Score | Hook | Why It Performed | ICP Match Detail | Halo Angle
+**Google Sheet:** `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4` — `Posts` tab columns: Week | Platform | Creator | Post URL | Likes | Views | Saves | Shares | Engagement Rate (%) | ICP Group | Content Pillar | Hook (0–3s) | Why It Works | ICP Match Detail | Halo Adaptation | Keyword | Format | Visual Style | Hook Type | CTA / Ending | Score (aligned to Alleah's manual inspo sheet format). Linked into the "Halo Post Inspiration Library" table of the Ideas & Moodboard Slack canvas (`F0A2ATP4D5L`).
+
+**Email recipients:** shin@, noa@, john@kravemedia.co, alleahvargas@gmail.com, basteperez021198@gmail.com (Baste — ads inspo)
 
 ---
 
@@ -324,7 +326,7 @@ node n8n-workflows/deploy-slack-invoice-handler.js
 
 ## Halo - VA Slack Bot
 
-VA-facing Shopify ops bot for `#halo-home-shopify`. VA @mentions the bot to query orders, inventory, refunds, revenue, fulfillment, drafts, abandoned checkouts, discount codes, and refill due list. Claude Haiku classifies intent → Shopify REST API → formatted thread reply.
+VA-facing Shopify ops bot for `#halo-home-shopify`. VA @mentions the bot to query orders, inventory, refunds, revenue, fulfillment, drafts, abandoned checkouts, discount codes, refill due list, order search by SKU/product, orders by discount code, week-vs-week comparison, subscription charges, and a subscription shipping-fee exception report (the $5 refund flag). Claude Haiku classifies intent → Shopify REST API → formatted thread reply.
 
 **Workflow ID:** `XgHWMBeHoPWelE9r`
 **Webhook:** `POST https://noatakhel.app.n8n.cloud/webhook/halo-home-bot`

@@ -2,10 +2,11 @@
 **Frequency:** Every 3 hours (weekdays) via scheduled agent + real-time via Krave bot | **Owner:** VA / Finance | **Updated:** May 2026
 
 ## Overview
-Collect creator and vendor invoices from three intake channels, validate each PDF, and create draft bills in Airwallex Spend via API. John reviews and finalizes all drafts by EOD. Noa processes approved payments every Thursday.
+Collect creator and vendor invoices from three intake channels, validate each PDF, and **forward each valid invoice to Airwallex billing** (`kravemedia@bills.airwallex.com`), which auto-creates a draft. John reviews and finalizes all drafts by EOD on the Airwallex side. Noa processes approved payments every Thursday. **The Airwallex Spend/Bills API is not released for us — forwarding by email is the only path; do not call the Spend/vendor/bill API.**
 
 **Key Rules:**
 - Never pay without John's approval. Create drafts only.
+- **Never reply to Airwallex.** Drop any email from `airwallex.com` (+ subdomains like `bills.airwallex.com`), `no-reply`/`noreply`, `notifications@`, or `mailer-daemon` — do not parse, reply to, forward, log, or mark read. Leave it untouched. Invoices come from real people (strategists/team or creators), never the payment platform. Do **not** block `kravemedia.co` — strategists manage creators and send/forward invoices, sometimes from that domain.
 - Strategists must **@tag @Claude EA** in #payments-invoices-updates to trigger invoice processing. Messages without this tag are informational — do not action them.
 - **No PDF = no bill.** If a strategist tags Claude EA but provides no invoice, reply asking for the PDF before drafting anything.
 - **No bank details = no bill.** If the invoice PDF has no bank account details, return to sender and ask them to reissue. Do not create the bill.
@@ -42,26 +43,29 @@ Run these checks in order:
 
 | Check | Rule |
 |-------|------|
+| Sender | **Hardstop** — block Airwallex / no-reply / notifications / mailer-daemon; leave untouched, never reply. Never block kravemedia.co. |
 | PDF attached | **Hardstop** — no PDF, ask for it first |
 | Bank details | **Hardstop** — no bank account info in PDF → return to sender, ask them to reissue |
 | Invoice number | If missing → generate: `MMDDYYYY-[FirstInitial][LastName]` (e.g. `5282026-AGMapula`) |
 | Due date | If missing → use Friday of the current week (PHT) |
 | Invoice date | If missing → use today |
 
-### Step 3 — Create Bill in Airwallex (API)
+### Step 3 — Forward to Airwallex Billing
 
-1. Look up vendor by name in Airwallex Spend → `airwallex_list_vendors`
-2. If not found → create vendor (name + email only) → `airwallex_create_vendor`
-3. Create draft bill → `airwallex_create_bill` with: vendor_id, invoice_number, issued_date, due_date, currency, line_items
-4. Bill status: DRAFT or AWAITING_APPROVAL
+> **No Spend API.** The Airwallex Spend/Bills API is not released for us. Do **not** call `airwallex_list_vendors`, `airwallex_create_vendor`, or `airwallex_create_bill`. Forwarding is the only path — Airwallex auto-creates the draft from the forwarded PDF; John finalizes it on the Airwallex side.
 
-**API fallback** (if Spend API returns 401 or 404): call `slack_download_file(url_private)` first to get `{ base64 }` (Slack-sourced) or retrieve PDF bytes already in memory (email-sourced), then forward to `kravemedia@bills.airwallex.com` via `gmail_send` with `attachment_base64` set — the PDF must be attached or the forwarding is useless. If download fails, post a Slack message asking for manual forwarding instead. Post bill prep report to John's channel. Log as "Forwarded via Email."
+For each validated invoice PDF:
+
+1. Get the PDF bytes — `slack_download_file(url_private)` to get `{ base64 }` (Slack-sourced) or the PDF bytes already in memory (email-sourced).
+2. Forward to `kravemedia@bills.airwallex.com` via `gmail_send` with `attachment_base64` set — the PDF **must** be attached or the forward is useless. Subject: `Creator Invoice - [Creator] | [Invoice #] | [Currency] [Amount]`. If the download fails, post a Slack message asking for manual forwarding instead.
+3. Post a bill prep report to John's channel (C0AQZGJDR38).
+4. Log to the tracker with status `Forwarded via Email`.
 
 ### Step 4 — Confirm to Requester
 
-After staging:
-- **Slack:** Reply in thread → "Received! Invoice for [Creator] — [Amount] [Currency] staged in Airwallex. John will review by EOD." + react ✅
-- **Email:** Reply in same thread → "Hi [First Name], Received. Staged for payment — John will review by EOD. Cheers, John / Krave Media"
+After forwarding:
+- **Slack:** Reply in thread → "Received! Invoice for [Creator] — [Amount] [Currency] forwarded to Airwallex billing. Staged for payment." + react ✅
+- **Email:** Reply in same thread → "Hi [First Name], Received. Staged for payment. Cheers, John / Krave Media"
 
 If validation fails (missing bank details etc.) → reply with the specific issue instead.
 
@@ -92,6 +96,7 @@ Every Thursday, Noa reviews approved bills and processes transfers in Airwallex.
 
 | Exception | Action |
 |-----------|--------|
+| Email from Airwallex / no-reply / notifications / mailer-daemon | Hardstop — drop, leave untouched, never reply or forward |
 | No PDF attached | Hardstop — ask for PDF first |
 | Missing bank details | Hardstop — return to sender, ask to reissue with bank details |
 | PayPal only | Flag — request ACH/bank wire |
