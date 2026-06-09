@@ -21,6 +21,12 @@ data/insense/runs/*
 # n8n workflow snapshots — local-only audit artifacts from REST PUT patches
 n8n-workflows/snapshots/
 
+# Contract generation — real client deal terms + generated contracts are local-only.
+# The fake example-standard.json is committed as a runnable sample.
+projects/contract-generation/deals/*
+!projects/contract-generation/deals/example-standard.json
+projects/contract-generation/output/
+
 # Claude Code scheduled task lock
 .claude/scheduled_tasks.lock
 
