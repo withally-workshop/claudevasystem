@@ -32,6 +32,9 @@ const {
 } = require('docx');
 
 const OUT = path.join(__dirname, 'template', 'retainer-template.docx');
+// Also bundle a copy into the Slack bot so its generate_contract tool ships the same
+// template (the bot deploys separately on Render). Single authoring source → no drift.
+const BOT_OUT = path.join(__dirname, '..', 'krave-bot', 'assets', 'retainer-template.docx');
 const BLANK = '________________________';
 
 // ---- paragraph helpers -------------------------------------------------------
@@ -264,7 +267,9 @@ children.push(new Paragraph({ spacing: { before: 160 }, children: [
 
 const doc = new Document({ sections: [{ children }] });
 Packer.toBuffer(doc).then((buf) => {
-  fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  fs.writeFileSync(OUT, buf);
-  console.log('Wrote', OUT);
+  for (const out of [OUT, BOT_OUT]) {
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, buf);
+    console.log('Wrote', out);
+  }
 });

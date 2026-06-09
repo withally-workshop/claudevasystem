@@ -258,8 +258,9 @@ async function resolveDisplayName(client, userId) {
   }
 }
 
-function withContext(text, displayName, threadTs) {
+function withContext(text, displayName, threadTs, channel) {
   const parts = [`[Requester: ${displayName}]`];
+  if (channel) parts.push(`[Slack Channel: ${channel}]`);
   if (threadTs) parts.push(`[Slack Thread TS: ${threadTs}]`);
   return `${parts.join(' ')}\n${text}`;
 }
@@ -281,7 +282,7 @@ app.event('message', async ({ event, say, client }) => {
     if (isDuplicate(event.client_msg_id || event.ts)) return;
     try {
       const displayName = await resolveDisplayName(client, event.user);
-      const contextText = withContext(event.text || '', displayName, event.thread_ts);
+      const contextText = withContext(event.text || '', displayName, event.thread_ts, event.channel);
       const userContent = await buildUserContent(contextText, event.files);
       const reply = await runAgent(userContent, threadKey);
       await say({ text: reply, thread_ts: event.thread_ts });
@@ -300,7 +301,7 @@ app.event('message', async ({ event, say, client }) => {
   const convKey = getConvKey(event.channel, null);
   try {
     const displayName = await resolveDisplayName(client, event.user);
-    const text = withContext(event.text || '', displayName, event.ts);
+    const text = withContext(event.text || '', displayName, event.ts, event.channel);
     const userContent = await buildUserContent(text, event.files);
     const reply = await runAgent(userContent, convKey);
     await say({ text: reply, thread_ts: event.ts });
@@ -317,7 +318,7 @@ app.event('app_mention', async ({ event, say, client }) => {
   const convKey = getConvKey(event.channel, event.thread_ts || event.ts);
   try {
     const displayName = await resolveDisplayName(client, event.user);
-    const contextText = withContext(text, displayName, event.thread_ts || event.ts);
+    const contextText = withContext(text, displayName, event.thread_ts || event.ts, event.channel);
     const userContent = await buildUserContent(contextText, event.files);
     const reply = await runAgent(userContent, convKey);
     await say({ text: reply, thread_ts: event.thread_ts || event.ts });
