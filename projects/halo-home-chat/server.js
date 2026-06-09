@@ -377,7 +377,7 @@ app.post('/chat', async (req, res) => {
   try {
     const historyEntries = conversation_history.slice(-10);
     const response = await callClaude({ content: message, historyEntries, email });
-    const cleanResponse = response.replace(/\[\[ESCALATE\]\]/g, '').trim();
+    const cleanResponse = response.replace(/\[\[ESCALATE(?::SHIPPING_FEE)?\]\]/g, '').trim();
     res.json({ response: cleanResponse });
   } catch (err) {
     console.error('Chat error:', err.message);
