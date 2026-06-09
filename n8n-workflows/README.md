@@ -1,4 +1,4 @@
-﻿# n8n Workflows
+# n8n Workflows
 
 Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 
@@ -8,8 +8,8 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 |----------|--------|----------|------|
 | Payment Detection | Active | Every hour | [deploy-payment-detection.js](deploy-payment-detection.js) |
 | Invoice Reminder Cron | Active | 10am PHT Mon–Fri | [deploy-invoice-reminder-cron.js](deploy-invoice-reminder-cron.js) |
-| Weekly Invoice Summary | Active | 9am ICT Mondays | [deploy-weekly-invoice-summary.js](deploy-weekly-invoice-summary.js) |
-| Invoice Reminder Reply Detection | Active | 10:30am ICT weekdays + manual webhook | [deploy-invoice-reminder-reply-detection.js](deploy-invoice-reminder-reply-detection.js) |
+| Weekly Invoice Summary | Active | 9am PHT Mondays | [deploy-weekly-invoice-summary.js](deploy-weekly-invoice-summary.js) |
+| Invoice Reminder Reply Detection | Active | 10:30am PHT weekdays + manual webhook | [deploy-invoice-reminder-reply-detection.js](deploy-invoice-reminder-reply-detection.js) |
 | Inbox Triage Daily v2 | Active | 9am PHT weekdays + manual webhook | [deploy-inbox-triage-daily.js](deploy-inbox-triage-daily.js) |
 | Slack Invoice Handler | Active | Slack slash command + modal submit | [deploy-slack-invoice-handler.js](deploy-slack-invoice-handler.js) |
 | Invoice Request Intake | Active | Slack modal / manual trigger | [deploy-invoice-request-intake.js](deploy-invoice-request-intake.js) |
@@ -20,7 +20,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Kit Subscriber Alert | Active | Kit webhook (subscriber.tag_add) | [deploy-kit-subscriber-alert.js](deploy-kit-subscriber-alert.js) |
 | LinkedIn Post Consistency Check | Active | 10AM PHT Mon–Fri | [deploy-linkedin-post-consistency-check.js](deploy-linkedin-post-consistency-check.js) |
 | Weekly Resource Conversion Report | Active | 9AM PHT Mondays | [deploy-weekly-resource-conversion-report.js](deploy-weekly-resource-conversion-report.js) |
-| Halo Weekly Intelligence Report | Active | 7AM ICT Mondays | [deploy-halo-intelligence-report.js](deploy-halo-intelligence-report.js) |
+| Halo Weekly Intelligence Report | Active | 7AM PHT Mondays | [deploy-halo-intelligence-report.js](deploy-halo-intelligence-report.js) |
 | Crave - Daily Lead Push | Inactive (warm-up) | 9AM PHT daily | [deploy-crave-lead-push.js](deploy-crave-lead-push.js) |
 | Crave - Status Sync | Inactive (warm-up) | 9AM PHT daily | [deploy-crave-status-sync.js](deploy-crave-status-sync.js) |
 | LinkedIn Post Monitor | Inactive (needs actor verification) | Every 30min all day | [deploy-linkedin-post-monitor.js](deploy-linkedin-post-monitor.js) |
@@ -37,7 +37,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 Weekly social intelligence pipeline for Halo Home's US market entry. Scrapes TikTok and Instagram for top-performing content in Halo's niche hashtag clusters (sensitive skin, hair loss, hard water, clean beauty), scores and ranks posts by engagement × ICP relevance, analyzes with Claude, and delivers a structured report.
 
 **Workflow ID:** `5ZqTSaUEtxnAndiY`
-**Schedule:** Every Monday 7:00 AM ICT (Asia/Manila)
+**Schedule:** Every Monday 7:00 AM PHT (Asia/Manila)
 
 **Deploy:**
 ```bash
@@ -124,7 +124,7 @@ node n8n-workflows/deploy-payment-detection.js
 
 ## Invoice Reminder Cron
 
-Scans the Client Invoice Tracker Mon–Fri at 9am ICT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker. **Payout-term-aware (tightened May 2026):** 30d/15d invoices get 7d/3d/due-today reminders; 7d invoices get 3d/due-today only. Posts a daily digest at the end of every run.
+Scans the Client Invoice Tracker Mon–Fri at 9am PHT, sends reminder emails from `john@kravemedia.co`, tags the correct strategist plus Amanda in `#payments-invoices-updates` for overdue states, and updates the tracker. **Payout-term-aware (tightened May 2026):** 30d/15d invoices get 7d/3d/due-today reminders; 7d invoices get 3d/due-today only. Posts a daily digest at the end of every run.
 
 Also writes latest reminder attribution metadata to the tracker: `Last Follow-Up Sent`, `Last Follow-Up Type`, and `Last Follow-Up Thread ID`. The thread ID is blank unless Gmail returns a real thread key. Column L remains the historical reminder log.
 
@@ -153,7 +153,7 @@ node n8n-workflows/deploy-invoice-reminder-cron.js
 
 ## Weekly Invoice Summary
 
-Posts a full portfolio snapshot to #payments-invoices-updates every Monday at 9 AM ICT. Reads all open invoices from the tracker and categorises them into action buckets: Collections, Late Fee Applied, Overdue Needs Chase, Due This Week, and Pending Upcoming. Gives Noa a weekly "who to chase" list without digging through the tracker.
+Posts a full portfolio snapshot to #payments-invoices-updates every Monday at 9 AM PHT. Reads all open invoices from the tracker and categorises them into action buckets: Collections, Late Fee Applied, Overdue Needs Chase, Due This Week, and Pending Upcoming. Gives Noa a weekly "who to chase" list without digging through the tracker.
 
 **Workflow ID:** `WX1hHek0cNTyZXkS`
 

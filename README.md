@@ -9,7 +9,7 @@ A Claude Code-powered executive assistant workspace for Noa Takhel — multi-bus
 A persistent, skill-based AI assistant system built on top of Claude Code. It handles recurring operational workflows, protects Noa's deep work time, and acts as an intelligent layer across her business stack.
 
 **Operator:** John (Systems Partner & EA)
-**Timezone:** Bangkok Time (ICT / GMT+7)
+**Timezone:** Philippine Time (PHT / GMT+8)
 
 ---
 
@@ -26,7 +26,7 @@ A persistent, skill-based AI assistant system built on top of Claude Code. It ha
 
 ## Core Rules
 
-- **Deep Work Block:** 1:30 PM–7:00 PM ICT is protected. No non-emergency interruptions.
+- **Deep Work Block:** 1:30 PM–7:00 PM PHT is protected. No non-emergency interruptions.
 - **EOD Triage:** All escalations batch to a daily 7:00 PM summary.
 - **3-and-1 Framework:** All recommendations present 3 options, 1 explicit recommendation.
 

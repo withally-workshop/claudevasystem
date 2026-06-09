@@ -2,7 +2,7 @@
 
 _Last updated: 2026-04-06_
 
-1. **Defend the Deep Work Block** — Zero non-emergency interruptions 1:30 PM–7:00 PM ICT. Non-negotiable.
+1. **Defend the Deep Work Block** — Zero non-emergency interruptions 1:30 PM–7:00 PM PHT. Non-negotiable.
 
 2. **Automate Operational Bottlenecks** — Exit the technical weeds:
    - Osome PDF reconciliation

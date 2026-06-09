@@ -1,4 +1,4 @@
-﻿# SOP: Start of Day Report
+# SOP: Start of Day Report
 
 **Owner:** John (operator)
 **Recipient:** Noa Takhel (via Slack DM) and `#ops-command`
@@ -10,7 +10,7 @@
 
 ## Purpose
 
-Give Noa a clear picture of what's happening today before her deep work block starts at 1:30 PM ICT. The workflow surfaces John's focus goals, carry-overs from yesterday's EOD, blockers needing her input, and, when available, the morning inbox-triage follow-ups, then posts the same final report to both Noa's DM and `#ops-command`.
+Give Noa a clear picture of what's happening today before her deep work block starts at 1:30 PM PHT. The workflow surfaces John's focus goals, carry-overs from yesterday's EOD, blockers needing her input, and, when available, the morning inbox-triage follow-ups, then posts the same final report to both Noa's DM and `#ops-command`.
 
 ---
 

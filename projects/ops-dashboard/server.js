@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 const http = require('http');
 const https = require('https');
@@ -994,10 +994,10 @@ function buildSlackSummary(d) {
   const ts = d.trackerStats;
   const n8n = d.n8nStats;
   const aging = d.aging;
-  const generated = new Date(d.generatedAt).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', hour12: false });
+  const generated = new Date(d.generatedAt).toLocaleString('en-GB', { timeZone: 'Asia/Manila', hour12: false });
   const rangeLabel = { '24h': 'last 24 hours', '7d': 'last 7 days', '30d': 'last 30 days' }[d.range || '7d'];
   const lines = [];
-  lines.push(`*Krave Ops — ${generated} ICT (${rangeLabel})*`, '');
+  lines.push(`*Krave Ops — ${generated} PHT (${rangeLabel})*`, '');
   if (ts) {
     lines.push('*Funnel*');
     lines.push(`• Reminders sent: ${ts.remindersTotal}`);
@@ -1148,7 +1148,7 @@ function renderDashboard(d) {
   const ts = d.trackerStats;
   const n8n = d.n8nStats;
   const arStr = ts ? Object.entries(ts.totalAR).map(([c, v]) => `${c} ${v.toLocaleString()}`).join(' · ') || '—' : '—';
-  const generatedTime = new Date(d.generatedAt).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', hour12: false });
+  const generatedTime = new Date(d.generatedAt).toLocaleString('en-GB', { timeZone: 'Asia/Manila', hour12: false });
   const cacheNote = d.cached ? `<span class="cache-note">Cached · ${Math.round(d.cacheAge / 60)}m old</span>` : '<span class="cache-note fresh">Live</span>';
 
   const caveatHtml = d.caveats.length
@@ -1530,7 +1530,7 @@ function renderDashboard(d) {
     <span class="range-toggle">${rangeToggle}</span>
   </div>
   <div class="header-right">
-    <span class="header-meta">${generatedTime} ICT</span>
+    <span class="header-meta">${generatedTime} PHT</span>
     ${cacheNote}
     <button class="theme-toggle" id="theme-toggle-btn" title="Toggle light/dark mode" onclick="toggleTheme()">☀</button>
     <form method="get" style="display:inline;margin:0">
@@ -1590,7 +1590,7 @@ function renderDashboard(d) {
 </div>
 
 <div class="scope-line">
-  <strong>Snapshot</strong> &nbsp;·&nbsp; invoice state at ${generatedTime} ICT &nbsp;&nbsp;
+  <strong>Snapshot</strong> &nbsp;·&nbsp; invoice state at ${generatedTime} PHT &nbsp;&nbsp;
   <strong>Range</strong> &nbsp;·&nbsp; workflow stats over the ${rangeLabel}
 </div>
 
@@ -1731,7 +1731,7 @@ function renderDashboard(d) {
         </tbody>
       </table>
     </div>` : ''}
-    ${d.insense.lastMessagedAt ? `<div class="card-sub" style="margin-top:8px">Last invite sent: ${new Date(d.insense.lastMessagedAt).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', hour12: false })} ICT</div>` : ''}
+    ${d.insense.lastMessagedAt ? `<div class="card-sub" style="margin-top:8px">Last invite sent: ${new Date(d.insense.lastMessagedAt).toLocaleString('en-GB', { timeZone: 'Asia/Manila', hour12: false })} PHT</div>` : ''}
   </div>` : ''}
 
   ${(d.smartlead || d.creatorSheet) ? `

@@ -1,4 +1,4 @@
-﻿# Krave Media - n8n Automation Workflows
+# Krave Media - n8n Automation Workflows
 
 **Instance:** `noatakhel.app.n8n.cloud`  
 **Last updated:** `2026-05-08`  
@@ -29,18 +29,18 @@
 |---|------|----|--------|----------|---------|
 | 1 | Krave - Payment Detection | `NurOLZkg3J6rur5Q` | Active | Hourly | Detect Airwallex deposits, match invoices, update tracker |
 | 2 | Krave - Invoice Reminder Cron | `Q3IqqLvmX9H49NdE` | Active | 10am PHT Mon–Fri | Send invoice reminders, alert overdue, update tracker, post daily digest |
-| 2b | Krave - Invoice Reminder Reply Detection | `omNFmRcDeiByLOzS` | Active | 10:30am ICT weekdays + `POST /webhook/krave-invoice-reminder-reply-detection` | Scan only `john@kravemedia.co` reminder threads, classify client replies, update reminder attribution columns |
+| 2b | Krave - Invoice Reminder Reply Detection | `omNFmRcDeiByLOzS` | Active | 10:30am PHT weekdays + `POST /webhook/krave-invoice-reminder-reply-detection` | Scan only `john@kravemedia.co` reminder threads, classify client replies, update reminder attribution columns |
 | 5 | Krave — Inbox Triage Daily v2 | `EuT6REDs5PUaoycE` | Active | 9am PHT weekdays + manual webhook | Classify all unread inbox emails into EA/* tiers using hardcoded rules + GPT-4o-mini fallback, create drafts, archive processed, post Slack summary |
 | 6 | Krave - Slack Invoice Handler | `t7MMhlUo5H4HQmgL` | Active | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
 | 7 | Krave - Invoice Request Intake | `5XHxhQ7wB2rxE3qz` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
 | 8 | Krave - Invoice Approval Polling | `uCS9lzHtVKWlqYlk` | Active | Every 2 hrs Mon-Fri 9am-5pm PHT + `POST /webhook/krave-invoice-approval-polling` | Poll tracker for pending drafts, detect John's "approve" replies, finalize in Airwallex, write tracker link, and reply in the original strategist thread |
 | 9 | Krave - Client Invoice Creation | `9eqWz6oJI5dqBesa` | Inactive legacy | Do not trigger | Deprecated finalization path; approval polling is canonical |
-| 10 | Krave - Weekly Invoice Summary | WX1hHek0cNTyZXkS | Active | 9am ICT Mondays | Post full portfolio snapshot to Slack — overdue, late fee, needs chase, due this week, upcoming |
+| 10 | Krave - Weekly Invoice Summary | WX1hHek0cNTyZXkS | Active | 9am PHT Mondays | Post full portfolio snapshot to Slack — overdue, late fee, needs chase, due this week, upcoming |
 | 11 | LinkedIn Resource Post Alert | `Rw2VZ6sAzAhJteyJ` | Active | Every 30min 8AM–1PM PHT Sun–Fri | Poll ClickUp for resource-promo posts just marked posted, alert John in #noa-linkedin-posts with trigger word + pre-filled DM |
 | 12 | Kit Subscriber Alert | `dtrTee7qEgLdR9hQ` | Active | Kit webhook (subscriber.tag_add) | Receive Kit webhook on new resource-claimed subscribers, post Slack alert to #noa-linkedin-posts with name, email, and resource |
 | 13 | LinkedIn Post Consistency Check | `220OeHs02nwJleCT` | Active | 10AM PHT Mon–Fri | Check if any post was marked posted in ClickUp today; alert #noa-linkedin-posts if none found |
 | 14 | Weekly Resource Conversion Report | `G39y9GgsrhnvC91C` | Active | 9AM PHT Mondays | Fetch last 7 days of resource-claimed Kit subscribers, group by resource, post breakdown to #noa-linkedin-posts |
-| 15 | Halo - Weekly Intelligence Report | 5ZqTSaUEtxnAndiY | Active | 7AM ICT Mondays | Scrape TikTok + Instagram by hashtag cluster, score by engagement × ICP relevance, Claude analysis of top 10 per platform, deliver to Slack + Google Sheet + email |
+| 15 | Halo - Weekly Intelligence Report | 5ZqTSaUEtxnAndiY | Active | 7AM PHT Mondays | Scrape TikTok + Instagram by hashtag cluster, score by engagement × ICP relevance, Claude analysis of top 10 per platform, deliver to Slack + Google Sheet + email |
 | 16 | Crave - Daily Lead Push | `ke52OLrSUXk8mPVw` | Inactive (warm-up) | 9AM PHT daily | Read approved Sheet rows, push to Smartlead campaign 3375376, mark outreach_queued |
 | 17 | Crave - Status Sync | `uUGxA3GW1W0vq6el` | Inactive (warm-up) | 9AM PHT daily | Pull Smartlead lead statuses, sync opens/replies/bounces back to Sheet |
 | 18 | Krave — Price Reply Auto-Resubmit | `nzFTk4e9NRi6Jk9r` | Active | Every 10min + `POST /webhook/krave-price-reply-resubmit` | Detect bot "price missing" threads with unprocessed amount replies in #payments-invoices-updates, parse receipt + amount, resubmit to intake webhook automatically |
@@ -694,7 +694,7 @@ Weekly social intelligence pipeline for Halo Home's US market entry. Replaces ma
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 7 * * 1` (Asia/Manila) — 7:00 AM ICT every Monday |
+| Schedule | `0 7 * * 1` (Asia/Manila) — 7:00 AM PHT every Monday |
 
 ### Node Flow
 

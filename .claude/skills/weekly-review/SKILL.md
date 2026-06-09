@@ -1,8 +1,8 @@
-﻿# Skill: Weekly Review
+# Skill: Weekly Review
 
 **Purpose:** Generate Noa's weekly review — synthesizes the week's EOD summaries + Slack activity into a structured recap by business, surfaces unresolved items, and sets next-week priorities.
 
-**Cadence:** Manual invoke. Recommended: **Fridays at or after 5:00 PM ICT** before the EOD summary fires.
+**Cadence:** Manual invoke. Recommended: **Fridays at or after 5:00 PM PHT** before the EOD summary fires.
 
 **Manual invoke:** Run `/weekly-review` at end of week, or any time Noa needs a cross-business status snapshot.
 
@@ -30,7 +30,7 @@ Before running, optionally post any offline context to `#ops-command` — decisi
 
 Use `mcp__slack__slack_get_channel_history` on all three channels with limit: 200.
 
-**Week filter:** Messages from Monday 00:00 ICT through now. Discard anything older.
+**Week filter:** Messages from Monday 00:00 PHT through now. Discard anything older.
 
 From `#ops-command`, extract all messages containing "Today's Wrap-up" — these are the EOD summaries. Pull all five (Mon–Fri) if available.
 

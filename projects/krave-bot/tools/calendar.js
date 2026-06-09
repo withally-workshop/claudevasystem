@@ -136,8 +136,8 @@ async function createEvent({ account = 'noa', calendar_id = 'primary', summary, 
     summary,
     description,
     location,
-    start: start.includes('T') ? { dateTime: start, timeZone: 'Asia/Bangkok' } : { date: start },
-    end: end.includes('T') ? { dateTime: end, timeZone: 'Asia/Bangkok' } : { date: end },
+    start: start.includes('T') ? { dateTime: start, timeZone: 'Asia/Manila' } : { date: start },
+    end: end.includes('T') ? { dateTime: end, timeZone: 'Asia/Manila' } : { date: end },
     attendees: attendees.map((e) => ({ email: e })),
   };
   const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar_id)}/events`;

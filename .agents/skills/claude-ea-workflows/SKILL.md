@@ -53,12 +53,12 @@ Use `n8n-workflows/WORKFLOWS.md` for current IDs, status, webhook paths, deploym
 | Krave - Invoice Reminder Cron | `invoice-reminder-cron`, `invoice-reminder-trigger`, `n8n-workflow-trigger` | Scheduled 10 AM PHT Mon–Fri, or manual webhook. |
 | Krave - EOD Triage Summary | `eod-triage-summary` | **Archived n8n workflow.** Migrated to Claude cron at 6 PM Asia/Manila Mon–Fri. See `.claude/skills/eod-triage-summary/SKILL.md`. |
 | Krave - Start Of Day Report | `sod-report` | **Archived.** Migrated to Claude cron at 10 AM PHT Mon–Fri. See `.claude/skills/sod-report/SKILL.md`. |
-| Krave - Inbox Triage Daily | `inbox-triage`, `n8n-workflow-trigger` | Scheduled 9 AM ICT weekdays, or manual webhook. |
+| Krave - Inbox Triage Daily | `inbox-triage`, `n8n-workflow-trigger` | Scheduled 9 AM PHT weekdays, or manual webhook. |
 | Krave - Slack Invoice Handler | `client-invoice-creation`, `n8n-workflow-trigger` | Slack `/invoice-request` command and modal submissions. |
 | Krave - Invoice Request Intake | `client-invoice-creation`, `n8n-workflow-trigger` | Structured Slack modal payload or manual webhook. |
 | Krave — Creator Invoice Email Scan | `creator-invoice-processing` | Scheduled every 3h Mon–Fri (`DbIJYYQ3FE4HKprB`). Scans john@kravemedia.co for unread invoice PDFs, parses with Claude, creates Airwallex draft bills. Manual: `POST /webhook/krave-creator-invoice-email-scan`. |
 | Krave - Invoice Approval Polling | `invoice-approval-polling`, `n8n-workflow-trigger` | Scheduled every 2 hrs on weekdays, or manual webhook. |
-| Krave - Weekly Invoice Summary | `weekly-invoice-summary`, `n8n-workflow-trigger` | Scheduled Monday 9 AM ICT, or manual webhook. Posts open invoice portfolio snapshot to #payments-invoices-updates. |
+| Krave - Weekly Invoice Summary | `weekly-invoice-summary`, `n8n-workflow-trigger` | Scheduled Monday 9 AM PHT, or manual webhook. Posts open invoice portfolio snapshot to #payments-invoices-updates. |
 | Krave - Client Invoice Creation | `client-invoice-creation` | Deprecated inactive legacy webhook from `deploy-client-invoice-creation.js`; use approval polling for finalization unless explicitly rolling back. |
 | Krave - Ops Report | `ops-report` | Live-read reporting skill only; reads n8n execution history, the Client Invoice Tracker, and Slack context without triggering workflows. |
 | Morning Coffee — Noa's Daily Briefing | `morning-coffee` | Local Windows Task Scheduler task `KraveEA-MorningCoffee`, Mon–Fri 10:00 AM Asia/Manila. Not an n8n workflow, not a remote CCR — runs locally because it depends on local-only MCP servers (`gmail-noa`, `slack-noa`, `slack` bot). |
@@ -69,8 +69,8 @@ Use `n8n-workflows/WORKFLOWS.md` for current IDs, status, webhook paths, deploym
 
 ## Operating Rules
 
-- Timezone: repo docs use ICT/GMT+7 in places, while workflow code often uses `Asia/Manila`/GMT+8. Confirm the runtime timezone before schedule-sensitive actions.
-- Deep work: protect Noa's 1:30 PM-7:00 PM ICT block; batch non-urgent escalations into EOD.
+- Timezone: canonical zone is Asia/Manila (PHT, GMT+8) for all docs, schedules, and workflow code. Legacy GMT+7 labels were removed 2026-06-10.
+- Deep work: protect Noa's 1:30 PM-7:00 PM PHT block; batch non-urgent escalations into EOD.
 - Recommendations: use the 3-and-1 framework when decisions are needed.
 - Finance tracker: never write to formula/display columns called out in skill docs, especially Client Invoice Tracker column N.
 - Deduplication: honor Slack `white_check_mark` reactions and tracker duplicate rules before processing.

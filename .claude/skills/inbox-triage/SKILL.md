@@ -1,7 +1,7 @@
-﻿# Skill: Inbox Triage
+# Skill: Inbox Triage
 **Trigger:** "triage inbox", "run email triage", "morning triage", "/inbox-triage", "inbox zero setup", "archive old emails"
 **Account:** noa@kravemedia.co
-**Deliver to:** Noa's Slack DM (~9 AM ICT daily)
+**Deliver to:** Noa's Slack DM (~9 AM PHT daily)
 **SOP:** references/sops/inbox-triage.md
 
 ---
@@ -12,7 +12,7 @@ Two modes:
 
 1. **Inbox Zero Setup** *(run once)* — Bulk-moves all pre-2026 email to `Z_Archive`, scans existing labels to understand the current taxonomy, samples 2026 emails to determine the right label structure, then categorizes and moves all 2026 emails out of inbox into the appropriate labels. Result: inbox = 0.
 
-2. **Daily Triage** *(run each morning ~9 AM ICT)* — Reads new inbox email, applies two-layer labels, drafts replies, and posts a clean Slack DM summary to Noa. Inbox stays at 0.
+2. **Daily Triage** *(run each morning ~9 AM PHT)* — Reads new inbox email, applies two-layer labels, drafts replies, and posts a clean Slack DM summary to Noa. Inbox stays at 0.
 
 ---
 

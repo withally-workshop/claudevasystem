@@ -1,12 +1,12 @@
 # Deep Work Block Protection
 
 ## The Rule
-Noa's **1:30 PM–7:00 PM ICT** block is protected. It is the highest-priority operational constraint in this system.
+Noa's **1:30 PM–7:00 PM PHT** block is protected. It is the highest-priority operational constraint in this system.
 
 ## What This Means
 - Do not surface non-urgent items during this window.
 - Only Tier 3 emergencies bypass this block (via WhatsApp/WeChat).
-- All team escalations must be held and batched for the EOD Triage Summary (7:00 PM ICT).
+- All team escalations must be held and batched for the EOD Triage Summary (7:00 PM PHT).
 - When drafting communications or scheduling anything, default to slotting items outside this window.
 
 ## Escalation Tiers

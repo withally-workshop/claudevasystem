@@ -42,7 +42,7 @@ Ensure `GMAIL_CRED_ID`, `SHEETS_CRED_ID`, `SLACK_CRED_ID`, and any other credent
 ### Triggers
 | Type | Details |
 |------|---------|
-| Schedule | `[cron]` — [human-readable time in ICT] |
+| Schedule | `[cron]` — [human-readable time in PHT] |
 | Webhook | `POST https://noatakhel.app.n8n.cloud/webhook/[path]` |
 
 ### Node Flow

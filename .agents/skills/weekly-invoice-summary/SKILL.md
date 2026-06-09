@@ -22,7 +22,7 @@ POST https://noatakhel.app.n8n.cloud/webhook/krave-weekly-invoice-summary
 Use the `n8n-workflow-trigger` skill or call the webhook directly. No payload required.
 
 **Workflow ID:** `WX1hHek0cNTyZXkS`  
-**Schedule:** Fires automatically every Monday 9:00 AM ICT (`0 2 * * 1`).
+**Schedule:** Fires automatically every Monday 9:00 AM PHT (`0 9 * * 1`, Asia/Manila).
 
 ## What the Workflow Posts
 

@@ -61,7 +61,7 @@
 
 ### Node 1 — Schedule Trigger
 - **Type:** Schedule Trigger
-- **Cron:** `0 2 * * *` (2:00 AM UTC = 9:00 AM ICT)
+- **Cron:** `0 2 * * *` (2:00 AM UTC = 10:00 AM PHT)
 
 ---
 

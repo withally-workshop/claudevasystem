@@ -56,7 +56,7 @@ Resource posts give away free Krave playbooks and grow the newsletter list. They
 
 ## ⚙️ How posts get generated
 
-### Every morning around 9am Singapore time
+### Every morning around 9am Philippine time
 
 Behind the scenes, a system automatically:
 
@@ -72,7 +72,7 @@ The three drafts get posted into `#noa-linkedin-posts` as a thread. Noa reviews 
 **4. Mirrors all three into ClickUp.**
 The three drafts get pushed into the "LinkedIn Post" space in ClickUp as separate tasks. If a post is "framework-style" (numbered list, checklist, multi-step process), an infographic gets auto-generated using the Krave brand template and attached to the task automatically.
 
-**Also at 9AM SGT:** Noa's scheduled LinkedIn post goes live. Noa works every Sunday to pre-schedule posts for the entire week.
+**Also at 9AM PHT:** Noa's scheduled LinkedIn post goes live. Noa works every Sunday to pre-schedule posts for the entire week.
 
 ### Weekly content rotation
 

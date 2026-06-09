@@ -16,7 +16,7 @@ const BUILD_DATE_CODE = `
 function sgtOffset(d) { return new Date(d.getTime() + 8 * 60 * 60 * 1000); }
 const now = sgtOffset(new Date());
 const today = now.toISOString().split('T')[0];
-// Yesterday in SGT
+// Yesterday in PHT
 const yest = sgtOffset(new Date(Date.now() - 86400000));
 const yesterday = yest.toISOString().split('T')[0];
 return { json: { today, yesterday, todayFormatted: now.toLocaleDateString('en-SG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Singapore' }) } };

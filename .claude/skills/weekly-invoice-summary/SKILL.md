@@ -1,5 +1,5 @@
 # Skill: Weekly Invoice Summary
-**Trigger:** Scheduled Monday at 9:00 AM ICT — also invocable manually: "run weekly invoice summary", "/weekly-invoice-summary"
+**Trigger:** Scheduled Monday at 9:00 AM PHT — also invocable manually: "run weekly invoice summary", "/weekly-invoice-summary"
 **Fully automated — no human input required.**
 
 ---
@@ -17,7 +17,7 @@ Proactive Monday push to #payments-invoices-updates giving Noa a full portfolio 
 - **Client Invoice Tracker Sheet ID:** `1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50`
 - **Client Invoice Tracker Tab:** `Invoices`
 - **Slack digest channel:** #payments-invoices-updates (C09HN2EBPR7)
-- **Schedule:** `0 2 * * 1` — Monday 9:00 AM ICT (2:00 AM UTC)
+- **Schedule:** `0 9 * * 1` (Asia/Manila) — Monday 9:00 AM PHT (1:00 AM UTC)
 - **Webhook:** `POST https://noatakhel.app.n8n.cloud/webhook/krave-weekly-invoice-summary`
 
 ---
