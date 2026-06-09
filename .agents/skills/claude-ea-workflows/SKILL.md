@@ -15,7 +15,7 @@ This repo is a Claude Code executive-assistant workspace. Treat `.claude/skills/
 2. Read the matching `.claude/skills/<name>/SKILL.md` before acting.
 3. If the task involves a deployed automation, read the relevant section of `n8n-workflows/WORKFLOWS.md`.
 4. Preserve deep-work rules, channel routing, and tracker column rules exactly.
-5. Do not print secrets from `.claude/settings.json` or webhook URLs unless the user explicitly asks for operational run commands.
+5. Do not print secrets from `.mcp.json` or `.env` (the only files that hold credentials) or webhook URLs unless the user explicitly asks for operational run commands.
 
 ## Project Skill Map
 
@@ -24,18 +24,18 @@ This repo is a Claude Code executive-assistant workspace. Treat `.claude/skills/
 | `/invoice-triage`, "process invoices", "run invoice triage", "stage invoice", "create bill" | `.claude/skills/creator-invoice-processing/SKILL.md` and `.agents/skills/creator-invoice-processing/SKILL.md` | Receive PDF invoices from email/Slack/DMs, validate, create draft bills in Airwallex Spend, confirm to requester, log to tracker. |
 | `/inbox-triage`, "triage inbox", "morning triage", "inbox zero setup" | `.claude/skills/inbox-triage/SKILL.md` and `.agents/skills/inbox-triage/SKILL.md` | Run inbox setup or daily triage for `noa@kravemedia.co`. |
 | `/payment-detection`, "check for payments", "scan for payments" | `.claude/skills/payment-detection/SKILL.md` and `.agents/skills/payment-detection/SKILL.md` | Scan Airwallex payment emails and update invoice tracker. |
-| `/payment-detection-trigger`, "run payment detection" | `.claude/skills/payment-detection-trigger/SKILL.md` | Fire the n8n payment detection webhook. |
+| `/payment-detection-trigger`, "run payment detection" | `.claude/skills/payment-detection-trigger/SKILL.md` and `.agents/skills/payment-detection-trigger/SKILL.md` | Fire the n8n payment detection webhook. |
 | `/n8n-trigger`, "trigger n8n", "run n8n workflow", "fire webhook", "run automation" | `.claude/skills/n8n-workflow-trigger/SKILL.md` | Manually trigger approved deployed n8n workflow webhooks. |
-| `/invoice-reminder-cron`, "run invoice reminders" | `.claude/skills/invoice-reminder-cron/SKILL.md` | Full daily reminder workflow, including payment detection first. |
-| `/invoice-reminder-trigger`, "trigger invoice reminder" | `.claude/skills/invoice-reminder-trigger/SKILL.md` | Fire the n8n invoice reminder webhook. |
-| `/invoice-approval-polling`, "check approvals" | `.claude/skills/invoice-approval-polling/SKILL.md` | Poll John's approval threads, finalize invoices, notify strategist/client. |
+| `/invoice-reminder-cron`, "run invoice reminders" | `.claude/skills/invoice-reminder-cron/SKILL.md` and `.agents/skills/invoice-reminder-cron/SKILL.md` | Full daily reminder workflow, including payment detection first. |
+| `/invoice-reminder-trigger`, "trigger invoice reminder" | `.claude/skills/invoice-reminder-trigger/SKILL.md` and `.agents/skills/invoice-reminder-trigger/SKILL.md` | Fire the n8n invoice reminder webhook. |
+| `/invoice-approval-polling`, "check approvals" | `.claude/skills/invoice-approval-polling/SKILL.md` and `.agents/skills/invoice-approval-polling/SKILL.md` | Poll John's approval threads, finalize invoices, notify strategist/client. |
 | `/eod-triage-summary`, "EOD summary", "today's wrap-up" | `.claude/skills/eod-triage-summary/SKILL.md` | Generate and send Noa's end-of-day Slack summary. |
 | `/sod-report`, "start of day report", "SOD report" | `.claude/skills/sod-report/SKILL.md` | Generate the daily goals report from validated Slack inputs. |
-| `/weekly-review` | `.claude/skills/weekly-review/SKILL.md` | Synthesize weekly cross-business status and priorities. |
+| `/weekly-review` | `.claude/skills/weekly-review/SKILL.md` and `.agents/skills/weekly-review/SKILL.md` | Synthesize weekly cross-business status and priorities. |
 | `/ops-report`, "hey report", "ops report", "daily report", "weekly report", "dashboard report" | `.claude/skills/ops-report/SKILL.md` and `.agents/skills/ops-report/SKILL.md` | Generate a live-read operations briefing and dashboard from n8n executions, the invoice tracker, and Slack context. |
 | `/weekly-invoice-summary`, "weekly invoice summary", "who to chase this week", "weekly payment status", "what invoices are overdue" | `.claude/skills/weekly-invoice-summary/SKILL.md` and `.agents/skills/weekly-invoice-summary/SKILL.md` | Fire the n8n weekly summary workflow — posts a full open-invoice portfolio snapshot to #payments-invoices-updates. |
 | `/client-invoice-creation`, "client invoice creation", "process invoice requests" | `.claude/skills/client-invoice-creation/SKILL.md` | Process Slack invoice request receipts and approval replies. |
-| "Osome reconciliation" | `.claude/skills/osome-reconciliation/SKILL.md` | Triage Osome documents-needed transactions and locate PDFs. |
+| `/osome-reconciliation`, "Osome reconciliation", "osome session" | `.claude/skills/osome-reconciliation/SKILL.md` and `.agents/skills/osome-reconciliation/SKILL.md` | Triage Osome documents-needed transactions and locate PDFs. |
 | `/halo-report`, "halo intelligence report", "halo weekly intel" | `.claude/skills/halo-intelligence-report/SKILL.md` and `.agents/skills/halo-intelligence-report/SKILL.md` | Run or explain the Halo Weekly Intelligence Report — scrapes TikTok + Instagram, scores by engagement × ICP relevance, Claude analysis of top 10 per platform, delivers to Slack + Sheet + email. |
 | `/morning-coffee`, "morning coffee", "run morning coffee", "Noa's morning briefing", "send morning briefing", "what's on for Noa today" | `.claude/skills/morning-coffee/SKILL.md` and `.agents/skills/morning-coffee/SKILL.md` | Personal daily morning briefing DM to Noa — calendar, email attention items, ClickUp project pulse, Slack DMs and channel highlights. Sends as John's personal Slack account. |
 | `/clickup-invoice-sync`, "sync clickup", "update clickup status", "why didn't clickup update" | `.claude/skills/clickup-invoice-sync/SKILL.md` and `.agents/skills/clickup-invoice-sync/SKILL.md` | Explain and troubleshoot ClickUp ↔ invoice lifecycle sync: status moves to collections on finalization, payment complete on payment confirmed. |

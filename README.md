@@ -34,16 +34,7 @@ A persistent, skill-based AI assistant system built on top of Claude Code. It ha
 
 ## Skills
 
-Automated workflows built from recurring tasks. Located in [`.claude/skills/`](.claude/skills/).
-
-| Skill | Purpose |
-|-------|---------|
-| `im8-brief-extraction` | Extract IM8 ad briefs from Slack → populate Master Tracker |
-| `eod-triage-summary` | Generate daily End-of-Day Triage Summary for Slack |
-| `osome-reconciliation` | Guide Osome PDF upload reconciliation workflow |
-| `client-invoice-creation` | Client invoice creation and payment tracking |
-| `creator-invoice-processing` | Creator invoice processing |
-| `inbox-triage` | Tier 1 inbox triage for routine replies |
+Automated workflows built from recurring tasks. Located in [`.claude/skills/`](.claude/skills/) (full logic) with Codex pointers in [`.agents/skills/`](.agents/skills/). The routing map — what each skill does and how to trigger it — lives in [`.agents/skills/claude-ea-workflows/SKILL.md`](.agents/skills/claude-ea-workflows/SKILL.md). This README intentionally lists no skill inventory; directories don't drift, lists do.
 
 ---
 

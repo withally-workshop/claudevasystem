@@ -1,8 +1,8 @@
 # Claude EA Workspace Guide
 
-Last updated: 2026-04-22
+Last updated: 2026-06-10
 
-This repo supports Noa Takhel's executive-assistant and ops work. The main build focus right now is Krave operational automation: `n8n` workflows, Slack/Gmail triage, invoicing, reporting, SOPs, and internal tooling.
+This repo supports Noa Takhel's executive-assistant and ops work. The main build focus is Krave operational automation: `n8n` workflows, Slack/Gmail triage, invoicing, reporting, SOPs, and internal tooling.
 
 John is the human operator and systems partner.
 
@@ -12,99 +12,53 @@ John is the human operator and systems partner.
 
 ```text
 claude-ea/
-|-- .agents/skills/         # codex/agent skills (invocable from Claude AI / codex)
-|-- .claude/skills/         # claude code skills (invocable from Claude Code CLI)
+|-- .agents/skills/         # codex/agent skills (thin pointers back to .claude/skills/)
+|-- .claude/skills/         # claude code skills — source of truth for workflow instructions
 |-- .claude/rules/          # standing rules applied to all sessions
+|-- .claude/hooks/          # doc-sync-reminder.js (PostToolUse nudge on synced-family edits)
+|-- .githooks/              # pre-commit alignment + secret checks (core.hooksPath)
 |-- context/                # background context and priorities
 |-- decisions/log.md        # append-only decisions
-|-- docs/superpowers/       # specs and plans
-|-- mcp-servers/            # local MCP servers
-|-- n8n-workflows/          # deploy scripts, tests, workflow docs
+|-- docs/superpowers/       # specs and plans (historical — do not retro-edit)
+|-- mcp-servers/            # local MCP servers (all creds via env, never literals)
+|-- n8n-workflows/          # deploy scripts, patches, tests, workflow docs
 |-- projects/               # active projects and local demos
 |-- references/sops/        # SOPs used by skills and workflows
 |-- templates/              # reusable templates
-|-- .mcp.json               # local MCP config
-|-- CLAUDE.MD               # shared repo instructions
+|-- .mcp.json               # local MCP config — SENSITIVE, gitignored
 `-- CLAUDE.local.md         # local-only overrides
 ```
 
-**Invocation parity rule:** Every skill must exist in both `.claude/skills/` (Claude Code) and `.agents/skills/` (Codex), and be registered in `.agents/skills/claude-ea-workflows/SKILL.md`. See `.claude/rules/skill-and-workflow-creation.md` for the full creation checklist.
+## Source-of-Truth Rules (anti-staleness)
+
+**This file never enumerates skills, projects, workflows, or MCP servers.** Inventories drift; directories don't. To know what exists, look where it lives:
+
+| What | Source of truth |
+|------|-----------------|
+| Skills | `.claude/skills/` (full logic) + `.agents/skills/` (Codex pointers) |
+| Skill routing map | `.agents/skills/claude-ea-workflows/SKILL.md` |
+| n8n workflows | `n8n-workflows/WORKFLOWS.md` (registry) + `README.md` (index) — verify against live instance for IDs/schedules |
+| Projects | `projects/` directory |
+| MCP servers | `.mcp.json` (gitignored — holds live credentials) |
+| Operating decisions | `decisions/log.md` (append-only) |
+
+**Invocation parity rule:** every skill exists in both `.claude/skills/` and `.agents/skills/`, and is registered in the routing map. The pre-commit hook checks this on every commit — fix warnings, don't bypass them.
+
+**Timezone:** canonical zone is **Asia/Manila (PHT, UTC+8)** for all docs, schedules, prompts, and workflow code. Never use ICT/GMT+7 or SGT labels. n8n crons are written in Asia/Manila local time (workflow `settings.timezone`), not UTC.
+
+**Secrets:** live only in `.env` and `.mcp.json` (both gitignored). All code reads `process.env`. Never put credentials in `.claude/settings.json`, deploy scripts, or any committed file — the pre-commit hook blocks known token patterns. (History lesson: an Airwallex key was committed and publicly exposed Apr–Jun 2026; rotated 2026-06-10.)
 
 ---
 
-## What Matters Most
+## n8n Workflows
 
-### `n8n-workflows/`
-
-This is the highest-signal area of the repo.
-
-Current live workflow family in repo:
-
-- `deploy-payment-detection.js`
-- `deploy-invoice-reminder-cron.js`
-- `deploy-weekly-invoice-summary.js`
-- `deploy-inbox-triage-daily.js`
-- `deploy-slack-invoice-handler.js`
-- `deploy-invoice-request-intake.js`
-
-EOD Triage Summary and SOD Report no longer have n8n deploy scripts — both run as scheduled remote Claude Code agents (see `.claude/skills/eod-triage-summary/SKILL.md` and `.claude/skills/sod-report/SKILL.md`).
-
-Important supporting files:
-
-- `README.md`
-- `WORKFLOWS.md`
-- `connection-integrity.test.js`
-- workflow-specific test files
+The highest-signal area of the repo. For workflow work, treat deploy scripts plus `README.md` and `WORKFLOWS.md` as the source-of-truth set that must stay aligned. One-off live fixes are `patch-*.js` scripts (kept for audit trail); local-only state snapshots live in `snapshots/` (gitignored).
 
 Current SOD contract:
 
 - hard-stop if yesterday's EOD is missing
-- hard-stop if John's morning dump is missing
+- John's morning dump is **optional** — if missing, fall back to EOD carry-overs + live Gmail/Slack scan (see Step 1b in the skill); do NOT hard-stop
 - `Morning Triage` is optional; if missing, SOD still sends without inbox follow-ups
-
-For workflow work, treat deploy scripts plus `README.md` and `WORKFLOWS.md` as the source-of-truth set that should stay aligned.
-
-### `.claude/skills/`
-
-Current skills on disk:
-
-- `client-invoice-creation`
-- `creator-invoice-processing`
-- `eod-triage-summary`
-- `halo-home-ops`
-- `inbox-triage`
-- `invoice-approval-polling`
-- `invoice-reminder-cron`
-- `invoice-reminder-trigger`
-- `osome-reconciliation`
-- `ops-report`
-- `payment-detection`
-- `payment-detection-trigger`
-- `sod-report`
-- `weekly-invoice-summary`
-- `weekly-review`
-
-Important note:
-
-- `references/sops/inbox-triage.md` is not present right now.
-- For inbox triage, use the skill file as the operational source of truth until that SOP exists.
-
-### `projects/`
-
-Current project folders:
-
-- `halo-home-chat`
-- `halo-home-us-expansion`
-- `system-automation-build-out`
-- `krave-ops-showcase`
-
-`krave-ops-showcase` is a local internal demo, not a live integrated product by default.
-
-### `references/sops/` and `decisions/log.md`
-
-- Keep SOPs aligned with related skills and workflow docs.
-- Keep `decisions/log.md` append-only using:
-  - `[YYYY-MM-DD] DECISION: ... | REASONING: ... | CONTEXT: ...`
 
 ---
 
@@ -114,20 +68,9 @@ Memory is part of the operating model for this repo.
 
 - Use memory for recurring preferences, repo conventions, and past decisions.
 - Do not treat memory as fresher than the repo. If memory and files disagree, verify the current repo state.
-- Re-check drift-prone details before acting on them:
-  - workflow IDs
-  - credentials
-  - webhook paths
-  - schedules
-  - live production status
+- Re-check drift-prone details before acting on them: workflow IDs, credentials, webhook paths, schedules, live production status.
 
-Good memory candidates:
-
-- planning vs implementation preferences
-- workflow behavior decisions
-- push-scope rules
-- local-only vs publishable artifacts
-- repeated repo conventions
+Good memory candidates: planning vs implementation preferences, workflow behavior decisions, push-scope rules, local-only vs publishable artifacts, repeated repo conventions.
 
 Memory + repo files + decision log should reinforce each other.
 
@@ -153,26 +96,20 @@ Memory + repo files + decision log should reinforce each other.
 - Add or update tests when changing workflow logic, parsers, connections, or behavior contracts.
 - Run the smallest useful verification first, then broader checks as needed.
 - Do not claim something is working, live, or pushed without verification.
-- Keep the distinction clear between:
-  - looks correct
-  - passed local verification
-  - validated live
+- Keep the distinction clear between: looks correct / passed local verification / validated live.
 
 ### Documentation Discipline
 
-- If behavior changes, update the related docs in the same round when practical.
-- Keep these aligned when they describe the same workflow behavior:
-  - `.claude/skills/`
-  - `references/sops/`
-  - `n8n-workflows/README.md`
-  - `n8n-workflows/WORKFLOWS.md`
+- If behavior changes, update the related docs in the same round — see `.claude/rules/cross-cutting-fixes.md` for the synced-file table.
 - Use docs to record real behavior and real constraints, not idealized future-state behavior.
+- Date-stamp this file's "Last updated" line whenever you edit it.
 
 ### Repo Hygiene
 
 - Preserve local-only artifacts unless explicitly asked to remove, publish, or commit them.
 - Be deliberate about push scope; avoid accidentally staging archives, helper files, generated artifacts, or unrelated edits.
 - In a dirty worktree, do not overwrite or revert unrelated user changes.
+- Push only to the `github` remote (private). Never push to `origin` (withally-workshop) without explicit confirmation.
 
 ### Quality Bar
 
@@ -182,39 +119,12 @@ Memory + repo files + decision log should reinforce each other.
 
 ---
 
-## MCP And Context
+## Context
 
-Local MCP config exists in `.mcp.json`.
-
-Configured server names currently include:
-
-- `krave-airwallex`
-- `google-sheets`
-- `gmail-noa`
-- `gmail-john`
-- `slack`
-
-Treat `.mcp.json` as sensitive local config.
-
-The `context/` folder remains useful background:
-
-- `me.md`
-- `work.md`
-- `team.md`
-- `current-priorities.md`
-- `goals.md`
+The `context/` folder holds background: `me.md`, `work.md`, `team.md`, `current-priorities.md`, `goals.md`. If `current-priorities.md` disagrees with recent `decisions/log.md` entries, the decision log wins — and update the priorities file.
 
 ---
 
 ## Update Checklist
 
-When refreshing this file, check:
-
-1. `projects/`
-2. `.claude/skills/`
-3. `n8n-workflows/README.md`
-4. `n8n-workflows/WORKFLOWS.md`
-5. `references/sops/`
-6. `docs/superpowers/specs/`
-7. `docs/superpowers/plans/`
-8. `decisions/log.md`
+When refreshing this file: verify the Repo Map matches the directory tree, the Source-of-Truth table paths still exist, and the SOD contract matches `.claude/skills/sod-report/SKILL.md`. Do NOT add inventories of skills/projects/workflows — that is what the source-of-truth table is for.

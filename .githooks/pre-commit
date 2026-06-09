@@ -1,16 +1,41 @@
 #!/usr/bin/env bash
 # pre-commit: enforce file-alignment rules from .claude/rules/
-# Warns (does not block) when related docs appear to be out of sync.
-# Bypass: SKIP_SYNC_CHECK=1 git commit ...
+# - Secret scan BLOCKS the commit (exit 1). Everything else warns only.
+# Bypass warnings: SKIP_SYNC_CHECK=1 git commit ...
+# (The secret scan cannot be bypassed with SKIP_SYNC_CHECK — use git config hooks path override only if you truly must.)
 
 set -euo pipefail
+
+STAGED=$(git diff --cached --name-only)
+WARNINGS=()
+BLOCKERS=()
+
+# ── Rule 0 (BLOCKING): no credential literals in staged content ───────────────
+# Patterns: Slack tokens, Shopify tokens, Anthropic keys, Render keys, Apify keys,
+# and bare 96-char hex strings (Airwallex-style API keys).
+SECRET_PATTERNS='xox[bpsoar]-[0-9A-Za-z-]{10,}|shpat_[0-9a-fA-F]{16,}|sk-ant-[0-9A-Za-z_-]{20,}|rnd_[0-9A-Za-z]{16,}|apify_api_[0-9A-Za-z]{16,}|[0-9a-f]{96}'
+while IFS= read -r f; do
+  case "$f" in
+    .env|.mcp.json|*.bak|node_modules/*) continue ;;
+  esac
+  if git show ":$f" 2>/dev/null | grep -qE "$SECRET_PATTERNS"; then
+    BLOCKERS+=("possible credential literal staged in: $f  (secrets belong in .env / .mcp.json only)")
+  fi
+done < <(echo "$STAGED")
+
+if [ ${#BLOCKERS[@]} -gt 0 ]; then
+  echo ""
+  echo "🛑 pre-commit SECRET CHECK FAILED — commit blocked:"
+  for b in "${BLOCKERS[@]}"; do echo "   • $b"; done
+  echo ""
+  echo "   Move the value to .env or .mcp.json and reference it via process.env."
+  echo ""
+  exit 1
+fi
 
 if [ "${SKIP_SYNC_CHECK:-0}" = "1" ]; then
   exit 0
 fi
-
-STAGED=$(git diff --cached --name-only)
-WARNINGS=()
 
 # ── Rule 1: n8n deploy script changed → WORKFLOWS.md + README.md should too ──
 if echo "$STAGED" | grep -q '^n8n-workflows/deploy-'; then
@@ -31,6 +56,7 @@ fi
 
 # ── Rule 3: Claude Code skill changed → matching Codex skill should also be staged ──
 while IFS= read -r skill_file; do
+  [ -z "$skill_file" ] && continue
   skill_name=$(echo "$skill_file" | sed 's|.claude/skills/||;s|/SKILL.md||')
   agent_file=".agents/skills/${skill_name}/SKILL.md"
   if ! echo "$STAGED" | grep -q "^${agent_file}$"; then
@@ -40,12 +66,12 @@ while IFS= read -r skill_file; do
       WARNINGS+=("Claude Code skill '${skill_name}' staged but ${agent_file} does NOT EXIST (create it — invocation parity rule)")
     fi
   fi
-done < <(echo "$STAGED" | grep '^\.claude/skills/.*/SKILL\.md$')
+done < <(echo "$STAGED" | grep '^\.claude/skills/.*/SKILL\.md$' || true)
 
 # ── Rule 4: Codex skill changed → matching Claude Code skill should also be staged ──
 while IFS= read -r agent_file; do
+  [ -z "$agent_file" ] && continue
   skill_name=$(echo "$agent_file" | sed 's|.agents/skills/||;s|/SKILL.md||')
-  # Skip the claude-ea-workflows meta-skill
   if [ "$skill_name" = "claude-ea-workflows" ]; then continue; fi
   claude_file=".claude/skills/${skill_name}/SKILL.md"
   if ! echo "$STAGED" | grep -q "^${claude_file}$"; then
@@ -53,7 +79,41 @@ while IFS= read -r agent_file; do
       WARNINGS+=("Codex skill '${skill_name}' staged but ${claude_file} is NOT staged (invocation parity)")
     fi
   fi
-done < <(echo "$STAGED" | grep '^\.agents/skills/.*/SKILL\.md$')
+done < <(echo "$STAGED" | grep '^\.agents/skills/.*/SKILL\.md$' || true)
+
+# ── Rule 5: full-tree parity drift (runs every commit, not just on skill edits) ──
+for d in .claude/skills/*/; do
+  name=$(basename "$d")
+  [ -f ".claude/skills/${name}/SKILL.md" ] || continue
+  if [ ! -f ".agents/skills/${name}/SKILL.md" ]; then
+    WARNINGS+=("parity drift: .claude/skills/${name} has no .agents counterpart")
+  fi
+done
+for d in .agents/skills/*/; do
+  name=$(basename "$d")
+  [ "$name" = "claude-ea-workflows" ] && continue
+  [ -f ".agents/skills/${name}/SKILL.md" ] || continue
+  if [ ! -f ".claude/skills/${name}/SKILL.md" ]; then
+    WARNINGS+=("parity drift: .agents/skills/${name} has no .claude counterpart")
+  fi
+done
+
+# ── Rule 6: every skill registered in the routing map ────────────────────────
+REGISTRY=".agents/skills/claude-ea-workflows/SKILL.md"
+if [ -f "$REGISTRY" ]; then
+  for d in .claude/skills/*/; do
+    name=$(basename "$d")
+    if ! grep -q "skills/${name}/SKILL.md" "$REGISTRY"; then
+      WARNINGS+=("skill '${name}' not registered in ${REGISTRY} (Project Skill Map)")
+    fi
+  done
+fi
+
+# ── Rule 7: stale timezone labels in staged additions (canonical: PHT/Asia/Manila) ──
+TZ_HITS=$(git diff --cached --unified=0 | grep '^+' | grep -vE '^\+\+\+' | grep -cE '\b(ICT|SGT)\b|Asia/Bangkok|GMT\+7|UTC\+7' || true)
+if [ "$TZ_HITS" -gt 0 ]; then
+  WARNINGS+=("staged additions contain ${TZ_HITS} non-canonical timezone label(s) (ICT/SGT/Bangkok/GMT+7) — canonical is PHT / Asia/Manila / UTC+8")
+fi
 
 # ── Report ────────────────────────────────────────────────────────────────────
 if [ ${#WARNINGS[@]} -eq 0 ]; then
