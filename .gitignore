@@ -33,6 +33,7 @@ projects/contract-generation/output/
 # Temp/scratch files
 logs/
 *.png
+shopify-mcp-*.txt
 cw_*.js
 cw_*.pdf
 extract_nodes.js
