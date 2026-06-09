@@ -380,8 +380,8 @@ try {
     method: 'POST',
     url: 'https://api.airwallex.com/api/v1/authentication/login',
     headers: {
-      'x-client-id': 'JaQA4uJ1SDSBkTdFigT9sw',
-      'x-api-key': '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af5c91666f50b10ee64fd87fa3db7435e8dc5c07721'
+      'x-client-id': '${process.env.AIRWALLEX_CLIENT_ID}',
+      'x-api-key': '${process.env.AIRWALLEX_API_KEY}'
     }
   });
   token = authResp.token;
@@ -791,8 +791,8 @@ const workflow = {
         url: 'https://api.airwallex.com/api/v1/authentication/login',
         authentication: 'none', sendHeaders: true,
         headerParameters: { parameters: [
-          { name: 'x-client-id', value: 'JaQA4uJ1SDSBkTdFigT9sw' },
-          { name: 'x-api-key', value: '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af5c91666f50b10ee64fd87fa3db7435e8dc5c07721' }
+          { name: 'x-client-id', value: process.env.AIRWALLEX_CLIENT_ID },
+          { name: 'x-api-key', value: process.env.AIRWALLEX_API_KEY }
         ]},
         sendBody: false, options: {}
       }

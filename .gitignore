@@ -1,8 +1,8 @@
 .env
 CLAUDE.local.md
 .claude/settings.local.json
-.claude/settings.json
 .mcp.json
+*.bak
 node_modules/
 archives/caveman/
 projects/krave-ops-showcase/
