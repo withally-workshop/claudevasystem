@@ -23,3 +23,5 @@ services:
         sync: false
       - key: SLACK_ESCALATION_CHANNEL
         sync: false
+      - key: SLACK_ALLEAH_USER_ID
+        sync: false

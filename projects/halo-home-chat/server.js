@@ -267,9 +267,10 @@ io.on('connection', (socket) => {
     socket.emit('typing', { typing: false });
 
     // Claude escalation signal
-    const claudeEscalate = botReply.includes('[[ESCALATE]]');
+    const shippingFeeEscalate = botReply.includes('[[ESCALATE:SHIPPING_FEE]]');
+    const claudeEscalate = shippingFeeEscalate || botReply.includes('[[ESCALATE]]');
     const shouldEscalate = escalationCheck.escalate || claudeEscalate;
-    const cleanReply = botReply.replace(/\[\[ESCALATE\]\]/g, '').trim();
+    const cleanReply = botReply.replace(/\[\[ESCALATE(?::SHIPPING_FEE)?\]\]/g, '').trim();
 
     const parts = cleanReply.split('|||').map(s => s.trim()).filter(Boolean);
     socket.emit('bot_message', { content: cleanReply, parts });
@@ -279,8 +280,8 @@ io.on('connection', (socket) => {
     if (shouldEscalate) {
       const bh = isBusinessHours();
       const handoffMessage = bh
-        ? "One moment — I'm connecting you with a team member who can help further. They'll be with you shortly."
-        : "Our team is offline right now, but I've flagged your message and a team member will follow up within 24 hours.";
+        ? "Got it. I'm passing this to our Halo support team now, and someone will follow up with you by email shortly."
+        : "Our support team is offline right now, but I've flagged your message and someone will follow up by email within 24 hours.";
 
       socket.emit('bot_message', { content: handoffMessage, parts: [handoffMessage] });
       socket.emit('escalated', { sessionId: activeSessionId, businessHours: bh });
@@ -291,15 +292,18 @@ io.on('connection', (socket) => {
 
         const fullHistory = await getHistory(activeSessionId);
         const transcript = formatTranscript(fullHistory);
-        const triggeredBy = escalationCheck.escalate
-          ? (escalationCheck.trigger === 'explicit_request' ? 'explicit request' : `keyword: ${escalationCheck.keyword}`)
-          : 'Claude judgment';
+        const triggeredBy = shippingFeeEscalate
+          ? 'wrong $5 subscription shipping fee — needs refund review'
+          : escalationCheck.escalate
+            ? (escalationCheck.trigger === 'explicit_request' ? 'explicit request' : `keyword: ${escalationCheck.keyword}`)
+            : 'Claude judgment';
 
         await notifyEscalation(activeSessionId, {
           email: session.email || email || '',
           transcript,
           isBusinessHours: bh,
           triggeredBy,
+          reason: shippingFeeEscalate ? 'shipping_fee' : null,
         });
       } catch (err) {
         console.error('[Socket] escalation error:', err.message);

@@ -26,18 +26,22 @@ function actionButtons(sessionId) {
   };
 }
 
-async function notifyEscalation(sessionId, { email, transcript, isBusinessHours, triggeredBy }) {
+async function notifyEscalation(sessionId, { email, transcript, isBusinessHours, triggeredBy, reason }) {
   if (!web) {
     console.warn('[Slack] SLACK_BOT_TOKEN not set — skipping escalation notification');
     return;
   }
   const bhText = isBusinessHours ? 'Yes — team member being paged' : 'No — customer notified of 24h response window';
   const customerText = email || 'unknown';
+  const isShippingFee = reason === 'shipping_fee';
+  const headerText = isShippingFee
+    ? `$5 shipping fee refund — Session #${sessionId}`
+    : `Customer needs help — Session #${sessionId}`;
 
   const blocks = [
     {
       type: 'header',
-      text: { type: 'plain_text', text: `Customer needs help — Session #${sessionId}`, emoji: true },
+      text: { type: 'plain_text', text: headerText, emoji: true },
     },
     {
       type: 'section',
@@ -58,8 +62,19 @@ async function notifyEscalation(sessionId, { email, transcript, isBusinessHours,
     actionButtons(sessionId),
   ];
 
+  if (isShippingFee) {
+    const alleah = process.env.SLACK_ALLEAH_USER_ID;
+    blocks.splice(1, 0, {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `${alleah ? `<@${alleah}> ` : ''}Customer reports a wrongly charged *$5 filter subscription shipping fee*. Review the order and refund if affected.`,
+      },
+    });
+  }
+
   try {
-    const res = await web.chat.postMessage({ channel: SLACK_CHANNEL, blocks, text: `Customer needs help — Session #${sessionId}` });
+    const res = await web.chat.postMessage({ channel: SLACK_CHANNEL, blocks, text: headerText });
     if (res.ok) {
       await setSlackThread(sessionId, { threadTs: res.ts, channel: res.channel });
     }
