@@ -25,9 +25,9 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Crave - Status Sync | Inactive (warm-up) | 9AM PHT daily | [deploy-crave-status-sync.js](deploy-crave-status-sync.js) |
 | LinkedIn Post Monitor | Inactive (needs actor verification) | Every 30min all day | [deploy-linkedin-post-monitor.js](deploy-linkedin-post-monitor.js) |
 | Halo - VA Slack Bot | Active | Slack `app_mention` in #halo-home-shopify | [deploy-halo-home-slack-bot.js](deploy-halo-home-slack-bot.js) |
-| Halo - Daily Digest | Active | 2 AM UTC (10 AM PHT) daily | [deploy-halo-home-daily-digest.js](deploy-halo-home-daily-digest.js) |
-| Halo - Inventory Alert | Active | 1 AM UTC (9 AM PHT) daily | [deploy-halo-home-inventory-alert.js](deploy-halo-home-inventory-alert.js) |
-| Halo - Weekly Report | Active | 1 AM UTC Mondays (9 AM PHT) | [deploy-halo-home-weekly-report.js](deploy-halo-home-weekly-report.js) |
+| Halo - Daily Digest | Active | 10 AM PHT daily (Asia/Manila) | [deploy-halo-home-daily-digest.js](deploy-halo-home-daily-digest.js) |
+| Halo - Inventory Alert | Active | 9 AM PHT daily (Asia/Manila) | [deploy-halo-home-inventory-alert.js](deploy-halo-home-inventory-alert.js) |
+| Halo - Weekly Report | Active | 9 AM PHT Mondays (Asia/Manila) | [deploy-halo-home-weekly-report.js](deploy-halo-home-weekly-report.js) |
 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | 09:00/12:00/15:00/18:00 PHT Mon–Fri + webhook | [deploy-creator-invoice-email-scan.js](deploy-creator-invoice-email-scan.js) |
 
 ---
@@ -346,7 +346,7 @@ node n8n-workflows/deploy-halo-home-slack-bot.js
 Posts yesterday's Halo Home revenue + unfulfilled orders to `#halo-home-shopify` every morning at 10 AM PHT.
 
 **Workflow ID:** `047cSNvFvUGHaf3O`
-**Schedule:** `0 2 * * *` UTC (10 AM PHT)
+**Schedule:** `0 10 * * *` Asia/Manila (10 AM PHT)
 
 **Deploy:**
 ```bash
@@ -362,7 +362,7 @@ node n8n-workflows/deploy-halo-home-daily-digest.js
 Detects when Halo Home products go OOS, come back in stock, or newly drop below 10 units. Only posts to `#halo-home-shopify` when something changes.
 
 **Workflow ID:** `NBvfYPmjdTXzrKfb`
-**Schedule:** `0 1 * * *` UTC (9 AM PHT)
+**Schedule:** `0 9 * * *` Asia/Manila (9 AM PHT)
 
 **Note:** First run establishes baseline state (no alert). Alerts fire from second run onward.
 
@@ -380,7 +380,7 @@ node n8n-workflows/deploy-halo-home-inventory-alert.js
 Posts refill due list + upsell gap to `#halo-home-shopify` every Monday at 9 AM PHT.
 
 **Workflow ID:** `7N9gEZb7nDS0EDGu`
-**Schedule:** `0 1 * * 1` UTC (9 AM PHT Mondays)
+**Schedule:** `0 9 * * 1` Asia/Manila (9 AM PHT Mondays)
 
 **Deploy:**
 ```bash

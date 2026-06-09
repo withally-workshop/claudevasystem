@@ -124,7 +124,7 @@ const workflow = {
   nodes: [
     // n1: Schedule — 10 AM PHT daily
     { id: 'n1', name: 'Schedule Trigger', type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2, position: [240, 300],
-      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 1 * * *' }] } } }, // 1 AM UTC = 9 AM PHT
+      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 9 * * *' }] } } }, // 9 AM PHT (workflow tz Asia/Manila)
 
     // n2: Load persisted OOS state from static data
     { id: 'n2', name: 'Load OOS State', type: 'n8n-nodes-base.code', typeVersion: 2, position: [460, 300],

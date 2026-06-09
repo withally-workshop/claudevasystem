@@ -46,10 +46,10 @@
 | 18 | Krave — Price Reply Auto-Resubmit | `nzFTk4e9NRi6Jk9r` | Active | Every 10min + `POST /webhook/krave-price-reply-resubmit` | Detect bot "price missing" threads with unprocessed amount replies in #payments-invoices-updates, parse receipt + amount, resubmit to intake webhook automatically |
 | 19 | LinkedIn Post Monitor | `wNXs7wqHz5d5naJN` | Inactive (needs actor verification) | Every 30min all day | Scrape Noa's LinkedIn profile via Apify every 30min, detect new posts using workflow static data, alert John in #noa-linkedin-posts with preview + link |
 | 20 | Halo - VA Slack Bot | `XgHWMBeHoPWelE9r` | Active | `app_mention` in #halo-home-shopify | VA @mentions bot → Claude classifies intent → Shopify API → formatted reply in thread |
-| 21 | Halo - Daily Digest | `047cSNvFvUGHaf3O` | Active | 2 AM UTC (10 AM PHT) daily | Pull yesterday's Shopify orders + unfulfilled count → Claude formats → post to #halo-home-shopify |
+| 21 | Halo - Daily Digest | `047cSNvFvUGHaf3O` | Active | 10 AM PHT daily (Asia/Manila) | Pull yesterday's Shopify orders + unfulfilled count → Claude formats → post to #halo-home-shopify |
 | 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Active | 09:00/12:00/15:00/18:00 PHT Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` | Scan john@kravemedia.co for unread invoice PDFs, parse with Claude, block Airwallex/automated senders, dedup vs tracker, validate bank details, forward to kravemedia@bills.airwallex.com, reply to sender, log to Creator & AP Bills Tracker |
-| 23 | Halo - Inventory Alert | `NBvfYPmjdTXzrKfb` | Active | 1 AM UTC (9 AM PHT) daily | Compare product stock vs previous run; alert #halo-home-shopify on OOS changes + newly low-stock (<10 units) |
-| 24 | Halo - Weekly Report | `7N9gEZb7nDS0EDGu` | Active | 1 AM UTC Mondays (9 AM PHT) | Refill due list (filter buyers 75–105 days ago) + upsell gap (showerhead buyers without filters) → post to #halo-home-shopify |
+| 23 | Halo - Inventory Alert | `NBvfYPmjdTXzrKfb` | Active | 9 AM PHT daily (Asia/Manila) | Compare product stock vs previous run; alert #halo-home-shopify on OOS changes + newly low-stock (<10 units) |
+| 24 | Halo - Weekly Report | `7N9gEZb7nDS0EDGu` | Active | 9 AM PHT Mondays (Asia/Manila) | Refill due list (filter buyers 75–105 days ago) + upsell gap (showerhead buyers without filters) → post to #halo-home-shopify |
 
 ---
 
@@ -1481,7 +1481,7 @@ Posts yesterday's Halo Home sales summary + current unfulfilled orders to `#halo
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 2 * * *` (UTC) — 10:00 AM PHT daily |
+| Schedule | `0 10 * * *` (Asia/Manila) — 10:00 AM PHT daily |
 
 ### Node Flow
 
@@ -1616,7 +1616,7 @@ Alerts `#halo-home-shopify` when Halo Home products go out of stock, come back i
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 1 * * *` (UTC) — 9:00 AM PHT daily |
+| Schedule | `0 9 * * *` (Asia/Manila) — 9:00 AM PHT daily |
 
 ### Node Flow
 
@@ -1677,7 +1677,7 @@ Every Monday at 9 AM PHT, posts two proactive lists to `#halo-home-shopify`: (1)
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 1 * * 1` (UTC) — 9:00 AM PHT every Monday |
+| Schedule | `0 9 * * 1` (Asia/Manila) — 9:00 AM PHT every Monday |
 
 ### Node Flow
 

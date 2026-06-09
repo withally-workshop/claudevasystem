@@ -73,7 +73,7 @@ const workflow = {
       position: [240, 300],
       parameters: {
         rule: {
-          interval: [{ field: 'cronExpression', expression: '0 2 * * *' }], // 2 AM UTC = 10 AM PHT
+          interval: [{ field: 'cronExpression', expression: '0 10 * * *' }], // 10 AM PHT (workflow tz Asia/Manila)
         },
       },
     },
