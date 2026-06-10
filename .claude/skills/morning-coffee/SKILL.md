@@ -1,4 +1,4 @@
-﻿# Skill: Morning Coffee
+# Skill: Morning Coffee
 
 **Purpose:** Generate Noa's personal daily morning briefing — a warm Slack DM from John covering today's calendar, emails needing attention, ClickUp project pulse, and open Slack threads. Personal in tone. Separate from the SOD report (which is ops-focused). Sent directly to Noa's DM.
 
@@ -48,8 +48,8 @@ mcp__claude_ai_Google_Calendar__list_events
 For each event returned:
 - Extract `summary` (title), `start.dateTime`, `end.dateTime`, attendees
 - Skip events where `status == "cancelled"`
-- Format: `[HH:MM SGT] — [Event Title] with [Person]` (omit "with" if no external attendees)
-- **Flag** events between 14:30–20:00 SGT with `[deep work window]`
+- Format: `[HH:MM PHT] — [Event Title] with [Person]` (omit "with" if no external attendees)
+- **Flag** events between 13:30–19:00 PHT with `[deep work window]`
 
 **Fallback:** If the Google Calendar MCP returns an error or empty result, fall back to email-based parsing:
 ```
@@ -227,13 +227,13 @@ _Deep work starts at 1:30 PM — have a good one._
 ```
 mcp__claude_ai_Slack__slack_send_message
   channel_id: U06TBGX9L93   ← Noa's user ID, opens a DM
-  message: [composed message — exact final text, nothing appended]
+  message: [composed message — exact final text; do not append anything yourself]
 ```
 
 **Critical formatting rules for this send:**
-- Do NOT append `*Sent using* Claude`, `Sent via Claude Code`, or any attribution footer. The message must end with `_Deep work starts at 1:30 PM — have a good one._` and nothing after.
-- Do NOT include any disclaimer, note, or explanation outside the briefing template.
-- The `text` parameter must contain ONLY the final composed briefing — no preamble, no postscript.
+- The message body must end with `_Deep work starts at 1:30 PM — have a good one._` Do not add your own preamble, postscript, disclaimer, or note.
+- **Known platform behavior — not a bug:** the claude.ai Slack connector auto-appends a `*Sent using* Claude` footer to messages sent via `mcp__claude_ai_Slack__slack_send_message`. It is injected by the platform *after* your text, so it cannot be prevented or removed from within this skill. This is expected — do not treat it as a failure or retry to strip it.
+- The `message` parameter must contain ONLY the final composed briefing — no preamble, no postscript from you.
 
 Confirm `ts` is returned. If delivery fails: output the composed message in full for manual copy-paste, note the failure.
 

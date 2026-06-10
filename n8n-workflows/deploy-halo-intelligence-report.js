@@ -24,7 +24,7 @@ const GMAIL_JOHN_CRED = 'vsDW3WpKXqS9HUs3';
 const SLACK_CHANNEL_ID = 'C0A22NPLV38';
 const GOOGLE_SHEET_ID = '1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4';
 const GOOGLE_SHEET_NAME = 'Posts';
-const REPORT_EMAILS = 'shin@kravemedia.co,noa@kravemedia.co,john@kravemedia.co,alleahvargas@gmail.com';
+const REPORT_EMAILS = 'shin@kravemedia.co,noa@kravemedia.co,john@kravemedia.co,alleahvargas@gmail.com,basteperez021198@gmail.com';
 
 // Keeping to 8 high-signal hashtags per platform so the sync run completes
 // within the 5-min window. Add more once we confirm run times are stable.
@@ -321,7 +321,7 @@ const instagramSection = (instagramTop10 || []).map(summarize).join('\\n\\n');
 const tiktokCount = (tiktokTop10 || []).length;
 const instagramCount = (instagramTop10 || []).length;
 
-const systemPrompt = 'You are a content intelligence analyst for Halo Home — a DTC shower filter brand entering the US market. Halo shower filters remove chlorine, heavy metals, and hard water minerals to protect skin and hair health.\\n\\nHalo ICP groups:\\n1. Skin Conditions (Eczema, Rosacea, Psoriasis, Acne-Prone, Sensitive Skin) — driver: pain, exhaustion, tried everything\\n2. Hair & Scalp Conditions (Hair Loss, Dandruff, Dry/Frizzy Hair, Color-Treated Hair) — driver: frustration, embarrassment, wasted money\\n3. Context & Mindset (Hard Water Refugee, Wellness-Burned, Prevention-Focused) — driver: attribution, skepticism, proactive protection\\n\\nContent pillars: Problem/Solution | Educational | Inspirational | Wellness Hack\\n\\nAnalyze the provided social content. For each post return a JSON object: { "hook": "opening line or first-2-seconds description", "whyItPerformed": "specific analysis — format, pacing, emotional angle", "icpMatch": "which ICP group and why", "contentPillar": "one of the four pillars", "haloAngle": "one sentence — how Halo owns a version of this" }\\n\\nFor trend synthesis: exactly 2 paragraphs. Paragraph 1: cross-platform patterns in format, emotion, and angle. Paragraph 2: what this means for Halo content strategy.';
+const systemPrompt = 'You are a content intelligence analyst for Halo Home — a DTC shower filter brand entering the US market. Halo shower filters remove chlorine, heavy metals, and hard water minerals to protect skin and hair health.\\n\\nHalo ICP groups:\\n1. Skin Conditions (Eczema, Rosacea, Psoriasis, Acne-Prone, Sensitive Skin) — driver: pain, exhaustion, tried everything\\n2. Hair & Scalp Conditions (Hair Loss, Dandruff, Dry/Frizzy Hair, Color-Treated Hair) — driver: frustration, embarrassment, wasted money\\n3. Context & Mindset (Hard Water Refugee, Wellness-Burned, Prevention-Focused) — driver: attribution, skepticism, proactive protection\\n\\nContent pillars: Problem/Solution | Educational | Inspirational | Wellness Hack\\n\\nFormat options (pick the single closest): VSL | B-Roll | B-Roll VO | Talking Head | Skit | Tutorial | Listicle.\\n\\nHook Type options (pick exactly one): Question | Bold Claim | Curiosity Gap | Pain Point | POV / Empathy | Visual Shock | Social Proof. If none fit, use Other.\\n\\nAnalyze the provided social content. For each post return a JSON object: { "hook": "opening line or first-2-seconds description", "hookType": "exactly one Hook Type option", "format": "exactly one Format option", "visualStyle": "short phrase, e.g. Raw & authentic, Polished/cinematic, Aesthetic/moody, Text-heavy", "keyword": "the single core niche topic, e.g. Shower Filter, Hair Loss, Hard Water, Eczema", "cta": "the closing call-to-action or ending line, verbatim if present", "whyItPerformed": "specific analysis — format, pacing, emotional angle", "icpMatch": "which ICP group and why", "contentPillar": "one of the four pillars", "haloAngle": "one sentence — how Halo owns a version of this" }\\n\\nFor trend synthesis: exactly 2 paragraphs. Paragraph 1: cross-platform patterns in format, emotion, and angle. Paragraph 2: what this means for Halo content strategy.';
 
 const userPrompt = 'Week of ' + weekLabel + '\\n\\n=== TOP TIKTOK CONTENT ===\\n' + (tiktokSection || '(no posts)') + '\\n\\n=== TOP INSTAGRAM REELS ===\\n' + (instagramSection || '(no posts)') + '\\n\\nRespond with this JSON (no markdown, raw JSON only):\\n{\\n  "trendSynthesis": "paragraph 1\\\\n\\\\nparagraph 2",\\n  "tiktok": [array of ' + tiktokCount + ' analysis objects in order],\\n  "instagram": [array of ' + instagramCount + ' analysis objects in order]\\n}';
 
@@ -393,6 +393,7 @@ function emailPostHtml(post, rank) {
       ' &nbsp;|&nbsp; Views: ' + (post.views || 0).toLocaleString() +
       ' &nbsp;|&nbsp; Likes: ' + (post.likes || 0).toLocaleString() + '</p>' +
     '<p style="margin:4px 0;"><strong>Hook:</strong> ' + (a.hook || '—') + '</p>' +
+    '<p style="margin:4px 0;"><strong>Format / Hook Type:</strong> ' + (a.format || '—') + ' · ' + (a.hookType || '—') + '</p>' +
     '<p style="margin:4px 0;"><strong>Why it performed:</strong> ' + (a.whyItPerformed || '—') + '</p>' +
     '<p style="margin:4px 0;"><strong>ICP match:</strong> ' + (a.icpMatch || '—') + '</p>' +
     '<p style="margin:4px 0;"><strong>Halo angle:</strong> ' + (a.haloAngle || '—') + '</p>' +
@@ -427,19 +428,24 @@ const sheetRows = allEnriched.map(post => {
     'Week': weekLabel,
     'Platform': post.platform === 'tiktok' ? 'TikTok' : 'Instagram',
     'Creator': post.creator || '',
-    'URL': post.url || '',
+    'Post URL': post.url || '',
+    'Keyword': a.keyword || '',
+    'Format': a.format || '',
+    'Visual Style': a.visualStyle || '',
+    'Hook (0–3s)': a.hook || '',
+    'Hook Type': a.hookType || '',
+    'CTA / Ending': a.cta || '',
     'Likes': post.likes || 0,
     'Views': post.views || 0,
     'Saves': post.saves || 0,
     'Shares': post.shares || 0,
     'Engagement Rate (%)': post.engagementRate || 0,
+    'Score': post.scoreDisplay || 0,
     'ICP Group': post.primaryIcp || '',
     'Content Pillar': post.contentPillar || '',
-    'Score': post.scoreDisplay || 0,
-    'Hook': a.hook || '',
-    'Why It Performed': a.whyItPerformed || '',
+    'Why It Works': a.whyItPerformed || '',
     'ICP Match Detail': a.icpMatch || '',
-    'Halo Angle': a.haloAngle || '',
+    'Halo Adaptation': a.haloAngle || '',
   };
 });
 
@@ -681,19 +687,24 @@ const workflow = {
             'Week': '={{ $json.Week }}',
             'Platform': '={{ $json.Platform }}',
             'Creator': '={{ $json.Creator }}',
-            'URL': '={{ $json.URL }}',
+            'Post URL': '={{ $json["Post URL"] }}',
+            'Keyword': '={{ $json.Keyword }}',
+            'Format': '={{ $json.Format }}',
+            'Visual Style': '={{ $json["Visual Style"] }}',
+            'Hook (0–3s)': '={{ $json["Hook (0–3s)"] }}',
+            'Hook Type': '={{ $json["Hook Type"] }}',
+            'CTA / Ending': '={{ $json["CTA / Ending"] }}',
             'Likes': '={{ $json.Likes }}',
             'Views': '={{ $json.Views }}',
             'Saves': '={{ $json.Saves }}',
             'Shares': '={{ $json.Shares }}',
             'Engagement Rate (%)': '={{ $json["Engagement Rate (%)"] }}',
+            'Score': '={{ $json.Score }}',
             'ICP Group': '={{ $json["ICP Group"] }}',
             'Content Pillar': '={{ $json["Content Pillar"] }}',
-            'Score': '={{ $json.Score }}',
-            'Hook': '={{ $json.Hook }}',
-            'Why It Performed': '={{ $json["Why It Performed"] }}',
+            'Why It Works': '={{ $json["Why It Works"] }}',
             'ICP Match Detail': '={{ $json["ICP Match Detail"] }}',
-            'Halo Angle': '={{ $json["Halo Angle"] }}',
+            'Halo Adaptation': '={{ $json["Halo Adaptation"] }}',
           },
           schema: [],
         },

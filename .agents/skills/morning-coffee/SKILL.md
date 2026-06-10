@@ -84,6 +84,8 @@ Here's your Morning Coffee for [Day, Date]:
 _Deep work starts at 1:30 PM — have a good one._
 ```
 
+**Note:** the claude.ai Slack connector auto-appends a `*Sent using* Claude` footer to messages sent via `mcp__claude_ai_Slack__slack_send_message`. It is injected by the platform after the message text and cannot be removed from within this skill — this is expected, not a failure.
+
 ---
 
 ## Failure Handling

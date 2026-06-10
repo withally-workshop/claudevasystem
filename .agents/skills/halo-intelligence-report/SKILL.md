@@ -16,14 +16,14 @@ This skill runs the n8n workflow via the n8n MCP or direct webhook once the work
 ## What It Outputs
 
 1. **Slack** — digest posted to channel `C0A22NPLV38` with trend synthesis + one-liner per top post
-2. **Google Sheet** — one row per post appended to `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4` (Posts tab)
-3. **Email** — full HTML analysis sent to shin@kravemedia.co, noa@kravemedia.co, john@kravemedia.co, alleahvargas@gmail.com
+2. **Google Sheet** — one row per post appended to `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4` (Posts tab). Columns aligned to Alleah's manual inspo sheet (adds Keyword, Format, Visual Style, Hook Type, CTA / Ending). Linked into the "Halo Post Inspiration Library" table in the **Ideas & Moodboard** Slack canvas (`F0A2ATP4D5L`) as the auto-updated TikTok feed; Alleah's manual sheet there is the IG-focused complement.
+3. **Email** — full HTML analysis sent to shin@kravemedia.co, noa@kravemedia.co, john@kravemedia.co, alleahvargas@gmail.com, basteperez021198@gmail.com (Baste — ads inspo)
 
 ## Pipeline Summary
 
 1. Fetch Social Data — Apify TikTok + Instagram scrapers run in parallel (Instagram in `reels` mode, not static posts)
 2. Score & Rank — video/reels only; last 14 days; gate TikTok ≥5,000 likes, Instagram ≥10,000 views; weighted engagement formula × ICP relevance multiplier; top 10 per platform (max 2 per creator, ≥3 niche categories best effort)
-3. Claude Analysis — hook, why it performed, ICP match, content pillar, Halo angle per post + 2-paragraph trend synthesis
+3. Claude Analysis — per post: hook, hook type, format, visual style, keyword, CTA/ending, why it works, ICP match, content pillar, Halo adaptation + 2-paragraph trend synthesis (Hook Type + Format constrained to fixed option lists matching Alleah's manual sheet)
 4. Format + Deliver — Slack digest, email HTML, Sheet rows
 
 ## ICP Groups

@@ -16,12 +16,13 @@ Triggers the n8n Halo Weekly Intelligence Report workflow, which:
 - **ID:** 5ZqTSaUEtxnAndiY
 - **URL:** `https://noatakhel.app.n8n.cloud/workflow/5ZqTSaUEtxnAndiY`
 - **Deploy script:** `n8n-workflows/deploy-halo-intelligence-report.js`
-- **Schedule:** Every Monday, 7:00 AM ICT (Asia/Manila)
+- **Schedule:** Every Monday, 7:00 AM PHT (Asia/Manila)
 
 ## Key Config
 - **Slack channel:** `C0A22NPLV38`
-- **Google Sheet:** `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4` — sheet tab: `Posts`
-- **Email recipients:** shin@kravemedia.co, noa@kravemedia.co, john@kravemedia.co, alleahvargas@gmail.com
+- **Google Sheet:** `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4` — sheet tab: `Posts`. Columns aligned to Alleah's manual inspo sheet (adds Keyword, Format, Visual Style, Hook Type, CTA / Ending; Hook→Hook (0–3s), Why It Performed→Why It Works, Halo Angle→Halo Adaptation, URL→Post URL).
+- **Inspiration Library:** Posts sheet is linked in the "Halo Post Inspiration Library" table of the **Ideas & Moodboard** Slack canvas (`F0A2ATP4D5L`) as the auto-updated TikTok feed; Alleah's manual sheet (`1dX0QCZvvb9W0pQIjNUieXTaO9WlYOObI9Hb6RzZlmEg`) there is the IG-focused complement.
+- **Email recipients:** shin@kravemedia.co, noa@kravemedia.co, john@kravemedia.co, alleahvargas@gmail.com, basteperez021198@gmail.com (Baste — ads inspo)
 - **Email sender:** john@kravemedia.co (gmail-john credential)
 - **Apify TikTok actor:** `clockworks~tiktok-hashtag-scraper` (resultsType: posts)
 - **Apify Instagram actor:** `apify~instagram-hashtag-scraper` (resultsType: reels)
@@ -57,12 +58,19 @@ Final Score = (Engagement Rate × 0.40 + Saves/Shares Rate × 0.35 + Views Norma
 - Diversity floor — best effort to include ≥3 distinct niche categories (skin / hair / shower / wellness) in each Top 10 when the data allows; cannot fabricate categories that aren't present
 
 ## Claude Output Per Post
-- Hook breakdown
-- Why it performed (format, pacing, angle, emotion)
+- Hook breakdown (Hook (0–3s))
+- Hook Type — one of: Question | Bold Claim | Curiosity Gap | Pain Point | POV / Empathy | Visual Shock | Social Proof (else Other)
+- Format — one of: VSL | B-Roll | B-Roll VO | Talking Head | Skit | Tutorial | Listicle
+- Visual Style (e.g. Raw & authentic, Polished/cinematic, Aesthetic/moody, Text-heavy)
+- Keyword (core niche topic, e.g. Shower Filter, Hair Loss)
+- CTA / Ending
+- Why It Works (format, pacing, angle, emotion)
 - ICP match (which group + why)
 - Content pillar (Problem/Solution | Educational | Inspirational | Wellness Hack)
-- Halo angle (one sentence)
+- Halo Adaptation (one sentence)
 - 2-paragraph trend synthesis at the top of the report
+
+Hook Type + Format taxonomies mirror Alleah's manual inspo sheet ("🪝 Hook Type Legend" tab) so the automated tracker and her manual pulls read in the same format.
 
 ## Manual Deploy
 ```bash

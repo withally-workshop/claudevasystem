@@ -16,11 +16,12 @@
 
 Weekly social intelligence pipeline — live as of 2026-05-21.
 
-- **What it does:** Scrapes TikTok and Instagram for top content in Halo's niche hashtag clusters, scores by engagement × ICP relevance, analyzes with Claude, delivers to Slack + Google Sheet + email every Monday 7AM ICT.
+- **What it does:** Scrapes TikTok and Instagram for top content in Halo's niche hashtag clusters, scores by engagement × ICP relevance, analyzes with Claude, delivers to Slack + Google Sheet + email every Monday 7AM PHT.
 - **Deploy script:** `n8n-workflows/deploy-halo-intelligence-report.js`
 - **Skill:** `.claude/skills/halo-intelligence-report/SKILL.md`
-- **Google Sheet:** `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4` (Posts tab)
+- **Google Sheet:** `1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4` (Posts tab) — columns aligned to Alleah's manual inspo sheet format; linked into the "Halo Post Inspiration Library" table of the Ideas & Moodboard Slack canvas (`F0A2ATP4D5L`) as the auto-updated TikTok feed
 - **Slack channel:** `C0A22NPLV38`
+- **Email recipients:** shin@, noa@, john@kravemedia.co, alleahvargas@gmail.com, basteperez021198@gmail.com (Baste — ads inspo)
 
 **ICP groups scored against:**
 1. Skin Conditions — Eczema, Rosacea, Psoriasis, Acne-Prone, Sensitive Skin
