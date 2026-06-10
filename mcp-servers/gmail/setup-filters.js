@@ -134,12 +134,51 @@ async function main() {
   // 2. Filters
   console.log("── Airwallex ────────────────────────────────────────");
 
-  // Stripe/Shopify payouts → skip inbox, airwallex label
+  // Deposit routing (verified 2026-06-10):
+  //   • Client invoice payments  → _Payment_Received, STAY in inbox (money-in, surface it)
+  //   • Everything else Airwallex → _Airwallex, skip inbox (Stripe/Shopify/internal/Wise/FX)
+  // Gmail has no "else", so each non-client deposit source is enumerated, and the
+  // client filter positively matches "a deposit that is NOT one of those sources".
+  // Note: Shopify Payments runs on Stripe rails, so most Shopify payouts already
+  // arrive as "deposit from STRIPE PAYMENTS SINGAPORE" and hit the Stripe filter.
+
+  // Stripe payouts (incl. Shopify-via-Stripe) → skip inbox, airwallex label
   // Uses query field (not hasWords) — Gmail API ignores hasWords silently without other criteria
   await createFilter(
     { from: "support@info.airwallex.com", query: "STRIPE PAYMENTS SINGAPORE" },
     skipAndTag(KNOWN_LABELS.airwallex),
-    "Airwallex: Stripe/Shopify deposits (query) → skip inbox"
+    "Airwallex: Stripe deposits (query) → skip inbox"
+  );
+
+  // Client invoice payments → _Payment_Received, STAY in inbox
+  await createFilter(
+    {
+      from: "support@info.airwallex.com",
+      query: '"You received a deposit" -"STRIPE PAYMENTS SINGAPORE" -SHOPIFY -"deposit from AIRWALLEX" -"WISE ASIA"',
+    },
+    tagOnly(KNOWN_LABELS.paymentReceived),
+    "Airwallex: client invoice payments → _Payment_Received (stay in inbox)"
+  );
+
+  // Shopify-named deposits → skip inbox, airwallex label
+  await createFilter(
+    { from: "support@info.airwallex.com", query: '"You received a deposit" SHOPIFY' },
+    skipAndTag(KNOWN_LABELS.airwallex),
+    "Airwallex: Shopify deposits → skip inbox"
+  );
+
+  // Airwallex-internal / FX settlement deposits → skip inbox, airwallex label
+  await createFilter(
+    { from: "support@info.airwallex.com", query: '"You received a deposit" "deposit from AIRWALLEX"' },
+    skipAndTag(KNOWN_LABELS.airwallex),
+    "Airwallex: internal/FX deposits → skip inbox"
+  );
+
+  // Wise transfer deposits → skip inbox, airwallex label
+  await createFilter(
+    { from: "support@info.airwallex.com", query: '"You received a deposit" "WISE ASIA"' },
+    skipAndTag(KNOWN_LABELS.airwallex),
+    "Airwallex: Wise deposits → skip inbox"
   );
 
   // Daily task digest → skip inbox, airwallex label
