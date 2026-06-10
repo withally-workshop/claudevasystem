@@ -474,7 +474,7 @@ Classifies all unread inbox emails for `noa@kravemedia.co` into the `EA/*` tier 
 |-----------|---------|
 | Sender includes `osome.com` OR has `Compliance` label (`Label_14`) | EA/Urgent + draft |
 | Has `Creators-Inbound` label (`Label_16`) | EA/Needs-Reply + typeform draft |
-| Has `Payment Received` label (`Label_5194298534623747326`) | EA/FYI, no draft |
+| Has `_Payment_Received` label (`Label_5194298534623747326`) | EA/FYI, no draft, **kept in inbox** (client payments are not archived) |
 | Sender matches known contacts list (amanda, shin, joshua, lucas, welleco, etc.) | EA/Needs-Reply + AI draft |
 | PandaDoc completed contract notification | EA/Needs-Reply, no draft |
 | Sender matches `noreply@`, `no-reply@`, `notifications@` | EA/Auto-Sorted |
@@ -492,6 +492,7 @@ Classifies all unread inbox emails for `noa@kravemedia.co` into the `EA/*` tier 
 |----------|--------|
 | EA/Urgent / EA/Needs-Reply | Apply label, create draft (typeform for creator inbound, AI for all others), archive |
 | EA/FYI / EA/Auto-Sorted | Apply label, archive |
+| EA/FYI with `_Payment_Received` (client payment) | Apply label, **keep in inbox** (Archive? step excludes `_Payment_Received`) |
 | EA/Unsure | Apply label, keep in inbox |
 | All tiers | Post to `#ops-command` channel + DM Noa |
 
