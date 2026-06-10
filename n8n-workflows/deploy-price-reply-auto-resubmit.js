@@ -141,22 +141,12 @@ const workflow = {
   settings: { executionOrder: 'v1', saveManualExecutions: true, timezone: 'Asia/Manila' },
   nodes: [
     // ── Triggers ──────────────────────────────────────────────────────────
-    {
-      id: 'n1', name: 'Schedule Trigger',
-      type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
-      position: [200, 200],
-      parameters: {
-        // INTERIM throttle (2026-06-10): was '*/10 * * * *' (24/7, ~4,300 execs/mo —
-        // blew the 2,500 execution cap). Polling a private channel for occasional
-        // price replies does not need 24/7 10-min cadence. Now every 30 min, business
-        // hours, weekdays (Asia/Manila) ≈ 530 execs/mo.
-        // TARGET: drop this Schedule Trigger entirely once the Slack app subscribes to
-        // `message.groups` (private-channel events) and the Approval Reply Trigger
-        // router fans out to the krave-price-reply-resubmit webhook (fully event-driven,
-        // ~0 idle execs). See decisions/log.md 2026-06-10.
-        rule: { interval: [{ field: 'cronExpression', expression: '*/30 8-19 * * 1-5' }] },
-      },
-    },
+    // Schedule Trigger REMOVED 2026-06-10: this workflow is now fully event-driven.
+    // The krave-bot (Render) forwards human messages in #payments-invoices-updates
+    // (C09HN2EBPR7) to the webhook below — confirmed live via 5 webhook-mode
+    // executions (message.groups delivers to the bot). No idle polling. History:
+    // started 24/7 `*/10` (~4,300 execs/mo, blew the 2,500 cap), throttled to
+    // `*/30 8-19 * * 1-5`, then dropped entirely. See decisions/log.md 2026-06-10.
     {
       id: 'n2', name: 'Webhook Trigger',
       type: 'n8n-nodes-base.webhook', typeVersion: 2,
@@ -292,7 +282,6 @@ const workflow = {
   ],
 
   connections: {
-    'Schedule Trigger':        { main: [[{ node: 'Get Channel History', type: 'main', index: 0 }]] },
     'Webhook Trigger':         { main: [[{ node: 'Get Channel History', type: 'main', index: 0 }]] },
     'Get Channel History':     { main: [[{ node: 'Find Price Prompts', type: 'main', index: 0 }]] },
     'Find Price Prompts':      { main: [[{ node: 'Get Thread Replies', type: 'main', index: 0 }]] },
