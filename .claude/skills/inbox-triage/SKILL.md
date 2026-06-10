@@ -152,4 +152,5 @@ Do NOT attempt to classify emails manually in Mode 2 — the n8n workflow handle
 - John's private channel: C0AQZGJDR38 — ALL triage summaries post here (both setup reports and daily triage). John forwards to Noa manually.
 - All drafts saved to Gmail Drafts — Noa reviews and sends herself
 - Never send on Noa's behalf without explicit confirmation
+- **Client payments stay in inbox:** emails labeled `_Payment_Received` (Airwallex client deposits) are classified `EA/FYI` (no draft) but are NOT archived — they remain in the inbox per Noa's rule. The "Archive?" step excludes `_Payment_Received`. Pairs with the Gmail filter routing client deposits to inbox + `_Payment_Received` (see references/sops + setup-filters.js).
 - If Noa corrects a mis-tier, update classification rules in this skill

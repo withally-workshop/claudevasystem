@@ -513,12 +513,21 @@ const checkArchive = ifElse({
     parameters: {
       conditions: {
         combinator: "and",
-        options: { caseSensitive: true, leftValue: "", typeValidation: "strict", version: 1 },
-        conditions: [{
-          leftValue: expr("{{ $json.tier }}"),
-          rightValue: "EA/Unsure",
-          operator: { type: "string", operation: "notEquals" },
-        }],
+        options: { caseSensitive: true, leftValue: "", typeValidation: "loose", version: 1 },
+        conditions: [
+          {
+            leftValue: expr("{{ $json.tier }}"),
+            rightValue: "EA/Unsure",
+            operator: { type: "string", operation: "notEquals" },
+          },
+          {
+            // Keep client payments (_Payment_Received) in the inbox — never archive them.
+            // Pairs with the Gmail filter that routes client deposits to inbox+_Payment_Received.
+            leftValue: expr("{{ ($json.labelIds || []).includes('Label_5194298534623747326') }}"),
+            rightValue: false,
+            operator: { type: "boolean", operation: "equals" },
+          },
+        ],
       },
     },
   },

@@ -35,7 +35,7 @@ If non-2xx: report the status code and suggest checking the workflow at `https:/
 - Searches `in:inbox is:unread` for new emails
 - AI classifier applies two-layer labels: EA/Urgent, EA/Needs-Reply, EA/FYI, EA/Auto-Sorted, EA/Unsure + context labels (Compliance, Creators-Inbound, etc.)
 - Creates Gmail drafts for emails needing replies
-- Archives EA/Auto-Sorted emails (removes from inbox)
+- Archives non-`EA/Unsure` emails (removes from inbox), EXCEPT client payments labeled `_Payment_Received` — those are classified `EA/FYI` but kept in the inbox per Noa's rule (pairs with the Gmail filter routing client deposits to inbox + `_Payment_Received`)
 - Posts a triage summary to #ops-command (Slack channel C0AQZGJDR38)
 
 ## Key References
