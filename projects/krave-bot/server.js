@@ -279,16 +279,16 @@ app.event('message', async ({ event, say, client }) => {
     return;
   }
 
-  // Event-driven price-reply trigger: any human message in #payments-invoices-updates
-  // kicks the Price Reply Auto-Resubmit workflow, which does its own filtering for
-  // unactioned "price missing" threads. Replaces the n8n schedule poll (zero idle execs).
-  // NOTE: requires the Slack app to subscribe to `message.groups` (private channel).
-  // The startup log below confirms delivery on the first real reply; once verified,
-  // delete the Schedule Trigger in deploy-price-reply-auto-resubmit.js.
-  if (event.channel === PAYMENTS_CHANNEL) {
-    console.log(`[price-reply] forwarding payments-channel event ts=${event.ts} thread=${event.thread_ts || '-'} user=${event.user || '-'}`);
+  // Event-driven price-reply trigger: forward THREAD REPLIES in
+  // #payments-invoices-updates to the Price Reply Auto-Resubmit workflow, which
+  // does its own filtering for unactioned "price missing" prompts (replaces the
+  // old n8n schedule poll — message.groups delivers these events to the bot).
+  // Fire-and-forget and DO NOT return: fall through so the bot's conversational
+  // thread follow-ups in this channel (e.g. "Want me to email this?" → "yes")
+  // keep working. Price replies are always thread replies, so scope to thread_ts.
+  if (event.channel === PAYMENTS_CHANNEL && event.thread_ts) {
+    console.log(`[price-reply] forwarding payments-channel reply ts=${event.ts} thread=${event.thread_ts}`);
     forwardToN8n(event, '/webhook/krave-price-reply-resubmit');
-    return;
   }
 
   // Handle thread follow-ups in channels when bot is already in that conversation
