@@ -234,13 +234,17 @@ const app = new App({
 });
 
 const DRAFTS_CHANNEL = 'C0AQZGJDR38';
+const PAYMENTS_CHANNEL = 'C09HN2EBPR7'; // #payments-invoices-updates (private) — price-reply source
 const N8N_APPROVAL_WEBHOOK = 'https://noatakhel.app.n8n.cloud/webhook/krave-approval-reply-trigger';
+const N8N_PRICE_REPLY_WEBHOOK = 'https://noatakhel.app.n8n.cloud/webhook/krave-price-reply-resubmit';
 
-function forwardToN8n(payload) {
+// Fire-and-forget POST to an n8n webhook. Defaults to the approval-reply path
+// for backward compatibility with the existing #ops-command forward.
+function forwardToN8n(payload, path = '/webhook/krave-approval-reply-trigger') {
   const buf = Buffer.from(JSON.stringify(payload));
   const req = require('https').request({
     hostname: 'noatakhel.app.n8n.cloud',
-    path: '/webhook/krave-approval-reply-trigger',
+    path,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Content-Length': buf.length },
   }, (res) => { res.resume(); });
@@ -272,6 +276,18 @@ app.event('message', async ({ event, say, client }) => {
   // Forward drafts channel messages to n8n approval polling workflow
   if (event.channel === DRAFTS_CHANNEL) {
     forwardToN8n(event);
+    return;
+  }
+
+  // Event-driven price-reply trigger: any human message in #payments-invoices-updates
+  // kicks the Price Reply Auto-Resubmit workflow, which does its own filtering for
+  // unactioned "price missing" threads. Replaces the n8n schedule poll (zero idle execs).
+  // NOTE: requires the Slack app to subscribe to `message.groups` (private channel).
+  // The startup log below confirms delivery on the first real reply; once verified,
+  // delete the Schedule Trigger in deploy-price-reply-auto-resubmit.js.
+  if (event.channel === PAYMENTS_CHANNEL) {
+    console.log(`[price-reply] forwarding payments-channel event ts=${event.ts} thread=${event.thread_ts || '-'} user=${event.user || '-'}`);
+    forwardToN8n(event, '/webhook/krave-price-reply-resubmit');
     return;
   }
 

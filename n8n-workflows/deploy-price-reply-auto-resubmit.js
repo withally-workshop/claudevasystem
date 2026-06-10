@@ -146,7 +146,15 @@ const workflow = {
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [200, 200],
       parameters: {
-        rule: { interval: [{ field: 'cronExpression', expression: '*/10 * * * *' }] },
+        // INTERIM throttle (2026-06-10): was '*/10 * * * *' (24/7, ~4,300 execs/mo —
+        // blew the 2,500 execution cap). Polling a private channel for occasional
+        // price replies does not need 24/7 10-min cadence. Now every 30 min, business
+        // hours, weekdays (Asia/Manila) ≈ 530 execs/mo.
+        // TARGET: drop this Schedule Trigger entirely once the Slack app subscribes to
+        // `message.groups` (private-channel events) and the Approval Reply Trigger
+        // router fans out to the krave-price-reply-resubmit webhook (fully event-driven,
+        // ~0 idle execs). See decisions/log.md 2026-06-10.
+        rule: { interval: [{ field: 'cronExpression', expression: '*/30 8-19 * * 1-5' }] },
       },
     },
     {
