@@ -36,8 +36,9 @@ const SLACK_CRED_ID  = 'Bn2U6Cwe1wdiCXzD';   // Krave Slack Bot
 const BILLS_SHEET_ID  = '14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc';
 const BILLS_SHEET_TAB = 'Krave — Creator & AP Bills Tracker';
 const OPS_CHANNEL     = 'C0AQZGJDR38';         // John's private channel (#ops-command)
-const AW_CLIENT_ID    = 'JaQA4uJ1SDSBkTdFigT9sw';
-const AW_API_KEY      = '5611f8e189ef357e5b3493916208efb80413595b50e7201b8fc98af5c91666f50b10ee64fd87fa3db7435e8dc5c07721';
+// NOTE: Airwallex credentials were removed — this workflow forwards by email and
+// makes no Airwallex API call. If a future version needs them, read from
+// process.env (AIRWALLEX_CLIENT_ID / AIRWALLEX_API_KEY), never hardcode.
 
 // ─── Code node contents ───────────────────────────────────────────────────────
 
