@@ -45,9 +45,9 @@ async function getToken() {
 
 // Billing read/write paths — do NOT use x-on-behalf-of (causes 401)
 // Spend module paths (/api/v1/spend/*) DO use x-on-behalf-of
-const NO_BEHALF_PATHS = ["/api/v1/invoices", "/api/v1/billing", "/api/v1/billing_customers", "/api/v1/products", "/api/v1/prices"];
+const NO_BEHALF_PATHS = ["/api/v1/invoices", "/api/v1/billing", "/api/v1/billing_customers", "/api/v1/products", "/api/v1/prices", "/api/v1/subscriptions"];
 
-const BILLING_PATHS = ["/api/v1/invoices", "/api/v1/billing_customers", "/api/v1/products", "/api/v1/prices"];
+const BILLING_PATHS = ["/api/v1/invoices", "/api/v1/billing_customers", "/api/v1/products", "/api/v1/prices", "/api/v1/subscriptions"];
 
 async function airwallexRequest(method, path, body) {
   const token = await getToken();
@@ -66,6 +66,24 @@ async function airwallexRequest(method, path, body) {
   });
   const text = await res.text();
   if (!res.ok) throw new Error(`Airwallex API error ${res.status}: ${text}`);
+  return JSON.parse(text);
+}
+
+async function airwallexUploadFile(base64, filename) {
+  const token = await getToken();
+  const fileBuffer = Buffer.from(base64, "base64");
+  const formData = new FormData();
+  const blob = new Blob([fileBuffer], { type: "application/pdf" });
+  formData.append("file", blob, filename || "invoice.pdf");
+  const headers = { Authorization: `Bearer ${token}` };
+  if (ACCOUNT_ID) headers["x-on-behalf-of"] = ACCOUNT_ID;
+  const res = await fetch(`${BASE_URL}/api/v1/files/upload`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Airwallex file upload error ${res.status}: ${text}`);
   return JSON.parse(text);
 }
 
@@ -241,9 +259,22 @@ const TOOLS = [
     },
   },
   {
+    name: "airwallex_upload_file",
+    description:
+      "Upload a PDF file to Airwallex and get back a file_id. Call this BEFORE airwallex_create_bill to attach the invoice PDF. Pass the file_id to airwallex_create_bill as attachment_file_id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pdf_base64: { type: "string", description: "Base64-encoded PDF content" },
+        filename: { type: "string", description: "Filename e.g. invoice-001.pdf" },
+      },
+      required: ["pdf_base64"],
+    },
+  },
+  {
     name: "airwallex_create_bill",
     description:
-      "Create a new bill in Airwallex Spend (accounts payable). Requires a vendor_id — use airwallex_list_vendors or airwallex_create_vendor first. Bill is created as DRAFT or AWAITING_APPROVAL.",
+      "Create a new bill in Airwallex Spend (accounts payable). Requires a vendor_id — use airwallex_list_vendors or airwallex_create_vendor first. Optionally pass attachment_file_id from airwallex_upload_file to attach the invoice PDF.",
     inputSchema: {
       type: "object",
       properties: {
@@ -264,6 +295,10 @@ const TOOLS = [
         due_date: { type: "string", description: "Invoice due date ISO8601 e.g. 2026-06-04" },
         currency: { type: "string", description: "Bill currency e.g. USD, SGD" },
         description: { type: "string", description: "Optional bill description / memo" },
+        attachment_file_id: {
+          type: "string",
+          description: "Optional file_id from airwallex_upload_file — attaches the PDF to the bill",
+        },
         line_items: {
           type: "array",
           description: "Line items — each with description, quantity, unit_price (tax-exclusive)",
@@ -347,6 +382,130 @@ const TOOLS = [
         invoice_id: { type: "string", description: "The invoice ID to mark as paid" },
       },
       required: ["invoice_id"],
+    },
+  },
+  {
+    name: "airwallex_list_subscriptions",
+    description: "List recurring subscriptions in Airwallex. Filter by status or customer ID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", description: "Filter by status e.g. ACTIVE, CANCELED, PAST_DUE, TRIALING" },
+        customer_id: { type: "string", description: "Filter by billing customer ID" },
+        page_num: { type: "number" },
+        page_size: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "airwallex_create_subscription",
+    description:
+      "Create a recurring subscription in Airwallex. Requires a billing customer ID and at least one price ID (from airwallex_create_price). Returns the subscription ID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        billing_customer_id: { type: "string", description: "Airwallex billing customer ID" },
+        items: {
+          type: "array",
+          description: "Subscription line items — each with a price_id and optional quantity",
+          items: {
+            type: "object",
+            properties: {
+              price_id: { type: "string", description: "Price ID from airwallex_create_price" },
+              quantity: { type: "number", description: "Quantity (default 1)" },
+            },
+            required: ["price_id"],
+          },
+        },
+        currency: { type: "string", description: "Subscription currency e.g. USD, SGD" },
+        collection_method: { type: "string", description: "AUTO_CHARGE (requires payment_source_id), CHARGE_ON_CHECKOUT (requires linked_payment_account_id), or OUT_OF_BAND" },
+        linked_payment_account_id: { type: "string", description: "Required for AUTO_CHARGE and CHARGE_ON_CHECKOUT" },
+        payment_source_id: { type: "string", description: "Required for AUTO_CHARGE — the saved payment source ID" },
+        period_unit: { type: "string", description: "Billing interval: DAY, WEEK, MONTH, or YEAR" },
+        invoice_memo: { type: "string", description: "Optional memo to include on generated invoices" },
+        default_tax_percent: { type: "number", description: "Optional default tax percentage e.g. 9 for 9%" },
+        starts_at: { type: "string", description: "Optional subscription start date ISO8601 e.g. 2026-07-01" },
+        trial_ends_at: { type: "string", description: "Optional trial end date ISO8601 e.g. 2026-07-01" },
+        description: { type: "string", description: "Optional internal note" },
+      },
+      required: ["billing_customer_id", "items", "currency"],
+    },
+  },
+  {
+    name: "airwallex_get_subscription",
+    description: "Get full details of a specific subscription by ID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        subscription_id: { type: "string", description: "The subscription ID" },
+      },
+      required: ["subscription_id"],
+    },
+  },
+  {
+    name: "airwallex_cancel_subscription",
+    description: "Cancel an active subscription. By default cancels at period end. Use proration_behavior to control refund handling.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        subscription_id: { type: "string", description: "The subscription ID to cancel" },
+        cancel_immediately: { type: "boolean", description: "If true, cancel now. If false (default), cancel at end of current billing period." },
+        proration_behavior: { type: "string", description: "Refund handling: ALL (full period refund), PRORATED (refund remaining days), or NONE (no refund). Default NONE." },
+      },
+      required: ["subscription_id"],
+    },
+  },
+  {
+    name: "airwallex_list_subscription_items",
+    description: "List all line items on a subscription.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        subscription_id: { type: "string", description: "The subscription ID" },
+      },
+      required: ["subscription_id"],
+    },
+  },
+  {
+    name: "airwallex_get_subscription_item",
+    description: "Get a specific line item on a subscription.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        subscription_id: { type: "string", description: "The subscription ID" },
+        item_id: { type: "string", description: "The subscription item ID" },
+      },
+      required: ["subscription_id", "item_id"],
+    },
+  },
+  {
+    name: "airwallex_update_subscription",
+    description: "Update a subscription — change items, quantity, payment method, or trial end date. Only fields provided are updated; array fields are fully replaced if included.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        subscription_id: { type: "string", description: "The subscription ID to update" },
+        items: {
+          type: "array",
+          description: "Replacement line items — fully replaces existing items if provided",
+          items: {
+            type: "object",
+            properties: {
+              price_id: { type: "string" },
+              quantity: { type: "number" },
+            },
+            required: ["price_id"],
+          },
+        },
+        collection_method: { type: "string", description: "AUTO_CHARGE, CHARGE_ON_CHECKOUT, or OUT_OF_BAND" },
+        linked_payment_account_id: { type: "string" },
+        payment_source_id: { type: "string", description: "Required if switching to AUTO_CHARGE" },
+        trial_ends_at: { type: "string", description: "Updated trial end date ISO8601" },
+        invoice_memo: { type: "string", description: "Updated default invoice memo" },
+        default_tax_percent: { type: "number" },
+        description: { type: "string" },
+      },
+      required: ["subscription_id"],
     },
   },
 ];
@@ -457,6 +616,10 @@ async function handleTool(name, args) {
       return await airwallexRequest("GET", `/api/v1/spend/bills/${args.bill_id}`);
     }
 
+    case "airwallex_upload_file": {
+      return await airwallexUploadFile(args.pdf_base64, args.filename);
+    }
+
     case "airwallex_create_bill": {
       const body = {
         request_id: randomUUID(),
@@ -474,6 +637,7 @@ async function handleTool(name, args) {
       };
       if (args.legal_entity_id) body.legal_entity_id = args.legal_entity_id;
       if (args.description) body.description = args.description;
+      if (args.attachment_file_id) body.attachments = [{ file_id: args.attachment_file_id }];
       return await airwallexRequest("POST", "/api/v1/spend/bills/create", body);
     }
 
@@ -504,6 +668,73 @@ async function handleTool(name, args) {
         `/api/v1/invoices/${args.invoice_id}/mark_as_paid`,
         {}
       );
+    }
+
+    case "airwallex_list_subscriptions": {
+      const params = new URLSearchParams();
+      if (args.status) params.set("status", args.status);
+      if (args.customer_id) params.set("customer_id", args.customer_id);
+      if (args.page_num !== undefined) params.set("page_num", args.page_num);
+      if (args.page_size !== undefined) params.set("page_size", args.page_size);
+      const query = params.toString() ? `?${params}` : "";
+      return await airwallexRequest("GET", `/api/v1/subscriptions${query}`);
+    }
+
+    case "airwallex_create_subscription": {
+      const body = {
+        request_id: randomUUID(),
+        billing_customer_id: args.billing_customer_id,
+        currency: args.currency,
+        items: args.items.map((i) => ({ price_id: i.price_id, quantity: i.quantity || 1 })),
+      };
+      if (args.collection_method) body.collection_method = args.collection_method;
+      if (args.linked_payment_account_id) body.linked_payment_account_id = args.linked_payment_account_id;
+      if (args.payment_source_id) body.payment_source_id = args.payment_source_id;
+      if (args.period_unit) body.duration = { period_unit: args.period_unit };
+      if (args.invoice_memo || args.default_tax_percent !== undefined) {
+        body.default_invoice_template = {};
+        if (args.invoice_memo) body.default_invoice_template.invoice_memo = args.invoice_memo;
+        if (args.default_tax_percent !== undefined) body.default_invoice_template.default_tax_percent = args.default_tax_percent;
+      }
+      if (args.starts_at) body.starts_at = args.starts_at;
+      if (args.trial_ends_at) body.trial_ends_at = args.trial_ends_at;
+      if (args.description) body.description = args.description;
+      return await airwallexRequest("POST", "/api/v1/subscriptions/create", body);
+    }
+
+    case "airwallex_get_subscription": {
+      return await airwallexRequest("GET", `/api/v1/subscriptions/${args.subscription_id}`);
+    }
+
+    case "airwallex_cancel_subscription": {
+      const body = { request_id: randomUUID() };
+      if (args.cancel_immediately !== undefined) body.cancel_immediately = args.cancel_immediately;
+      if (args.proration_behavior) body.proration_behavior = args.proration_behavior;
+      return await airwallexRequest("POST", `/api/v1/subscriptions/${args.subscription_id}/cancel`, body);
+    }
+
+    case "airwallex_list_subscription_items": {
+      return await airwallexRequest("GET", `/api/v1/subscriptions/${args.subscription_id}/items`);
+    }
+
+    case "airwallex_get_subscription_item": {
+      return await airwallexRequest("GET", `/api/v1/subscriptions/${args.subscription_id}/items/${args.item_id}`);
+    }
+
+    case "airwallex_update_subscription": {
+      const body = { request_id: randomUUID() };
+      if (args.items) body.items = args.items.map((i) => ({ price_id: i.price_id, quantity: i.quantity || 1 }));
+      if (args.collection_method) body.collection_method = args.collection_method;
+      if (args.linked_payment_account_id) body.linked_payment_account_id = args.linked_payment_account_id;
+      if (args.payment_source_id) body.payment_source_id = args.payment_source_id;
+      if (args.trial_ends_at) body.trial_ends_at = args.trial_ends_at;
+      if (args.invoice_memo || args.default_tax_percent !== undefined) {
+        body.default_invoice_template = {};
+        if (args.invoice_memo) body.default_invoice_template.invoice_memo = args.invoice_memo;
+        if (args.default_tax_percent !== undefined) body.default_invoice_template.default_tax_percent = args.default_tax_percent;
+      }
+      if (args.description) body.description = args.description;
+      return await airwallexRequest("POST", `/api/v1/subscriptions/${args.subscription_id}/update`, body);
     }
 
     default:
