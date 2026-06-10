@@ -1,6 +1,6 @@
 # Skill: Halo Home Ops
 
-**Trigger:** "halo home", "/halo-home", "halo orders", "halo sales", "halo inventory", "halo customers", "halo refunds", "halo revenue", "halo subscriptions", "what came in today", "halo digest", "run digest", "daily digest", "run inventory check", "inventory status", "abandoned checkouts", "discount code", "refill due", "who needs to reorder"
+**Trigger:** "halo home", "/halo-home", "halo orders", "halo sales", "halo inventory", "halo customers", "halo refunds", "halo revenue", "halo subscriptions", "what came in today", "halo digest", "run digest", "daily digest", "run inventory check", "inventory status", "abandoned checkouts", "discount code", "refill due", "who needs to reorder", "which orders contain [SKU/product]", "who ordered [product]", "which orders used [code]", "who redeemed [code]", "who was charged for subscriptions today", "subscription shipping charges", "who needs a shipping refund"
 **Store:** homewithhalo.myshopify.com
 **MCP Server:** `shopify` (always-on via `.mcp.json`)
 **SOP:** `references/sops/halo-home-ops.md`
@@ -342,6 +342,50 @@ Note: No tagging system yet — reason cannot be determined from order data alon
 **Step 1** — `mcp__shopify__get-products` with `limit: 50`
 
 **Step 2** — Group by category (Shower / Sleep / Bundles) and output clean catalog with prices and SKUs.
+
+---
+
+### 9. Order Search by SKU / Product
+
+**Triggers:** "which orders contain [SKU]", "who ordered [product]", "show orders with SH-HR-HEADVITA-LAVENDER-0014", "did anyone order Lavender Bliss today"
+
+**Step 1** — `mcp__shopify__get-orders` over the date range (default last 30 days; honor any date range in the question), `status: any`, `limit: 250`.
+**Step 2** — Filter orders where any line item's `sku` equals/contains the SKU, or `title` contains the product name. Return order #, customer email, date, fulfillment status, matched items.
+**Note:** single fetch caps at 250 orders — for wide historical ranges, narrow the date window.
+
+---
+
+### 10. Orders by Discount Code
+
+**Triggers:** "which orders used DIVINE20", "who redeemed WELCOME15", "revenue from RELAX15", "how many times was X used (with order details)"
+
+Distinct from **1f Discount Code Lookup** (which only returns validity + usage count). This returns the actual orders.
+
+**Step 1** — `mcp__shopify__get-orders` over the range (default last 90 days), `status: any`, `limit: 250`.
+**Step 2** — Filter to orders whose `discount_codes[].code` is an **exact, case-insensitive match** (never substring — `DIVINE20` must not match `DIVINE2`). Return order #, customer, date, discount amount, fulfillment, and total revenue across matched orders.
+
+---
+
+### 11. Subscription Charges (Smart Refill renewals)
+
+**Triggers:** "who was charged today for filter subscriptions", "today's subscription charges", "which Smart Refill renewals processed this week"
+
+**Step 1** — `mcp__shopify__get-orders` over the range (default today), `status: any`, `limit: 250`.
+**Step 2** — Keep subscription orders: `tags` include subscription/recurring/seal, OR a line item has a `selling_plan_allocation`, OR a line item SKU is in the filter set (`SH-HR-HEADCALCIUM-NA-0013`, `SH-HR-HANDLEPP-NA-0011`, `SH-HR-HEADVITA-LAVENDER-0014`, `SH-HR-FILTERPLAN-0015`).
+**Step 3** — Return customer, order #, charge amount, charge date, last fulfillment date.
+**Note:** Subscription ID and **next charge date** live in **Seal Subscriptions**, not Shopify — state that they aren't available here rather than guessing.
+
+---
+
+### 12. Subscription Shipping Fee Exceptions (the $5 refund report)
+
+**Triggers:** "which filter subscriptions were charged shipping", "subscription orders with shipping charges", "who needs a shipping refund", "were any renewals charged $5 today"
+
+Filter subscriptions must ship free (per T&C). This flags any that weren't.
+
+**Step 1** — `mcp__shopify__get-orders` over the range (default last 7 days), `status: any`, `limit: 250`.
+**Step 2** — Of the subscription orders (see #11), flag any where `shipping_lines` total > 0.
+**Step 3** — Return customer, order #, shipping amount charged, date. If none: "No subscription orders were charged shipping in that range."
 
 ---
 

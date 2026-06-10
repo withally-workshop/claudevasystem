@@ -1,6 +1,6 @@
 ---
 name: halo-home-ops
-description: Run Halo Home store ops queries — sales snapshots, order lookup, inventory status, refund tracking, customer history, subscription list, comped orders, revenue reports, daily digest. Trigger with "halo home", "/halo-home", "halo orders", "halo sales", "halo inventory", "what came in today", "halo revenue", "halo refunds", "halo subscriptions", "run digest", "daily digest", "run inventory check".
+description: Run Halo Home store ops queries — sales snapshots, order lookup, order search by SKU/product, orders by discount code, inventory status, refund tracking, customer history, subscription list, subscription charges, subscription shipping-fee exceptions, comped orders, revenue reports, daily digest. Trigger with "halo home", "/halo-home", "halo orders", "halo sales", "halo inventory", "what came in today", "halo revenue", "halo refunds", "halo subscriptions", "run digest", "daily digest", "run inventory check", "which orders contain [SKU]", "who ordered [product]", "which orders used [code]", "who was charged for subscriptions today", "which subscriptions were charged shipping".
 metadata:
   short-description: Halo Home Shopify store ops queries
 ---
@@ -32,6 +32,10 @@ Use `mcp__shopify__*` tools directly. The `shopify` MCP server is always-on.
 | Customer history | `mcp__shopify__get-customers` + `get-orders` |
 | Refund tracking | `mcp__shopify__get-orders` with `query: "financial_status:refunded"` |
 | Subscription (refill plan) customers | `mcp__shopify__get-orders` with `query: "sku:SH-HR-FILTERPLAN-0015"` |
+| Order search by SKU / product | `mcp__shopify__get-orders` over range (default 30d), filter `line_items[].sku`/`title`. See #9 in `.claude` skill |
+| Orders by discount code | `mcp__shopify__get-orders` over range (default 90d), filter `discount_codes[].code` **exact** (not substring). See #10 |
+| Subscription charges (Smart Refill) | `mcp__shopify__get-orders` (default today), keep subs (tags/selling_plan/filter SKUs). Sub ID + next charge date are in Seal, not Shopify. See #11 |
+| Subscription shipping-fee exceptions ($5 refund report) | `mcp__shopify__get-orders` (default 7d), of subs flag `shipping_lines` total > 0. See #12 |
 | $0 comped orders | `mcp__shopify__get-orders` with `query: "total_price:0"` |
 | Product catalog | `mcp__shopify__get-products` limit 50 |
 

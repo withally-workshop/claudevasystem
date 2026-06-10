@@ -100,10 +100,15 @@ switch (action) {
   }
   case 'draft_orders': shopifyUrl = BASE + '/draft_orders.json?status=open&limit=50'; break;
   case 'abandoned_checkouts': shopifyUrl = BASE + '/checkouts.json?limit=50'; break;
+  case 'compare_periods': shopifyUrl = BASE + '/orders.json?status=any&limit=250&created_at_min=' + sgtDate(14) + 'T00:00:00+08:00'; break;
   case 'discount_lookup': if (params.code) shopifyUrl = BASE + '/discount_codes/lookup.json?code=' + encodeURIComponent(params.code); break;
   case 'refill_due': { const d105 = sgtDate(105); const d75 = sgtDate(75); shopifyUrl = BASE + '/orders.json?status=any&limit=100&created_at_min=' + d105 + 'T00:00:00+08:00&created_at_max=' + d75 + 'T00:00:00+08:00'; break; }
+  case 'order_by_sku': { const f = params.date_from || sgtDate(30); const t = params.date_to ? '&created_at_max=' + params.date_to + 'T23:59:59+08:00' : ''; shopifyUrl = BASE + '/orders.json?status=any&limit=250&created_at_min=' + f + 'T00:00:00+08:00' + t; break; }
+  case 'orders_by_discount': { const f = params.date_from || sgtDate(90); const t = params.date_to ? '&created_at_max=' + params.date_to + 'T23:59:59+08:00' : ''; shopifyUrl = BASE + '/orders.json?status=any&limit=250&created_at_min=' + f + 'T00:00:00+08:00' + t; break; }
+  case 'subscription_charges_today': { const f = params.date_from || sgtDate(); const t = params.date_to ? '&created_at_max=' + params.date_to + 'T23:59:59+08:00' : ''; shopifyUrl = BASE + '/orders.json?status=any&limit=250&created_at_min=' + f + 'T00:00:00+08:00' + t; break; }
+  case 'subscription_shipping_exceptions': { const f = params.date_from || sgtDate(7); const t = params.date_to ? '&created_at_max=' + params.date_to + 'T23:59:59+08:00' : ''; shopifyUrl = BASE + '/orders.json?status=any&limit=250&created_at_min=' + f + 'T00:00:00+08:00' + t; break; }
 }
-return { json: { shopifyUrl, action, originalQuestion, channel, threadTs, threadContext } };
+return { json: { shopifyUrl, action, params, originalQuestion, channel, threadTs, threadContext } };
 `.trim();
 
 // ─── n7: Build Claude Prompt ──────────────────────────────────────────────────
@@ -113,6 +118,14 @@ return { json: { shopifyUrl, action, originalQuestion, channel, threadTs, thread
 const BUILD_CLAUDE_PROMPT_CODE = `
 const urlNode = $('Build Shopify URL').item.json;
 let dataSection = '';
+
+const FILTER_SKUS = ['SH-HR-HEADCALCIUM-NA-0013','SH-HR-HANDLEPP-NA-0011','SH-HR-HEADVITA-LAVENDER-0014','SH-HR-FILTERPLAN-0015'];
+function isSubOrder(o) {
+  const tags = (o.tags || '').toLowerCase();
+  if (tags.includes('subscription') || tags.includes('recurring') || tags.includes('seal')) return true;
+  return (o.line_items || []).some(li => li.selling_plan_allocation || (li.sku && FILTER_SKUS.includes(li.sku)));
+}
+function shipTotal(o) { return (o.shipping_lines || []).reduce((s, sl) => s + parseFloat(sl.price || 0), 0); }
 
 if (urlNode.action === 'run_inventory') {
   const products = ($json.products || []);
@@ -138,6 +151,63 @@ if (urlNode.action === 'run_inventory') {
     '\\n\\nOUT OF STOCK:\\n' + (outOfStock.length ? outOfStock.join('\\n') : 'none') +
     (lowStock.length ? '\\n\\nLOW STOCK (<10 units):\\n' + lowStock.join('\\n') : '') +
     (flags.length ? '\\n\\nFLAGS:\\n' + flags.join('\\n') : '');
+} else if (urlNode.action === 'compare_periods') {
+  const allOrders = ($json.orders || []);
+  const cutoff = new Date(Date.now() - 7 * 86400000);
+  const tw = allOrders.filter(o => new Date(o.created_at) >= cutoff);
+  const lw = allOrders.filter(o => new Date(o.created_at) < cutoff);
+  function calcM(orders) {
+    const rev = orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
+    const cnt = orders.length;
+    const aov = cnt > 0 ? rev / cnt : 0;
+    const refunds = orders.filter(o => o.financial_status === 'refunded').length;
+    const pm = {};
+    for (const o of orders) for (const li of (o.line_items || [])) pm[li.title] = (pm[li.title] || 0) + li.quantity;
+    const top = Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([t,q])=>t+' x'+q);
+    return { revenue: rev.toFixed(2), orders: cnt, aov: aov.toFixed(2), refunds, top_products: top };
+  }
+  function pct(c, p) { if (!p) return c > 0 ? '+100%' : '0%'; const d=((c-p)/p*100).toFixed(0); return (d>=0?'+':'')+d+'%'; }
+  const twM = calcM(tw), lwM = calcM(lw);
+  dataSection = 'THIS WEEK (last 7 days):\\n' + JSON.stringify(twM) +
+    '\\n\\nLAST WEEK (7-14 days ago):\\n' + JSON.stringify(lwM) +
+    '\\n\\nCHANGES:\\nRevenue: ' + pct(parseFloat(twM.revenue), parseFloat(lwM.revenue)) +
+    ' | Orders: ' + pct(twM.orders, lwM.orders) +
+    ' | AOV: ' + pct(parseFloat(twM.aov), parseFloat(lwM.aov));
+} else if (urlNode.action === 'order_by_sku') {
+  const orders = ($json.orders || []);
+  const p = urlNode.params || {};
+  const term = (p.sku || p.product || '').toLowerCase().trim();
+  function liMatch(li) { return term && (((li.sku || '').toLowerCase() === term) || ((li.sku || '').toLowerCase().includes(term)) || ((li.title || '').toLowerCase().includes(term))); }
+  const matches = orders.filter(o => (o.line_items || []).some(liMatch));
+  const rows = matches.map(o => {
+    const items = (o.line_items || []).filter(liMatch).map(li => li.title + (li.sku ? ' [' + li.sku + ']' : '') + ' x' + li.quantity).join(', ');
+    return '#' + o.order_number + ' | ' + (o.email || 'no email') + ' | ' + (o.created_at || '').split('T')[0] + ' | ' + (o.fulfillment_status || 'unfulfilled') + ' | ' + items;
+  });
+  dataSection = 'SKU/PRODUCT SEARCH: "' + (p.sku || p.product || '(none given)') + '"\\nMatching orders: ' + rows.length + '\\n' + (rows.length ? rows.join('\\n') : 'none');
+} else if (urlNode.action === 'orders_by_discount') {
+  const orders = ($json.orders || []);
+  const code = ((urlNode.params || {}).code || '').toLowerCase().trim();
+  const matches = orders.filter(o => (o.discount_codes || []).some(dc => (dc.code || '').toLowerCase() === code));
+  let revenue = 0;
+  const rows = matches.map(o => {
+    revenue += parseFloat(o.total_price || 0);
+    const amt = (o.discount_codes || []).filter(dc => (dc.code || '').toLowerCase() === code).reduce((s, dc) => s + parseFloat(dc.amount || 0), 0);
+    return '#' + o.order_number + ' | ' + (o.email || 'no email') + ' | ' + (o.created_at || '').split('T')[0] + ' | -$' + amt.toFixed(2) + ' discount | ' + (o.fulfillment_status || 'unfulfilled');
+  });
+  dataSection = 'DISCOUNT CODE SEARCH: "' + ((urlNode.params || {}).code || '(none given)') + '" (exact match)\\nOrders using this code: ' + rows.length + '\\nRevenue from these orders: $' + revenue.toFixed(2) + ' SGD\\n' + (rows.length ? rows.join('\\n') : 'none');
+} else if (urlNode.action === 'subscription_charges_today') {
+  const orders = ($json.orders || []).filter(isSubOrder);
+  const rows = orders.map(o => {
+    const items = (o.line_items || []).filter(li => (li.sku && FILTER_SKUS.includes(li.sku)) || li.selling_plan_allocation).map(li => li.title + ' x' + li.quantity).join(', ');
+    const lastFul = (o.fulfillments && o.fulfillments[0] && o.fulfillments[0].created_at) ? o.fulfillments[0].created_at.split('T')[0] : 'not yet fulfilled';
+    return '#' + o.order_number + ' | ' + (o.email || 'no email') + ' | $' + parseFloat(o.total_price || 0).toFixed(2) + ' SGD | charged ' + (o.created_at || '').split('T')[0] + ' | last fulfilled: ' + lastFul + ' | ' + (items || 'no filter items') + ' | order id ' + o.id;
+  });
+  dataSection = 'SUBSCRIPTION CHARGES\\nSubscription orders in range: ' + rows.length + '\\n' + (rows.length ? rows.join('\\n') : 'none') + '\\n\\nNote: Subscription ID and next charge date live in Seal Subscriptions (not Shopify), so they are not available here.';
+} else if (urlNode.action === 'subscription_shipping_exceptions') {
+  const subs = ($json.orders || []).filter(isSubOrder);
+  const flagged = subs.filter(o => shipTotal(o) > 0);
+  const rows = flagged.map(o => '#' + o.order_number + ' | ' + (o.email || 'no email') + ' | shipping charged: $' + shipTotal(o).toFixed(2) + ' SGD | ' + (o.created_at || '').split('T')[0]);
+  dataSection = 'SUBSCRIPTION SHIPPING FEE EXCEPTIONS (filter subscriptions should ship free)\\nSubscription orders checked: ' + subs.length + '\\nWrongly charged shipping: ' + rows.length + '\\n' + (rows.length ? rows.join('\\n') : 'none — all subscription orders in range shipped free');
 } else if (urlNode.action !== 'general') {
   dataSection = 'Shopify data:\\n' + JSON.stringify($json).slice(0, 8000);
 }
@@ -159,8 +229,8 @@ return { json: { responseText: text.trim(), channel: promptNode.channel, threadT
 
 const INTENT_SYSTEM_PROMPT = `You are an intent classifier for Halo Home Shopify store ops.
 Return ONLY valid JSON, no markdown fences:
-{"action":"orders_today|orders_week|orders_month|order_lookup_email|order_lookup_number|order_status|unfulfilled_orders|draft_orders|abandoned_checkouts|discount_lookup|refill_due|inventory|product_availability|refunds|customer_history|subscriptions|comped_orders|revenue_report|product_catalog|run_digest|run_inventory|general","params":{"email":"if mentioned","order_number":"digits only","code":"discount code if mentioned","period":"today|week|month","date_from":"YYYY-MM-DD","date_to":"YYYY-MM-DD"},"original_question":"verbatim"}
-orders_today=today's orders, orders_week=this week, orders_month=this month, order_lookup_email=find by email, order_lookup_number=find by order#, order_status=has a specific order shipped/tracking info, unfulfilled_orders=what's unshipped, draft_orders=open quotes/unpaid drafts, abandoned_checkouts=abandoned carts/people who didn't complete checkout, discount_lookup=check if a discount code is valid and how many times used (put code in params.code), refill_due=customers due for filter refill (bought filters 75-105 days ago), inventory=all stock, product_availability=specific item stock, refunds=refunded orders, customer_history=history by email, subscriptions=refill plan orders, comped_orders=$0 orders, revenue_report=revenue summary, product_catalog=list products, run_digest=run the daily digest, run_inventory=full inventory status, general=no Shopify needed.`;
+{"action":"orders_today|orders_week|orders_month|order_lookup_email|order_lookup_number|order_status|unfulfilled_orders|draft_orders|abandoned_checkouts|discount_lookup|orders_by_discount|refill_due|compare_periods|inventory|product_availability|refunds|customer_history|subscriptions|subscription_charges_today|subscription_shipping_exceptions|order_by_sku|comped_orders|revenue_report|product_catalog|run_digest|run_inventory|general","params":{"email":"if mentioned","order_number":"digits only","code":"discount code if mentioned","sku":"product SKU if mentioned","product":"product name if mentioned","period":"today|week|month","date_from":"YYYY-MM-DD","date_to":"YYYY-MM-DD"},"original_question":"verbatim"}
+orders_today=today's orders, orders_week=this week, orders_month=this month, order_lookup_email=find by email, order_lookup_number=find by order#, order_status=has a specific order shipped/tracking info, unfulfilled_orders=what's unshipped, draft_orders=open quotes/unpaid drafts, abandoned_checkouts=abandoned carts/people who didn't complete checkout, discount_lookup=check if a discount code is valid and how many times used — validity only, NOT which orders used it (put code in params.code), orders_by_discount=which orders USED/redeemed a discount code, or revenue from a code (put code in params.code), refill_due=customers due for filter refill (bought filters 75-105 days ago), compare_periods=how did we do vs last week / this week vs last week / performance comparison, inventory=all stock, product_availability=specific item stock, refunds=refunded orders, customer_history=history by email, subscriptions=refill plan orders, subscription_charges_today=who was charged today/in a date range for their filter subscription or Smart Refill renewal, subscription_shipping_exceptions=subscription orders wrongly charged shipping / which filter subscriptions paid shipping / who needs a shipping refund, order_by_sku=find orders containing a specific SKU or product name (put SKU in params.sku, product name in params.product), comped_orders=$0 orders, revenue_report=revenue summary, product_catalog=list products, run_digest=run the daily digest, run_inventory=full inventory status, general=no Shopify needed.`;
 
 const FORMAT_SYSTEM_PROMPT = `You are Halo AI, Slack ops assistant for Halo Home (homewithhalo.myshopify.com).
 Currency: SGD. Timezone: UTC+8. Bestseller: Brushed Chrome Showerhead $125. Refill plan $33/90 days.
@@ -170,6 +240,45 @@ Subscriptions: only show orders with SKU SH-HR-FILTERPLAN-0015.
 Comped: only show orders where total_price="0.00".
 Empty Shopify array = "No [items] found for that period." Never say you lack access.
 Max 40 lines.
+
+When action=compare_periods, format as:
+*This Week vs Last Week*
+─────────────────────────────
+Revenue:   *$X,XXX SGD* ↑X% (was $X,XXX)
+Orders:    *XX* ↑X% (was XX)
+AOV:       *$XXX SGD* ↑X% (was $XXX)
+Refunds:   X orders
+
+Top products this week:
+  [product] x[units]
+Use ↑ for positive change, ↓ for negative. SGD currency.
+
+When action=order_by_sku, format as:
+*SKU Search: [sku/product] — X orders*
+─────────────────────────────
+#XXXX  [email]  [date]  [fulfillment]  [items]
+If none: "No orders found containing that SKU/product in the date range."
+
+When action=orders_by_discount, format as:
+*Discount Code [CODE] — X orders*
+─────────────────────────────
+#XXXX  [email]  [date]  -$XX discount  [fulfillment]
+Total revenue from these orders: *$X,XXX SGD*
+If none: "No orders used that code in the date range." Only count exact-match orders from the data — never guess.
+
+When action=subscription_charges_today, format as:
+*Subscription Charges — X orders*
+─────────────────────────────
+#XXXX  [email]  *$XX SGD*  charged [date]  last fulfilled [date]
+If none: "No subscription charges in that range."
+Always include the note that Subscription ID and next charge date aren't available from Shopify (they're in Seal).
+
+When action=subscription_shipping_exceptions, format as:
+*Subscription Shipping Fee Exceptions — X flagged*
+─────────────────────────────
+#XXXX  [email]  charged *$X.XX SGD* shipping  [date]
+These subscriptions should ship free — flag for refund.
+If none: "No subscription orders were charged shipping in that range. ✓"
 
 When action=abandoned_checkouts, format as:
 *Abandoned Checkouts — X carts*

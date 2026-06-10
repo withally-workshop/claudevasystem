@@ -53,6 +53,26 @@
 - **Query:** `get-orders` with `query: "total_price:0"`
 - **Note:** No tagging system — reason for comp cannot be determined from order data alone
 
+### Order Search by SKU / Product
+- **Ask:** "which orders contain SH-HR-HEADVITA-LAVENDER-0014", "who ordered Lavender Bliss"
+- **Query:** `get-orders` over range (default 30d), filter `line_items[].sku`/`title`
+- **Output:** order #, email, date, fulfillment status, matched items. Single fetch caps at 250 — narrow the date range for wide history.
+
+### Orders by Discount Code
+- **Ask:** "which orders used DIVINE20", "revenue from RELAX15"
+- **Query:** `get-orders` over range (default 90d), filter `discount_codes[].code` **exact, case-insensitive** (never substring — DIVINE20 ≠ DIVINE2)
+- **Output:** order #, customer, date, discount amount, fulfillment, total revenue. Distinct from discount-code lookup (validity/usage only).
+
+### Subscription Charges (Smart Refill)
+- **Ask:** "who was charged today for filter subscriptions"
+- **Query:** `get-orders` (default today), keep subs (tags/selling_plan/filter SKUs)
+- **Output:** customer, order #, charge amount, date, last fulfillment. Subscription ID + next charge date live in **Seal**, not Shopify.
+
+### Subscription Shipping-Fee Exceptions (the $5 refund report)
+- **Ask:** "which subscriptions were charged shipping", "who needs a shipping refund"
+- **Query:** `get-orders` (default 7d), of subs flag `shipping_lines` total > 0
+- **Output:** customer, order #, shipping charged, date. Filter subscriptions must ship free per T&C.
+
 ---
 
 ## Key Store Data
@@ -85,7 +105,7 @@
 
 ### VA Slack Bot
 - **Trigger:** @mention in #halo-home
-- **Intent types handled:** sales snapshot, order lookup by email, order lookup by number, inventory check, specific product availability, refund check, customer history, subscription list, comped orders, revenue report, product info, general question
+- **Intent types handled:** sales snapshot, order lookup by email, order lookup by number, inventory check, specific product availability, refund check, customer history, subscription list, comped orders, revenue report, product info, order search by SKU/product, orders by discount code, week-vs-week comparison, subscription charges, subscription shipping-fee exceptions, general question
 - **Deploy:** `n8n-workflows/deploy-halo-home-slack-bot.js`
 - **Setup required:** Slack app Event Subscriptions → `app_mention` → webhook URL `https://noatakhel.app.n8n.cloud/webhook/halo-home-bot`
 
