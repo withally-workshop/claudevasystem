@@ -101,7 +101,7 @@ node n8n-workflows/deploy-crave-status-sync.js
 
 Runs two parallel detection paths every hour: (1) scans `noa@kravemedia.co` for Airwallex deposit notifications + John's forwarded receipts, and (2) polls the Airwallex invoice API directly for SWIFT/bank-transfer payments. Uses **strict matching** — invoice number OR (amount + currency + client name fuzzy match). Anything with payment signal but no high-confidence match routes to a `needs review` Slack alert instead of writing the tracker. Cross-run idempotency via `processedEmailIds` (last 500) prevents re-processing.
 
-**Does NOT mark invoices paid in Airwallex.** That step was removed in May 2026 after an incident where the matcher mistakenly auto-marked a wrong invoice paid in Airwallex (which has no unpay API). Tracker is now the single source of truth that the workflow writes to. Partial payments set Col J `Partial Payment` and update Col Q; full payments set Col J `Payment Complete`. Column N is formula-only.
+**Airwallex mark-as-paid is confidence-gated + verified (v7, 2026-06-11).** Unconditional auto-mark was removed in May 2026 after the matcher mistakenly marked a wrong invoice paid (Airwallex has no unpay API). v7 re-introduces it safely: only high-confidence full payments (invoice-number match, or exact full-amount + client match) are auto-marked, and only after re-fetching the live Airwallex invoice and verifying currency, total, and unpaid status. Everything else keeps the tracker write and gets an explicit "NEEDS MANUAL mark-as-paid" line in the Slack alert. Partial payments set Col J `Partial Payment` and update Col Q; full payments set Col J `Payment Complete`. Column N is formula-only.
 
 **Workflow ID:** `NurOLZkg3J6rur5Q`
 
@@ -119,6 +119,7 @@ node n8n-workflows/deploy-payment-detection.js
 - `Gmail account` - `noa@kravemedia.co` OAuth2
 - `Google Sheets account` - access to Client Invoice Tracker
 - `Krave Slack Bot` - bot token for `#payments-invoices-updates`
+- `Airwallex API (login headers)` - `httpCustomAuth` (ID `Ry37bj6SFVD1zcd0`), used by the v7 guarded mark-as-paid path
 
 ---
 

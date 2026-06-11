@@ -8,7 +8,7 @@
 ## Purpose
 Scan noa@kravemedia.co for Airwallex deposit notifications **and** John's forwarded receipts received since the last run, match each deposit to an open invoice in the Client Invoice Tracker using **strict client-name + amount matching**, update statuses, and notify the team in Slack. Eliminates the manual "check with Noa" loop for Amanda.
 
-**Important (post-May-2026 hardening):** the n8n workflow no longer auto-marks invoices paid in Airwallex. The tracker is the only source of truth this skill writes to. Airwallex side reconciliation is manual. See WORKFLOWS.md "Hardening Notes" for the full incident postmortem.
+**Airwallex mark-as-paid (v7, 2026-06-11):** the n8n workflow auto-marks invoices paid in Airwallex **only** behind a confidence gate plus a runtime verification guard (re-fetch the live Airwallex invoice; require currency + total match and not already paid). Anything below the gate or failing verification keeps the tracker write but flags "NEEDS MANUAL mark-as-paid" in the Slack alert. Unconditional auto-mark stays banned (May 2026 WELLE incident — see WORKFLOWS.md "Hardening Notes" v4 and v7).
 
 ---
 
@@ -142,11 +142,19 @@ For each confirmed full payment, update the row:
 
 **Do NOT write to Column N** — it is formula-driven.
 
-### Step 5 — (Removed) Airwallex Mark Paid
+### Step 5b — Airwallex Mark Paid (v7: confidence-gated + verified)
 
-The n8n workflow no longer calls `airwallex_mark_paid` automatically. After the May 2026 incident, that node was deleted because Airwallex has no unpay endpoint and a wrong mark-paid required a credit-note-and-replace process to undo. The workflow updates the tracker only; Airwallex side reconciliation is a manual step John handles when needed.
+The n8n workflow re-introduced `mark_as_paid` on 2026-06-11, gated twice:
 
-For **manual skill runs** where you've human-verified the payment, you may still call `airwallex_mark_paid` deliberately — but never automate it from a parsed email.
+**Confidence gate (`awMarkEligible`, computed in the matcher)** — eligible only when ALL hold:
+- Full payment (not partial), non-Osome, tracker row has an Airwallex Invoice ID
+- Match confidence is `high` / `high-tracker-amount` (invoice-number match), OR `medium-client` where a single payment settles the exact full invoice amount (Col Q was 0 and |received − Col G| < $0.01)
+
+**Runtime verification guard (`Airwallex Guarded Mark Paid` node)** — before writing, re-fetches the live Airwallex invoice and requires: currency matches the deposit, `total_amount` matches the tracker amount (±0.01), and `payment_status` is not already `PAID`/void. Any mismatch, auth failure, or API error → no write, Slack flags "NEEDS MANUAL mark-as-paid — [reason]".
+
+Auth uses the n8n credential `Airwallex API (login headers)` (`httpCustomAuth`, ID `Ry37bj6SFVD1zcd0`) via the `Airwallex Auth` HTTP Request node — no API keys in workflow code. (Code nodes on this instance lack `this.helpers.requestWithAuthentication`; only `this.helpers.httpRequest` works.)
+
+For **manual skill runs** where you've human-verified the payment, you may call `airwallex_mark_paid` deliberately — but never automate it from a parsed email without the gate + guard above.
 
 ### Step 6 — Post Slack Alert
 
@@ -167,6 +175,7 @@ For **manual skill runs** where you've human-verified the payment, you may still
 • Amount: [Amount] [Currency]
 • Confirmed: [Date from email]
 • Tracker: Updated to Payment Complete
+• Airwallex: [✅ marked paid automatically (…) | already PAID in Airwallex | ⚠️ NEEDS MANUAL mark-as-paid — reason]
 ```
 
 **Needs review (parsed signal but no high-confidence match):**
@@ -206,7 +215,7 @@ If `mcp__gmail-noa__gmail_search_messages` returns an auth error:
 - **Time-windowed scanning (n8n):** the workflow uses `$getWorkflowStaticData('global').lastRunTs` to track last-run Unix timestamp; first run falls back to `newer_than:1d`. **Never reset `lastRunTs` to backfill** — the email-ID dedup log is the supported backfill mechanism.
 - **Manual skill runs:** use `newer_than:1d` and verify each match manually.
 - **Idempotency:** `staticData.processedEmailIds` (last 500) prevents reprocessing the same email twice across runs.
-- **No auto Airwallex mark-paid:** removed in May 2026 after the WELLE incident. Tracker-only writes.
+- **Airwallex mark-paid (v7):** auto-marks only behind the confidence gate + live verification guard (Step 5b). Unconditional auto-mark stays banned (May 2026 WELLE incident). Slack always reports the Airwallex outcome — no silent gaps.
 - **Partial payments:** detected by comparing received amount to Col G after accounting for Col Q. Sets Col J `Partial Payment` and updates Col Q.
 - **Airwallex API poll:** runs in parallel with the Gmail scan. Uses `this.helpers.httpRequest` (the v3 fix — `$helpers` was undefined). Polls `GET /api/v1/invoices/{id}` for each open Airwallex tracker row.
 - **Second payment handling:** when a subsequent payment arrives, accumulates Col Q and flips to `Payment Complete` when remaining ≤ $1.

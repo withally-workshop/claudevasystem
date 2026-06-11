@@ -41,6 +41,20 @@
 //       amount_received, collected_amount candidates; added status-based
 //       fallback — if status is PAID/COMPLETED/SETTLED and all field
 //       candidates are null, uses invoice total as paid amount.
+//   - v7 CONFIDENCE-GATED MARK-AS-PAID (2026-06-11):
+//       patch-payment-detection-aw-markpaid.js. n5 gained awMarkEligible/
+//       awEligibilityReason (eligible: invoice-number match, or medium-client
+//       with exact single-payment full settle). New nodes on the full-payment
+//       non-Osome path: n27 'Airwallex Auth' (HTTP Request, httpCustomAuth
+//       credential Ry37bj6SFVD1zcd0 — creds in n8n credential store, NOT
+//       inlined) → n26 'Airwallex Guarded Mark Paid' (Code: GET live invoice,
+//       verify currency/total/unpaid status, then mark_as_paid; fails closed
+//       to a 'NEEDS MANUAL' Slack flag). n10 Slack text now always carries an
+//       '• Airwallex: <status>' line. NOTE: code nodes on this instance lack
+//       this.helpers.requestWithAuthentication (only httpRequest works) —
+//       auth must stay in a regular HTTP Request node.
+//       The n7/n8 Airwallex Auth + Mark Paid nodes DEFINED BELOW are the old
+//       pre-v4 unconditional versions — do NOT resurrect them as-is.
 //
 // Re-running this script as-is would OVERWRITE the hardened workflow
 // with the old vulnerable topology. If you need to redeploy from

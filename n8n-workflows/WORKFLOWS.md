@@ -120,7 +120,7 @@
 
 ### Purpose
 
-Detects client payments and updates the tracker. Runs three detection paths in parallel: (1) scans `noa@kravemedia.co` for Airwallex deposit notifications + John's forwarded receipts, (2) polls the Airwallex invoice API directly — catching SWIFT bank-transfer payments that may not generate an email, and (3) scans for client-reply payment confirmations on non-Airwallex bank flows (added 2026-05-07). Path (3) routes only to `Slack Needs Review` and never auto-marks paid. Matches deposits to open invoices using **strict client-name + amount/currency matching**, handles partial payments, and posts Slack alerts. **Does NOT mark invoices paid in Airwallex** (that step was removed in May 2026 after an incident — see Hardening Notes below).
+Detects client payments and updates the tracker. Runs three detection paths in parallel: (1) scans `noa@kravemedia.co` for Airwallex deposit notifications + John's forwarded receipts, (2) polls the Airwallex invoice API directly — catching SWIFT bank-transfer payments that may not generate an email, and (3) scans for client-reply payment confirmations on non-Airwallex bank flows (added 2026-05-07). Path (3) routes only to `Slack Needs Review` and never auto-marks paid. Matches deposits to open invoices using **strict client-name + amount/currency matching**, handles partial payments, and posts Slack alerts. **Marks invoices paid in Airwallex only behind a confidence gate + live verification guard** (v7, 2026-06-11): high-confidence full payments are auto-marked after re-verifying amount/currency/status against the live Airwallex record; everything else gets an explicit "NEEDS MANUAL mark-as-paid" line in the Slack alert. Unconditional auto-mark was removed in May 2026 after an incident — see Hardening Notes below.
 
 ### Triggers
 
@@ -168,10 +168,14 @@ Detects client payments and updates the tracker. Runs three detection paths in p
               Tracker]         /        \
                    |        TRUE         FALSE
             [Slack Partial    |             |
-              Alert]    [Update Osome]  [Update Invoice Status]   ← directly, no
-                              |             |                        Airwallex Mark Paid
-                        [Slack Osome]  [Slack Payment Confirmed]
-                        [Confirmed]
+              Alert]    [Update Osome]  [Update Invoice Status]
+                              |             |
+                        [Slack Osome]  [Airwallex Auth]            ← httpCustomAuth credential
+                        [Confirmed]         |                         (no secrets in code)
+                                       [Airwallex Guarded Mark Paid] ← v7: confidence gate +
+                                            |                         live verify, else manual flag
+                                       [Slack Payment Confirmed]    ← always carries
+                                                                      "• Airwallex: <status>" line
 ```
 
 ### Matching Logic (strict — May 2026)
@@ -218,6 +222,13 @@ In May 2026 the matcher's amount-only fallback wrongly assigned a Little Saints 
 **v6.2 (recursive MIME traversal — 2026-05-08):**
 13. **Recursive MIME walker in Parse All Emails (`n3`).** Replaced the 2-level nested for-loop with a `findBodyParts()` recursive function that walks the MIME tree to any depth. Handles Airwallex invoice-paid notification emails that nest `text/html` at level 3+. Does not handle the deposit confirmation email type (empty body) — that is v6.3's scope. Extraction order: `text/plain` → `text/html` (deepest match at any nesting level) → PDF attachment (v6.3) → `msg.snippet`.
 
+**v7 (confidence-gated mark-as-paid — 2026-06-11):**
+16. **Guarded Airwallex mark-as-paid re-introduced.** Trigger: 2026-06-10 AMPLIFIED MARKETING `INV-AG2H2WFA-0001` — exact-amount match updated the tracker but left Airwallex unpaid with no notification that a manual step was needed (the v4 over-correction). Patch script: `n8n-workflows/patch-payment-detection-aw-markpaid.js`. Design (decision: John, 2026-06-11):
+    - **Confidence gate** (in `Match Deposits To Invoices`, `awMarkEligible`): eligible only for full (non-partial), non-Osome payments where the match is `high`/`high-tracker-amount` (invoice-number match) OR `medium-client` with a single payment settling the exact full invoice amount (`existingAmountPaid === 0` and `|amount − invoiceAmount| < 0.01`).
+    - **Runtime verification guard** (`Airwallex Guarded Mark Paid` node): before any write, re-fetches the live Airwallex invoice and requires currency match, `total_amount` match vs tracker (±0.01), and `payment_status` not already `PAID`/void. Any mismatch or API error → no write, manual flag. This directly addresses the WELLE failure mode: a wrongly-matched deposit cannot mark a different-amount invoice.
+    - **Auth via credential store** (`Airwallex Auth` HTTP Request node, `httpCustomAuth` credential `Ry37bj6SFVD1zcd0`) — no API keys in workflow code. NOTE: Code nodes on this instance do NOT have `this.helpers.requestWithAuthentication` (verified 2026-06-11; the v6.1/v6.3 usages in `n3` are inside silent try/catch) — only `this.helpers.httpRequest` works, so auth must live in a regular node.
+    - **Visibility:** `Slack Payment Confirmed` always ends with `• Airwallex: <status>` — "marked paid automatically (…)", "already PAID in Airwallex", or "⚠️ NEEDS MANUAL mark-as-paid — <reason>". No silent Airwallex gaps.
+
 ### Partial Payment Detection
 
 After a match, the workflow checks if the received amount covers the full invoice:
@@ -251,8 +262,9 @@ On full payment confirmed (not partial), after `Update Invoice Status` / `Update
 
 | Outcome | Action |
 |---------|--------|
-| Full payment matched, Airwallex invoice | Sheets Col J → Payment Complete, Col M date, Col Q = full amount, Slack ✅ |
-| Full payment matched, Osome invoice | Same as above (no separate Airwallex side effect) |
+| Full payment matched, Airwallex invoice, auto-mark eligible + verified | Sheets Col J → Payment Complete, Col M date, Col Q = full amount, Airwallex `mark_as_paid`, Slack ✅ with "Airwallex: marked paid automatically" |
+| Full payment matched, Airwallex invoice, NOT eligible or guard mismatch | Sheets updates as above, NO Airwallex write, Slack ✅ with "⚠️ Airwallex: NEEDS MANUAL mark-as-paid — [reason]" |
+| Full payment matched, Osome invoice | Same Sheets updates (no Airwallex record exists) |
 | Partial payment matched | Sheets Col J → Partial Payment, Col M date, Col Q = cumulative paid, Slack 🔄 |
 | Email has signal but matcher can't disambiguate | Slack ⚠️ "needs review" — no tracker write |
 | No emails / no API signals | Silent |
@@ -266,7 +278,9 @@ On full payment confirmed (not partial), after `Update Invoice Status` / `Update
 | Airwallex API poll auth fails | `continueOnFail: true` — returns empty emails array; Gmail scan still runs |
 | Per-invoice API fetch fails | Silent — that invoice skipped in poll; Gmail scan is fallback |
 | Airwallex `paid_amount` field missing | Poll returns nothing for that invoice — no false positives |
-| Airwallex mark paid fails | `continueOnFail: true` — Sheets still update |
+| Airwallex Auth (login) fails | `continueOnFail: true` — guard node sees no token, flags "NEEDS MANUAL mark-as-paid — auth failed"; Sheets already updated |
+| Guard verification mismatch (currency/amount/status) | No Airwallex write — Slack flags "NEEDS MANUAL" with the specific mismatch reason |
+| Airwallex `mark_as_paid` call fails | Caught inside guard node — Slack flags "NEEDS MANUAL mark-as-paid — Airwallex API error"; Sheets already updated |
 | Gmail auth error | Workflow errors and n8n emails the instance owner |
 
 ---
@@ -805,16 +819,14 @@ Update `TIKTOK_ACTOR_ID` and `INSTAGRAM_ACTOR_ID` in the deploy script if differ
 
 ### Airwallex
 
-Hardcoded in the Payment Detection HTTP Request nodes:
-
 | Field | Value |
 |-------|-------|
-| `x-client-id` | `JaQA4uJ1SDSBkTdFigT9sw` |
-| `x-api-key` | `5611f8e1...` |
+| n8n credential | `Airwallex API (login headers)` — type `httpCustomAuth`, ID `Ry37bj6SFVD1zcd0` (created 2026-06-11) |
+| Used by | Payment Detection `Airwallex Auth` node (v7 guarded mark-as-paid path) |
 | Auth endpoint | `POST https://api.airwallex.com/api/v1/authentication/login` |
 | Mark paid endpoint | `POST https://api.airwallex.com/api/v1/invoices/{id}/mark_as_paid` |
 
-> Airwallex credentials are hardcoded in the workflow deploy logic, not stored in n8n credentials. If the API key rotates, update both the deploy script and the live workflow nodes.
+> The actual client-id/api-key live in `.env` (gitignored) and in the n8n credential store — never in committed files. **Legacy exception:** the `Poll Airwallex Invoices` code node (n17) still has creds inlined from deploy-time interpolation; on the next key rotation, migrate it to the `httpCustomAuth` credential pattern used by `Airwallex Auth` instead of re-inlining. (Previous key was publicly exposed Apr–Jun 2026 and rotated 2026-06-10.)
 
 ---
 
@@ -1039,9 +1051,9 @@ curl -s -X POST "https://noatakhel.app.n8n.cloud/webhook/krave-weekly-invoice-su
   -H "Content-Type: application/json" -d '{}'
 ```
 
-### Payment matched but Airwallex mark paid failed
+### Payment matched but Airwallex not auto-marked (v7)
 
-The Sheets row still shows `Payment Complete` and Slack still shows the confirmation. Log into Airwallex and mark the invoice paid manually.
+The Slack ✅ confirmation's `• Airwallex:` line says why: below the confidence gate, a verification mismatch (currency/amount/status), auth failure, or an API error. The Sheets row still shows `Payment Complete`. Resolution: verify the deposit against the invoice, then mark paid manually in Airwallex (or via `airwallex_mark_paid` MCP after human verification). If the line says "marked paid automatically", no action is needed.
 
 ### Missing client email in tracker
 

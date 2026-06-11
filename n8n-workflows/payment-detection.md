@@ -1,6 +1,6 @@
 # n8n Workflow: Payment Detection
 
-> **Stale design doc.** This file describes the original V1 design. The live workflow was hardened in May 2026 (v4) — see `WORKFLOWS.md` "Workflow 1 - Payment Detection" → "Hardening Notes" for current behavior including: removed Airwallex Mark Paid node, strict client-name matching, idempotency via `processedEmailIds`, and the Needs Review Slack branch.
+> **Stale design doc.** This file describes the original V1 design. The live workflow was hardened in May 2026 (v4) and again in June 2026 (v7) — see `WORKFLOWS.md` "Workflow 1 - Payment Detection" → "Hardening Notes" for current behavior including: strict client-name matching, idempotency via `processedEmailIds`, the Needs Review Slack branch, and the v7 confidence-gated + verification-guarded Airwallex mark-as-paid (replacing both V1's unconditional auto-mark and v4's full removal).
 
 **Purpose:** Hourly scan of noa@kravemedia.co for Airwallex deposit notifications + John's forwarded receipts → match to open invoices via strict client-name matching → update Client Invoice Tracker → Slack notify (or post to Needs Review).
 **Schedule:** Hourly (`0 * * * *`)

@@ -32,10 +32,11 @@ Scan noa@kravemedia.co for Airwallex deposit notifications and John's forwarded 
 3. Match against open invoices — strict: INV# match OR amount+currency+client-name fuzzy
 4. Silently dedup already-reconciled deposits (completed rows, 90-day window for PDF-only emails)
 5. Update Col J/M/Q in tracker; post Slack alert (✅ full, 🔄 partial, ⚠️ needs review)
+6. v7 (2026-06-11): for high-confidence full payments, auto-mark the invoice paid in Airwallex after re-verifying amount/currency/status against the live Airwallex record; otherwise the Slack ✅ alert carries "⚠️ Airwallex: NEEDS MANUAL mark-as-paid — [reason]"
 
 ## Codex Invocation Notes
 
 - Trigger the n8n webhook for automated runs
 - For manual runs: use `.claude/skills/payment-detection/SKILL.md` step-by-step via Gmail MCP + Sheets MCP
-- Do not call `airwallex_mark_paid` automatically — tracker writes only (post-May-2026 hardening)
+- In manual runs, call `airwallex_mark_paid` only after human-verifying the payment against the invoice (the n8n workflow auto-marks only behind its confidence gate + live verification guard — v7)
 - Shopify deposits are NOT client invoice payments — always skip

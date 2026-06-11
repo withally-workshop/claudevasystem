@@ -63,8 +63,8 @@ On match:
 - Update Client Invoice Tracker Column J `Payment Status` to `Payment Complete` for full payments or `Partial Payment` for partial payments.
 - Update Column M `Payment Confirmed Date`.
 - Update Column Q `Amount Paid`.
-- Post one deduped confirmation to `#payments-invoices-updates`.
-- Mark the Airwallex invoice paid when applicable.
+- Post one deduped confirmation to `#payments-invoices-updates`, always including an `Airwallex:` status line.
+- Mark the Airwallex invoice paid only for high-confidence full payments (invoice-number match, or exact full-amount + client match) and only after re-verifying currency/total/unpaid status against the live Airwallex record (v7, 2026-06-11). Anything else is flagged `NEEDS MANUAL mark-as-paid` in the Slack confirmation and reconciled manually.
 
 Payment detection only acts on tracker rows whose formula/display Column N `Status` is `Unpaid`, `Overdue`, or blank and whose Column J `Payment Status` is not complete, collections, or draft. Column N is formula-only and must never be written by automations.
 
