@@ -1,6 +1,6 @@
 # Alleah Feedback Round — Status
 
-Last updated: 2026-06-11 (PHT)
+Last updated: 2026-06-11 (PHT) — refund scope decided + relayed
 
 Master plan: `alleah-feedback-response.md` | Open questions doc: `noa-verification-questions.md`
 
@@ -19,9 +19,10 @@ Master plan: `alleah-feedback-response.md` | Open questions doc: `noa-verificati
 ## Waiting on
 | Who | What | Then |
 |-----|------|------|
-| John | Send WhatsApp draft to Noa: refund date-range decision (May only $264.84 / +April $364.84 / full history) | Regenerate final list |
-| Noa | Date-range decision; #3989 outlier; referral terms (live ReferralCandy says $50/$50, Feb terms said $20/$10); Mimi rename vs wording | Prompt edits + list regen |
-| Alleah | Execute refunds in Shopify admin (shipping amount only) once scope confirmed | Exception report confirms cleanup |
+| Noa | #3989 outlier ($24.84 — international rate or bug?); referral terms (live ReferralCandy says $50/$50, Feb terms said $20/$10); Mimi rename vs wording | Prompt edits; release/skip #3989 |
+| Alleah | Execute the 48 × $5 refunds (May 1–Jun 10, $240 SGD, shipping amount only); #3989 on hold | Exception report confirms cleanup |
+
+**Refund scope DECIDED (Noa, 2026-06-11):** May 1 onward only. April and earlier: no proactive refunds, case-by-case if customers ask (flag to John). Relayed to Alleah in the worklist thread (bot msg ts `1781161965.368079`).
 
 ## Key technical facts (verified 2026-06-11)
 - **Shopify app sees only a rolling 60-day order window** — `read_all_orders` not effective. Full-history audit needs the dev-dashboard toggle (Noa/John) or Alleah's admin UI. April 14–30 has 20 more eligible orders ($100); pre-Apr-12 unknown.
