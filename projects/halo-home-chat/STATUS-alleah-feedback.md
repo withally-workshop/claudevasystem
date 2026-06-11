@@ -14,13 +14,13 @@ Master plan: `alleah-feedback-response.md` | Open questions doc: `noa-verificati
 - Mimi explains $109-first-order vs $33-renewal, escalates real renewal overcharges (`4d5ea74`, verified live on /chat)
 - Refund worklist delivered to Alleah in #halo-home-shopify feedback thread (ts `1780967657.532539`): 49 orders May 1–Jun 10, $264.84 SGD (48×$5 + #3989 $24.84 outlier — needs Noa's call, looks like an international rate)
 - Seal $109 fix instructions DM'd to Alleah as John (John↔Alleah DM `D0AM5EJ2NE9`, 2026-06-11)
+- **Seal $109 display FIXED** — Alleah applied the config 2026-06-11 (fixed price $109, change after initial order → $33); verified live on both showerhead products via `/products/{handle}.js`: cycles `[109, 33]`
 
 ## Waiting on
 | Who | What | Then |
 |-----|------|------|
 | John | Send WhatsApp draft to Noa: refund date-range decision (May only $264.84 / +April $364.84 / full history) | Regenerate final list |
 | Noa | Date-range decision; #3989 outlier; referral terms (live ReferralCandy says $50/$50, Feb terms said $20/$10); Mimi rename vs wording | Prompt edits + list regen |
-| Alleah | Seal $109 config change (screenshot BEFORE save → we sanity-check) | Verify storefront shows "$109 today, then $33/90 days" via `/products/halo-shower-grey.js` |
 | Alleah | Execute refunds in Shopify admin (shipping amount only) once scope confirmed | Exception report confirms cleanup |
 
 ## Key technical facts (verified 2026-06-11)
