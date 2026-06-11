@@ -1,8 +1,8 @@
 # KM-SOP-001 — Creator Invoice Management
-**Frequency:** Every 3 hours (weekdays) via scheduled agent + real-time via Krave bot | **Owner:** VA / Finance | **Updated:** May 2026
+**Frequency:** Every 3 hours (weekdays) via scheduled agent + real-time via Krave bot | **Owner:** VA / Finance | **Updated:** June 2026
 
 ## Overview
-Collect creator and vendor invoices from three intake channels, validate each PDF, and **forward each valid invoice to Airwallex billing** (`kravemedia@bills.airwallex.com`), which auto-creates a draft. John reviews and finalizes all drafts by EOD on the Airwallex side. Noa processes approved payments every Thursday. **The Airwallex Spend/Bills API is not released for us — forwarding by email is the only path; do not call the Spend/vendor/bill API.**
+Collect creator and vendor invoices from three intake channels, validate each PDF, and **forward each valid invoice to Airwallex billing** (`kravemedia@bills.airwallex.com`), which auto-creates a draft. John reviews and finalizes all drafts by EOD on the Airwallex side. Noa processes approved payments every Thursday. **The Airwallex Spend/Bills API is live as of 2026-06-11 (access via the `spendcreatekey` org-scoped key) but the flow switch is pending John's decision — forwarding by email remains the path; do not call the Spend/vendor/bill API in this flow yet.**
 
 **Key Rules:**
 - Never pay without John's approval. Create drafts only.
@@ -52,7 +52,7 @@ Run these checks in order:
 
 ### Step 3 — Forward to Airwallex Billing
 
-> **No Spend API.** The Airwallex Spend/Bills API is not released for us. Do **not** call `airwallex_list_vendors`, `airwallex_create_vendor`, or `airwallex_create_bill`. Forwarding is the only path — Airwallex auto-creates the draft from the forwarded PDF; John finalizes it on the Airwallex side.
+> **Spend API live (2026-06-11) via dedicated key — but this flow has NOT switched.** Access verified through the org-level scoped key `spendcreatekey` (`AIRWALLEX_SPEND_*` env vars in `.mcp.json`; `legal_entity_id` = `le_Zxw2-ECjOaKKebIGraD1AA`). Switching off forward-by-email is still a pending John decision — until then, do **not** call `airwallex_list_vendors`, `airwallex_create_vendor`, or `airwallex_create_bill` in this flow. Forwarding remains the path — Airwallex auto-creates the draft from the forwarded PDF; John finalizes it on the Airwallex side.
 
 For each validated invoice PDF:
 

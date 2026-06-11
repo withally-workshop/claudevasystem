@@ -29,7 +29,7 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 1. Scans email (john@kravemedia.co) and #payments-invoices-updates for unprocessed invoice PDFs (respects Slack cursor + ✅ dedup)
 2. Parses each PDF via document vision — extracts creator name, invoice number, dates, amount, currency, line items, bank details
 3. Validates: hardstop if no bank details (return to sender), hardstop if no PDF. Generates invoice number if missing (`MMDDYYYY-[FirstInitial][LastName]`). Uses Friday of current week if no due date.
-4. Forwards each valid PDF to `kravemedia@bills.airwallex.com` via `gmail_send` with the PDF attached (`attachment_base64`) — Airwallex auto-creates the draft. **No Spend/Bills API** (`airwallex_create_bill`/`list_vendors`/`create_vendor` not released for us — do not call them).
+4. Forwards each valid PDF to `kravemedia@bills.airwallex.com` via `gmail_send` with the PDF attached (`attachment_base64`) — Airwallex auto-creates the draft. **Spend/Bills API is live (2026-06-11, via the `spendcreatekey` scoped key) but this flow has NOT switched** — flow switch pending John's decision; do not call `airwallex_create_bill`/`list_vendors`/`create_vendor` in this workflow yet.
 5. Posts a bill prep report to John's channel (C0AQZGJDR38)
 6. Replies to requester:
    - **Slack:** "Received! Invoice for [Creator] — [Amount] [Currency] forwarded to Airwallex billing. John will review by EOD."

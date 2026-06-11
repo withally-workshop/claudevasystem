@@ -133,7 +133,7 @@ Apply validation rules. If any hardstop condition is triggered → skip bill cre
 
 ### Step 6 — Forward to Airwallex Billing
 
-> **No Spend API.** The Airwallex Spend/Bills API is not released for us yet. Do **not** call `airwallex_create_bill`, `airwallex_list_vendors`, or `airwallex_create_vendor`. The only path is forward-by-email — Airwallex auto-creates the draft from the forwarded PDF, and John finalizes it on the Airwallex side.
+> **Spend API live (2026-06-11) via dedicated key — but this flow has NOT switched.** Access verified through the org-level scoped key `spendcreatekey` (`AIRWALLEX_SPEND_CLIENT_ID`/`AIRWALLEX_SPEND_API_KEY` in `.mcp.json`; the MCP server routes `/api/v1/spend/*` through it; `legal_entity_id` = `le_Zxw2-ECjOaKKebIGraD1AA`). Switching off forward-by-email is still a pending John decision — until it's made, do **not** call `airwallex_create_bill`, `airwallex_list_vendors`, or `airwallex_create_vendor` in this workflow. The path remains forward-by-email — Airwallex auto-creates the draft from the forwarded PDF, and John finalizes it on the Airwallex side.
 
 For each validated invoice PDF:
 

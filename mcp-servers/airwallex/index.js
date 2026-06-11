@@ -10,24 +10,30 @@ const BASE_URL = "https://api.airwallex.com";
 const CLIENT_ID = process.env.AIRWALLEX_CLIENT_ID;
 const API_KEY = process.env.AIRWALLEX_API_KEY;
 const ACCOUNT_ID = process.env.AIRWALLEX_ACCOUNT_ID || "";
+// Spend endpoints need a Scoped API key with ORGANIZATION-level permissions
+// (Spend Read/Write) — the main account-level key gets 401 on /api/v1/spend/*.
+// Falls back to the main key if unset.
+const SPEND_CLIENT_ID = process.env.AIRWALLEX_SPEND_CLIENT_ID || CLIENT_ID;
+const SPEND_API_KEY = process.env.AIRWALLEX_SPEND_API_KEY || API_KEY;
 
 if (!CLIENT_ID || !API_KEY) {
   console.error("Missing AIRWALLEX_CLIENT_ID or AIRWALLEX_API_KEY");
   process.exit(1);
 }
 
-// Token cache — valid for 30 min
-let tokenCache = { token: null, expiresAt: 0 };
+// Token cache per key — tokens valid for 30 min
+const tokenCaches = new Map();
 
-async function getToken() {
-  if (tokenCache.token && Date.now() < tokenCache.expiresAt) {
-    return tokenCache.token;
+async function getToken(clientId = CLIENT_ID, apiKey = API_KEY) {
+  const cached = tokenCaches.get(clientId);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.token;
   }
   const res = await fetch(`${BASE_URL}/api/v1/authentication/login`, {
     method: "POST",
     headers: {
-      "x-client-id": CLIENT_ID,
-      "x-api-key": API_KEY,
+      "x-client-id": clientId,
+      "x-api-key": apiKey,
       "Content-Type": "application/json",
     },
   });
@@ -36,11 +42,12 @@ async function getToken() {
     throw new Error(`Airwallex auth failed: ${err}`);
   }
   const data = await res.json();
-  tokenCache = {
+  const entry = {
     token: data.token,
     expiresAt: Date.now() + 25 * 60 * 1000, // refresh 5 min early
   };
-  return tokenCache.token;
+  tokenCaches.set(clientId, entry);
+  return entry.token;
 }
 
 // Billing read/write paths — do NOT use x-on-behalf-of (causes 401)
@@ -50,7 +57,10 @@ const NO_BEHALF_PATHS = ["/api/v1/invoices", "/api/v1/billing", "/api/v1/billing
 const BILLING_PATHS = ["/api/v1/invoices", "/api/v1/billing_customers", "/api/v1/products", "/api/v1/prices", "/api/v1/subscriptions"];
 
 async function airwallexRequest(method, path, body) {
-  const token = await getToken();
+  const isSpend = path.startsWith("/api/v1/spend/");
+  const token = isSpend
+    ? await getToken(SPEND_CLIENT_ID, SPEND_API_KEY)
+    : await getToken();
   const headers = {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
@@ -69,17 +79,20 @@ async function airwallexRequest(method, path, body) {
   return JSON.parse(text);
 }
 
+// File upload lives on files.airwallex.com and needs the scoped key's
+// account-level "Supporting Services > Upload Files (Write)" permission
+// (scope w:awx_action:file_upload) — the main key 401s here.
+const FILES_BASE_URL = "https://files.airwallex.com";
+
 async function airwallexUploadFile(base64, filename) {
-  const token = await getToken();
+  const token = await getToken(SPEND_CLIENT_ID, SPEND_API_KEY);
   const fileBuffer = Buffer.from(base64, "base64");
   const formData = new FormData();
   const blob = new Blob([fileBuffer], { type: "application/pdf" });
   formData.append("file", blob, filename || "invoice.pdf");
-  const headers = { Authorization: `Bearer ${token}` };
-  if (ACCOUNT_ID) headers["x-on-behalf-of"] = ACCOUNT_ID;
-  const res = await fetch(`${BASE_URL}/api/v1/files/upload`, {
+  const res = await fetch(`${FILES_BASE_URL}/api/v1/files/upload`, {
     method: "POST",
-    headers,
+    headers: { Authorization: `Bearer ${token}` },
     body: formData,
   });
   const text = await res.text();
@@ -288,12 +301,16 @@ const TOOLS = [
         },
         legal_entity_id: {
           type: "string",
-          description: "Airwallex legal entity ID for your account",
+          description: "Airwallex legal entity ID for your account (required by the API)",
         },
         invoice_number: { type: "string", description: "Vendor invoice number" },
         issued_date: { type: "string", description: "Invoice issue date ISO8601 e.g. 2026-05-28" },
         due_date: { type: "string", description: "Invoice due date ISO8601 e.g. 2026-06-04" },
-        currency: { type: "string", description: "Bill currency e.g. USD, SGD" },
+        currency: { type: "string", description: "Bill currency e.g. USD, SGD (sent as billing_currency)" },
+        tax_status: {
+          type: "string",
+          description: "TAX_EXCLUSIVE (default) or TAX_INCLUSIVE",
+        },
         description: { type: "string", description: "Optional bill description / memo" },
         attachment_file_id: {
           type: "string",
@@ -313,7 +330,7 @@ const TOOLS = [
           },
         },
       },
-      required: ["external_id", "vendor_id", "invoice_number", "issued_date", "due_date", "currency", "line_items"],
+      required: ["external_id", "vendor_id", "legal_entity_id", "invoice_number", "issued_date", "due_date", "currency", "line_items"],
     },
   },
   {
@@ -382,6 +399,18 @@ const TOOLS = [
         invoice_id: { type: "string", description: "The invoice ID to mark as paid" },
       },
       required: ["invoice_id"],
+    },
+  },
+  {
+    name: "airwallex_mark_bill_paid",
+    description:
+      "Mark an Airwallex Spend bill (accounts payable) as paid outside of Airwallex. For client invoices (accounts receivable) use airwallex_mark_paid instead.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bill_id: { type: "string", description: "The bill ID to mark as paid" },
+      },
+      required: ["bill_id"],
     },
   },
   {
@@ -621,23 +650,27 @@ async function handleTool(name, args) {
     }
 
     case "airwallex_create_bill": {
+      // Spec: https://www.airwallex.com/docs/api/spend/bills/create (released 2026-06-11)
       const body = {
         request_id: randomUUID(),
         external_id: args.external_id,
+        legal_entity_id: args.legal_entity_id,
         vendor_id: args.vendor_id,
         invoice_number: args.invoice_number,
         issued_date: args.issued_date,
         due_date: args.due_date,
-        currency: args.currency,
+        billing_currency: args.currency,
+        tax_status: args.tax_status || "TAX_EXCLUSIVE",
+        sync_status: "NOT_SYNCED",
+        // API requires quantity/unit_price as strings
         line_items: args.line_items.map((item) => ({
           description: item.description,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
+          quantity: String(item.quantity),
+          unit_price: String(item.unit_price),
         })),
       };
-      if (args.legal_entity_id) body.legal_entity_id = args.legal_entity_id;
       if (args.description) body.description = args.description;
-      if (args.attachment_file_id) body.attachments = [{ file_id: args.attachment_file_id }];
+      if (args.attachment_file_id) body.attachments = [args.attachment_file_id];
       return await airwallexRequest("POST", "/api/v1/spend/bills/create", body);
     }
 
@@ -667,6 +700,14 @@ async function handleTool(name, args) {
         "POST",
         `/api/v1/invoices/${args.invoice_id}/mark_as_paid`,
         {}
+      );
+    }
+
+    case "airwallex_mark_bill_paid": {
+      // Spec: https://www.airwallex.com/docs/api/spend/bills/mark_as_paid (released 2026-06-11)
+      return await airwallexRequest(
+        "POST",
+        `/api/v1/spend/bills/${args.bill_id}/mark_as_paid`
       );
     }
 
