@@ -40,3 +40,6 @@ extract_nodes.js
 pdf_extract.js
 workflow.json
 clickup-*.json
+
+# Halo shipping-refund reconciliation output (customer PII — local only)
+projects/halo-home-chat/*.csv
