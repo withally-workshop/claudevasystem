@@ -5,6 +5,8 @@
 
 ---
 
+> **Email path: reworked + reactivated 2026-06-12 (John-approved) after a client-facing misfire.** A client lead's proposal screenshots were misclassified as creator invoices and got two "missing bank details" auto-replies. The n8n workflow `DbIJYYQ3FE4HKprB` now carries four guards: (1) PDF-only intake — images never ingested; (2) Claude classifies is-this-an-invoice with email context before any extraction is trusted; (3) one reply per email, never per attachment; (4) the missing-bank-details auto-reply only goes to known senders (@kravemedia.co or vendors already in the Bills tracker) — unknown senders get NO email, just an #ops-command flag + an "On hold" tracker row. Not-invoice skips also post a notice to #ops-command (nothing is marked read silently). These same guards apply to manual runs of this skill: **never auto-reply to a sender who is not @kravemedia.co or a known tracker vendor.**
+
 ## What This Skill Does
 Receives creator/vendor invoices from three channels (email, Slack channel, Slack DMs), validates each PDF, and **forwards each valid invoice to Airwallex billing** (`kravemedia@bills.airwallex.com`), which auto-creates a draft. John reviews and finalizes all drafts by EOD on the Airwallex side. No automated payment — Noa handles payments every Thursday. **The Airwallex Spend/Bills API is not released for us — there is no direct bill-creation call; forwarding is the only path.**
 

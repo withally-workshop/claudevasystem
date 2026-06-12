@@ -47,7 +47,7 @@
 | 19 | LinkedIn Post Monitor | `wNXs7wqHz5d5naJN` | Inactive (needs actor verification) | Every 30min all day | Scrape Noa's LinkedIn profile via Apify every 30min, detect new posts using workflow static data, alert John in #noa-linkedin-posts with preview + link |
 | 20 | Halo - VA Slack Bot | `XgHWMBeHoPWelE9r` | Active | `app_mention` in #halo-home-shopify | VA @mentions bot → Claude classifies intent → Shopify API → formatted reply in thread |
 | 21 | Halo - Daily Digest | `047cSNvFvUGHaf3O` | Active | 10 AM PHT daily (Asia/Manila) | Pull yesterday's Shopify orders + unfulfilled count → Claude formats → post to #halo-home-shopify |
-| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Active | 09:00/12:00/15:00/18:00 PHT Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` | Scan john@kravemedia.co for unread invoice PDFs, parse with Claude, block Airwallex/automated senders, dedup vs tracker, validate bank details, forward to kravemedia@bills.airwallex.com, reply to sender, log to Creator & AP Bills Tracker |
+| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | Active (reworked + reactivated 2026-06-12 after client-facing misfire; guards: PDF-only intake, is-invoice classification, per-message replies, known-sender gate + #ops-command flag path — see Workflow 22 section) | 09:00/12:00/15:00/18:00 PHT Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` | Scan john@kravemedia.co for unread invoice PDFs, parse with Claude, block Airwallex/automated senders, dedup vs tracker, validate bank details, forward to kravemedia@bills.airwallex.com, reply to sender, log to Creator & AP Bills Tracker |
 | 23 | Halo - Inventory Alert | `NBvfYPmjdTXzrKfb` | Active | 9 AM PHT daily (Asia/Manila) | Compare product stock vs previous run; alert #halo-home-shopify on OOS changes + newly low-stock (<10 units) |
 | 24 | Halo - Weekly Report | `7N9gEZb7nDS0EDGu` | Active | 9 AM PHT Mondays (Asia/Manila) | Refill due list (filter buyers 75–105 days ago) + upsell gap (showerhead buyers without filters) → post to #halo-home-shopify |
 
@@ -1536,7 +1536,9 @@ Posts yesterday's Halo Home sales summary + current unfulfilled orders to `#halo
 
 ### Purpose
 
-Replaces the manual email-check step for creator/AP invoice intake. Scans john@kravemedia.co four times a day for unread emails with PDF/image attachments, parses each with Claude Sonnet, guards against non-invoices and Airwallex/automated senders, validates bank details (hardstop if missing), **forwards the invoice PDF to the Airwallex bills inbox** (`kravemedia@bills.airwallex.com`), replies to the original sender, posts a prep report to `#ops-command`, and logs to the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`). This workflow does **not** call the Airwallex Spend API directly — bill creation happens on the Airwallex side from the forwarded email; John reviews/finalizes drafts there.
+Replaces the manual email-check step for creator/AP invoice intake. Scans john@kravemedia.co four times a day for unread emails with **PDF attachments only**, classifies + parses each with Claude Sonnet, guards against non-invoices and Airwallex/automated senders, validates bank details (hardstop if missing), **forwards the invoice PDF to the Airwallex bills inbox** (`kravemedia@bills.airwallex.com`), replies to the original sender (known senders only on the failure path), posts a prep report to `#ops-command`, and logs to the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`). This workflow does **not** call the Airwallex Spend API directly — bill creation happens on the Airwallex side from the forwarded email; John reviews/finalizes drafts there.
+
+> **2026-06-12 incident + guards:** the original version ingested inline images, treated any priced document as an invoice, and replied per attachment — it sent the "missing bank details" reply twice to a client lead whose proposal pricing screenshots matched the query (execution 8041; see `decisions/log.md`). The workflow was killed, reworked with four guards (PDF-only intake, explicit is-invoice classification with email context, per-message reply dedup, known-sender gate on the auto-reply with an #ops-command flag path for unknown senders), and reactivated the same day with John's approval.
 
 ### Triggers
 
@@ -1550,13 +1552,13 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
 ```text
 [Schedule / Webhook Trigger]
   ↓
-[Fetch Existing Bills] — HTTP GET Sheets values, column I (Slack Thread TS) — one item out, dedup source
+[Fetch Existing Bills] — HTTP GET Sheets values, range B:I — vendor names (allowlist) + column I messageIds (dedup)
   ↓
-[Search Inbox] — Gmail getAll, is:unread has:attachment in:inbox (invoice|bill|creator|payment) filename:(pdf|png|jpg), -from:airwallex.com
+[Search Inbox] — Gmail getAll, is:unread has:attachment in:inbox (invoice|bill|creator|payment) filename:pdf, -from:airwallex.com
   ↓
 [Get Message Details] — full payload per email
   ↓
-[Extract PDF Attachments] — Code, splits into one item per PDF/image; SENDER BLOCKLIST drops Airwallex/no-reply/notifications/mailer-daemon (left untouched)
+[Extract PDF Attachments] — Code, splits into one item per PDF (PDF-ONLY — images excluded); SENDER BLOCKLIST drops Airwallex/no-reply/notifications/mailer-daemon (left untouched)
   ↓
 [Dedup Filter] — Code, drops candidates whose messageId already has a row in the tracker (fail-open)
   ↓
@@ -1564,16 +1566,21 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
   ↓
 [Merge Attachment Data] — combines base64 + email context
   ↓
-[Prepare Claude Request] — builds document/image API payload with the file
+[Prepare Claude Request] — builds document API payload + email context (sender, subject)
   ↓
-[Call Claude API] — claude-sonnet-4-6, extracts invoice fields as JSON
+[Call Claude API] — claude-sonnet-4-6, CLASSIFIES (is_invoice + reason) then extracts invoice fields as JSON
   ↓
-[Parse & Validate] — derives invoice number (MMDDYYYY-FLast), Friday due date, bank details check, isInvoice flag
+[Parse & Validate] — derives invoice number (MMDDYYYY-FLast), Friday due date, bank details check; isInvoice requires Claude's is_invoice === true
   ↓
 [Is Invoice?]
-  ├─ false → [Mark Read (not invoice)]   (silent skip — no reply)
+  ├─ false → [Dedup Notice Per Message] → [Post Not-Invoice Notice] (→ #ops-command) → [Mark Read (not invoice)]
   └─ true  → [Has Bank Details?]
-               ├─ false → [Reply Missing Bank Details] → [Mark Read (missing bank details)]
+               ├─ false → [Dedup Reply Gate] (one item per message + senderKnown flag)
+               │            → [Known Sender?]
+               │                ├─ true  → [Reply Missing Bank Details] → [Mark Read (missing bank details)]
+               │                └─ false → [Flag Unknown Sender to Ops] (→ #ops-command, NO email)
+               │                           → [Log On Hold to Bills Tab] (status: On hold — missing bank details)
+               │                           → [Mark Read (held)]
                └─ true  → [Build Forward Context] (builds Slack text + RFC822 MIME w/ PDF)
                           → [Forward PDF to Airwallex Email] (→ kravemedia@bills.airwallex.com)
                           → [Post Slack Prep Report] (→ #ops-command C0AQZGJDR38)
@@ -1585,12 +1592,15 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
 ### Key Logic
 
 - **Sender blocklist (NEVER reply to Airwallex):** Two layers. (1) `-from:airwallex.com` in the Search Inbox query keeps platform mail out of the pipeline (saves Claude calls). (2) `isBlockedSender()` in Extract PDF Attachments hard-drops any email from `airwallex.com` (+ subdomains), `no-reply`/`noreply`, `notifications@`, or `mailer-daemon`/`postmaster` — never parsed, replied to, forwarded, logged, or marked read; left untouched in the inbox. `kravemedia.co` is **not** blocked — strategists send/forward invoices and may use that domain.
-- **Is Invoice? guard:** `isInvoice` is true only when Claude returns a creator name AND amount > 0. Anything else (statements, receipts, random PDFs) is silently marked read with no reply.
-- **Dedup (3 layers):** (1) `is:unread` search + mark-as-read at the end of every path. (2) **Tracker dedup** — `Fetch Existing Bills` reads column I of the tracker once at the top; `Dedup Filter` drops any candidate whose Gmail messageId already has a row. Fail-open: if the read errors, everything is processed. (3) Multiple PDFs in one email each get their own item but share the messageId (see limitation below).
-- **Multiple PDFs per email:** Extract Attachments splits one email into N items (one per PDF). Each PDF is processed independently. *Limitation:* tracker dedup keys on messageId only, so if a run forwards PDF A but fails before PDF B, a later run skips both (messageId already present). Mark-as-read mitigates in practice.
+- **PDF-only intake (2026-06-12 guard):** the Gmail query (`filename:pdf`) and the extractor both exclude images. Inline pricing screenshots on a client sales thread were the trigger for the 2026-06-12 misfire.
+- **Is Invoice? guard (2026-06-12 guard):** Claude is asked to CLASSIFY first — `is_invoice` is true only for an actual invoice/bill issued TO Krave Media, judged with email context (sender, subject). Proposals, quotes, pricing pages, receipts, contracts, and Krave's own outbound invoices are explicitly not invoices. `isInvoice` requires Claude's `is_invoice === true` plus the name/amount sanity floor. A Claude parse failure fails safe to the not-invoice path. Nothing is skipped silently anymore: every not-invoice skip posts a one-line notice (with Claude's reason) to `#ops-command` before marking read.
+- **Known-sender gate on the failure path (2026-06-12 guard):** the "missing bank details" auto-reply only goes to senders who are `@kravemedia.co` or whose name matches an existing vendor in the Bills tracker (column B, matched against parsed creator name or From name). Unknown senders get **no email** — the case is flagged to `#ops-command`, logged to the tracker as `On hold — missing bank details`, and marked read. Fail-safe: if the tracker read failed, every sender is treated as unknown.
+- **Per-message replies (2026-06-12 guard):** `Dedup Reply Gate` and `Dedup Notice Per Message` collapse N failing attachments from one email into ONE reply/flag/notice. The incident's duplicate emails came from per-attachment replies.
+- **Dedup (3 layers):** (1) `is:unread` search + mark-as-read at the end of every path. (2) **Tracker dedup** — `Fetch Existing Bills` reads range B:I of the tracker once at the top; `Dedup Filter` drops any candidate whose Gmail messageId already has a row (column I = index 7 in the range). The On-hold log row also feeds this, so held emails are never reprocessed. Fail-open: if the read errors, everything is processed. (3) Multiple PDFs in one email each get their own item but share the messageId (see limitation below).
+- **Multiple PDFs per email:** Extract Attachments splits one email into N items (one per PDF). Each PDF is processed independently on the forward path. *Limitation:* tracker dedup keys on messageId only, so if a run forwards PDF A but fails before PDF B, a later run skips both (messageId already present). Mark-as-read mitigates in practice.
 - **Invoice number:** Auto-generated as `MMDDYYYY-[FirstInitialLastName]` if missing.
 - **Due date:** Defaults to Friday of current week (PHT) if not on invoice.
-- **Bank details hardstop:** Replies asking to reissue; marks email read; does not forward.
+- **Bank details hardstop:** Known sender → reply asking to reissue; unknown sender → #ops-command flag + On-hold log. Either way: marked read, never forwarded.
 - **Forward-by-email (not Spend API):** On a valid invoice, the PDF is rebuilt into an RFC822 MIME message and sent to `kravemedia@bills.airwallex.com`; a prep report goes to `#ops-command`; the sender gets a confirmation reply; a row is logged as "Forwarded via Email."
 
 ### Outputs
@@ -1598,8 +1608,9 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
 | Scenario | Action |
 |----------|--------|
 | Valid invoice with bank details | PDF forwarded to kravemedia@bills.airwallex.com, Slack prep report to #ops-command, confirmation reply to sender, logged to tracker as "Forwarded via Email", email marked read |
-| Not an invoice (no name/amount) | Email marked read silently — no reply, no forward, no log |
-| Missing bank details | Reply sent asking to reissue, email marked read, not forwarded |
+| Not an invoice (Claude classification) | One notice per email to #ops-command (with Claude's reason), email marked read — no reply, no forward, no tracker row |
+| Missing bank details, KNOWN sender (@kravemedia.co or tracker vendor) | One reissue reply per email, marked read, not forwarded |
+| Missing bank details, UNKNOWN sender | NO email sent — flagged to #ops-command, logged as "On hold — missing bank details", marked read |
 | Blocked sender (Airwallex / no-reply / notifications / mailer-daemon) | Dropped at Extract — left untouched in inbox |
 | Already in tracker (duplicate messageId) | Dropped at Dedup Filter — not reprocessed |
 | No unread PDF emails | Workflow exits with 0 items, nothing happens |
@@ -1608,8 +1619,8 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
 
 | Failure | Behaviour |
 |---------|-----------|
-| Tracker read (`Fetch Existing Bills`) fails | `continueOnFail` — Dedup Filter fails open, processes everything |
-| Claude API fails | Parse & Validate gets empty response → `isInvoice` false → marked read, no reply |
+| Tracker read (`Fetch Existing Bills`) fails | `continueOnFail` — Dedup Filter fails open (processes everything); Dedup Reply Gate fails SAFE (all senders treated unknown → flag path, no auto-reply) |
+| Claude API fails | Parse & Validate gets empty response → `isInvoice` false → #ops-command notice + marked read, no reply |
 | Forward to Airwallex email fails | `continueOnFail` — downstream Slack/reply/log/mark-read still run |
 | Gmail reply fails | `continueOnFail` — mark read still runs |
 | Sheets append fails | `continueOnFail` — email still marked read |

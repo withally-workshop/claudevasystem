@@ -7,6 +7,8 @@ metadata:
 
 # Creator Invoice Processing
 
+> **Email path: reworked + reactivated 2026-06-12 (John-approved) after a client-facing misfire.** The n8n workflow `DbIJYYQ3FE4HKprB` now carries four guards: PDF-only intake, explicit is-invoice classification (with email context), one reply per email, and a known-sender gate — the missing-bank-details auto-reply only goes to @kravemedia.co senders or vendors already in the Bills tracker; unknown senders get NO email, just an #ops-command flag + "On hold" tracker row. Same rule applies to manual runs: never auto-reply to an unknown sender. Slack/DM paths via krave-bot are unaffected.
+
 Receive PDF invoices from email, Slack channel, or Slack DMs → validate → create draft bill in Airwallex Spend → confirm to requester → log to tracker. John reviews and finalizes all drafts by EOD.
 
 ## How to Trigger

@@ -3,6 +3,19 @@
 /**
  * Krave — Creator Invoice Email Scan
  *
+ * INCIDENT GUARDS (added 2026-06-12 after execution 8041 sent the "missing
+ * bank details" reply twice to a client lead whose proposal screenshots were
+ * misclassified as invoices):
+ *   1. PDF-only intake — images (inline screenshots, signature graphics) are
+ *      never ingested; the Gmail query and the extractor both enforce this.
+ *   2. Real classification — Claude is asked IF the document is an invoice
+ *      (with email subject/sender context), not just told to extract fields.
+ *   3. Replies are deduped per message, never per attachment.
+ *   4. The missing-bank-details auto-reply only goes to known senders
+ *      (@kravemedia.co or vendors already in the Bills tracker). Unknown
+ *      senders get NO email — the case is flagged to #ops-command and logged
+ *      On hold instead.
+ *
  * Scans john@kravemedia.co every 3 hours (Mon–Fri) for unread emails with PDF
  * attachments. Parses each PDF with Claude, validates bank details, creates
  * draft bills in Airwallex Spend, replies to the sender, and logs to the Bills
@@ -44,7 +57,9 @@ const OPS_CHANNEL     = 'C0AQZGJDR38';         // John's private channel (#ops-c
 
 const EXTRACT_PDF_ATTACHMENTS = `
 // Runs once across all input items.
-// Accepts PDF and image (PNG/JPG) invoice attachments.
+// Accepts PDF attachments ONLY. Images are deliberately excluded: inline
+// pricing screenshots in a client lead's reply were ingested as "invoices"
+// on 2026-06-12. Real invoices arrive as PDFs.
 
 // ── Sender blocklist (HARD GUARD) ──────────────────────────────────────────
 // Creator invoices come from real people — strategists/team forwarding on behalf
@@ -72,8 +87,7 @@ function findAttachments(parts, found) {
     if (p.body && p.body.attachmentId) {
       const name = (p.filename || p.name || '').toLowerCase();
       const mime = (p.mimeType || '').toLowerCase();
-      const isInvoiceFile = name.endsWith('.pdf') || name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg')
-        || mime === 'application/pdf' || mime.startsWith('image/');
+      const isInvoiceFile = name.endsWith('.pdf') || mime === 'application/pdf';
       if (isInvoiceFile && (p.filename || p.name)) {
         found.push({ attachmentId: p.body.attachmentId, attachmentName: p.filename || p.name, mimeType: p.mimeType || 'application/octet-stream' });
       }
@@ -144,21 +158,10 @@ const PREPARE_CLAUDE_REQUEST = `
 const output = [];
 for (const item of $input.all()) {
   const ctx = item.json;
-  const mime = (ctx.mimeType || '').toLowerCase();
-  const isPdf = mime === 'application/pdf' || ctx.attachmentName.toLowerCase().endsWith('.pdf');
-  const isImage = mime.startsWith('image/') || /\\.(png|jpg|jpeg|gif|webp)$/i.test(ctx.attachmentName);
+  // PDF-only intake — images never reach this node (see Extract PDF Attachments).
+  const contentBlock = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: ctx.pdfBase64 } };
 
-  let contentBlock;
-  if (isPdf) {
-    contentBlock = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: ctx.pdfBase64 } };
-  } else if (isImage) {
-    const imgMime = mime.startsWith('image/') ? mime : 'image/png';
-    contentBlock = { type: 'image', source: { type: 'base64', media_type: imgMime, data: ctx.pdfBase64 } };
-  } else {
-    contentBlock = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: ctx.pdfBase64 } };
-  }
-
-  const system = 'You are an invoice parser. Extract invoice data from the attached file and return ONLY valid JSON with these exact fields: { "creator_name": "string", "email": "string or null", "invoice_number": "string or null", "issued_date": "YYYY-MM-DD or null", "due_date": "YYYY-MM-DD or null", "amount": number, "currency": "ISO currency code e.g. USD SGD AUD", "line_items": [{"description":"string","quantity":number,"unit_price":number}], "bank_details": { "bank_name": "string or null", "account_name": "string or null", "account_number": "string or null", "swift": "string or null", "iban": "string or null", "bsb": "string or null", "routing_number": "string or null" }, "has_bank_details": boolean }';
+  const system = 'You are a document classifier and invoice parser for Krave Media, a creative agency that PAYS creators and vendors. FIRST decide whether the attached document is an actual INVOICE or BILL issued TO Krave Media requesting payment. Proposals, quotes, pricing pages or package screenshots, pitch decks, contracts, receipts for already-completed payments, statements, and invoices issued BY Krave Media to its own clients are NOT invoices for this purpose. Use the email context (sender, subject) to judge — e.g. a prospect replying on a sales thread is not submitting a creator invoice. Return ONLY valid JSON with these exact fields: { "is_invoice": boolean, "classification_reason": "one short sentence", "creator_name": "string", "email": "string or null", "invoice_number": "string or null", "issued_date": "YYYY-MM-DD or null", "due_date": "YYYY-MM-DD or null", "amount": number, "currency": "ISO currency code e.g. USD SGD AUD", "line_items": [{"description":"string","quantity":number,"unit_price":number}], "bank_details": { "bank_name": "string or null", "account_name": "string or null", "account_number": "string or null", "swift": "string or null", "iban": "string or null", "bsb": "string or null", "routing_number": "string or null" }, "has_bank_details": boolean }. If is_invoice is false, still fill the other fields with your best guess or nulls.';
 
   output.push({ json: {
     ...ctx,
@@ -167,7 +170,7 @@ for (const item of $input.all()) {
       role: 'user',
       content: [
         contentBlock,
-        { type: 'text', text: 'Extract the invoice data from this file and return the JSON as specified.' }
+        { type: 'text', text: 'Email context — From: ' + (ctx.fromName || '') + ' <' + (ctx.fromEmail || '') + '>, Subject: ' + (ctx.subject || '') + '. Classify the attached document per the system instructions and, if it is an invoice to Krave Media, extract the data as specified. Return ONLY the JSON.' }
       ]
     }]
   }});
@@ -214,9 +217,13 @@ $input.all().forEach((item, i) => {
   const lineItems = (inv.line_items && inv.line_items.length) ? inv.line_items : [{ description: 'Services', quantity: 1, unit_price: amount }];
   const bd = inv.bank_details || {};
   const hasBankDetails = inv.has_bank_details === true || !!(bd.account_number || bd.iban || bd.swift || bd.bsb || bd.routing_number);
-  const isInvoice = !!(creatorName && amount > 0);
+  // is_invoice must come from Claude's explicit classification. A parse failure
+  // (inv = {}) leaves it undefined → false → not-invoice path (fail-safe).
+  // name + amount remain as a sanity floor, not the test (2026-06-12 incident).
+  const isInvoice = inv.is_invoice === true && !!(creatorName && amount > 0);
+  const classificationReason = String(inv.classification_reason || '');
 
-  output.push({ json: { ...ctx, creatorName, creatorEmail, invoiceNumber, dueDate, issuedDate, amount, currency, lineItems, bankDetails: bd, hasBankDetails, isInvoice } });
+  output.push({ json: { ...ctx, creatorName, creatorEmail, invoiceNumber, dueDate, issuedDate, amount, currency, lineItems, bankDetails: bd, hasBankDetails, isInvoice, classificationReason } });
 });
 return output;
 `.trim();
@@ -288,7 +295,8 @@ const DEDUP_FILTER = `
 // but failed before marking the email read, or a schedule + manual webhook overlap.
 //
 // Key = Gmail messageId, matched against column I ("Slack Thread TS") of the Bills
-// tracker, which the Log node writes for every email-sourced bill.
+// tracker, which the Log nodes write for every email-sourced bill (forwarded OR
+// held). Fetch range is B:I, so messageId is index 7 and vendor name index 0.
 //
 // FAIL-OPEN: if the tracker read errored (continueOnFail), process everything — we
 // never drop a real invoice because of a transient read failure. Worst case the
@@ -298,7 +306,7 @@ try {
   const fetched = $('Fetch Existing Bills').first();
   const rows = (fetched && fetched.json && fetched.json.values) || [];
   for (const r of rows) {
-    const v = String((r && r[0]) || '').trim();
+    const v = String((r && r[7]) || '').trim(); // column I within the B:I range
     if (v) keys.add(v);
   }
 } catch (_) { /* fail-open */ }
@@ -307,6 +315,52 @@ const output = [];
 for (const item of $input.all()) {
   const mid = String(item.json.messageId || '').trim();
   if (mid && keys.has(mid)) continue; // already in tracker → skip, do not reprocess
+  output.push(item);
+}
+return output;
+`.trim();
+
+const DEDUP_REPLY_GATE = `
+// Missing-bank-details path guard (2026-06-12 incident):
+// 1. Dedup per MESSAGE — one email with N failing PDFs gets ONE reply/flag,
+//    never N (the incident sent the same reply twice, once per attachment).
+// 2. senderKnown — only @kravemedia.co senders and vendors already present in
+//    the Bills tracker (column B) qualify for the auto-reply. Everyone else is
+//    flagged to #ops-command with NO outbound email.
+const seen = new Set();
+const names = new Set();
+try {
+  const fetched = $('Fetch Existing Bills').first();
+  const rows = (fetched && fetched.json && fetched.json.values) || [];
+  for (const r of rows) {
+    const v = String((r && r[0]) || '').trim().toLowerCase();
+    if (v) names.add(v);
+  }
+} catch (_) { /* tracker read failed → names empty → unknown sender → flag path (fail-safe) */ }
+
+const output = [];
+for (const item of $input.all()) {
+  const j = item.json;
+  const mid = String(j.messageId || '').trim();
+  if (mid && seen.has(mid)) continue;
+  if (mid) seen.add(mid);
+  const email = String(j.fromEmail || '').toLowerCase();
+  const senderKnown = /@kravemedia\\.co$/.test(email)
+    || names.has(String(j.creatorName || '').trim().toLowerCase())
+    || names.has(String(j.fromName || '').trim().toLowerCase());
+  output.push({ json: { ...j, senderKnown } });
+}
+return output;
+`.trim();
+
+const DEDUP_NOTICE = `
+// One not-invoice Slack notice per email, even if it carried several PDFs.
+const seen = new Set();
+const output = [];
+for (const item of $input.all()) {
+  const mid = String(item.json.messageId || '').trim();
+  if (mid && seen.has(mid)) continue;
+  if (mid) seen.add(mid);
   output.push(item);
 }
 return output;
@@ -350,7 +404,9 @@ const workflow = {
         authentication: 'predefinedCredentialType',
         nodeCredentialType: 'googleSheetsOAuth2Api',
         method: 'GET',
-        url: 'https://sheets.googleapis.com/v4/spreadsheets/' + BILLS_SHEET_ID + '/values/' + encodeURIComponent(BILLS_SHEET_TAB + '!I:I'),
+        // B:I — vendor names (B, index 0) feed the known-sender allowlist in
+        // Dedup Reply Gate; messageIds (I, index 7) feed the Dedup Filter.
+        url: 'https://sheets.googleapis.com/v4/spreadsheets/' + BILLS_SHEET_ID + '/values/' + encodeURIComponent(BILLS_SHEET_TAB + '!B:I'),
         options: {},
       },
       credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
@@ -374,7 +430,9 @@ const workflow = {
         // strategists (the team managing creators) send/forward invoices and may
         // use that domain. See the BLOCKED_SENDER backstop in Extract PDF
         // Attachments for the hard guard.
-        filters: { q: 'is:unread has:attachment in:inbox (invoice OR bill OR creator OR payment) (filename:pdf OR filename:png OR filename:jpg OR filename:jpeg) -from:airwallex.com' },
+        // PDF-only (2026-06-12): filename:png/jpg matched inline pricing
+        // screenshots on a client sales thread and caused a misfire.
+        filters: { q: 'is:unread has:attachment in:inbox (invoice OR bill OR creator OR payment) filename:pdf -from:airwallex.com' },
       },
     },
     {
@@ -471,9 +529,34 @@ const workflow = {
       },
     },
     {
+      id: 'n11c', name: 'Dedup Notice Per Message',
+      type: 'n8n-nodes-base.code', typeVersion: 2,
+      position: [2660, 500],
+      parameters: { mode: 'runOnceForAllItems', jsCode: DEDUP_NOTICE },
+    },
+    {
+      // Nothing is marked read silently anymore: every not-invoice skip is
+      // visible to John in #ops-command (2026-06-12 incident guard).
+      id: 'n11d', name: 'Post Not-Invoice Notice',
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+      position: [2780, 500],
+      continueOnFail: true,
+      parameters: {
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'slackApi',
+        method: 'POST',
+        url: 'https://slack.com/api/chat.postMessage',
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '={{ { channel: "' + OPS_CHANNEL + '", text: ":mag: *Invoice scan — skipped (not an invoice), marking read*\\n- From: " + ($json.fromName || "?") + " <" + ($json.fromEmail || "?") + ">\\n- Subject: " + ($json.subject || "?") + "\\n- File: " + ($json.attachmentName || "?") + "\\n- Why: " + ($json.classificationReason || "no classification returned") } }}',
+        options: {},
+      },
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+    },
+    {
       id: 'n11b', name: 'Mark Read (not invoice)',
       type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
-      position: [2660, 500],
+      position: [2900, 600],
       continueOnFail: true,
       credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
@@ -499,10 +582,31 @@ const workflow = {
     },
 
     // ── [false] Missing bank details path ─────────────────────────────────────
+    // Dedup per message + known-sender gate, THEN either auto-reply (known) or
+    // flag to #ops-command with no outbound email (unknown). 2026-06-12 guard.
+    {
+      id: 'n12a', name: 'Dedup Reply Gate',
+      type: 'n8n-nodes-base.code', typeVersion: 2,
+      position: [2900, 440],
+      parameters: { mode: 'runOnceForAllItems', jsCode: DEDUP_REPLY_GATE },
+    },
+    {
+      id: 'n12b', name: 'Known Sender?',
+      type: 'n8n-nodes-base.if', typeVersion: 2.1,
+      position: [3020, 440],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+          conditions: [{ id: 'c1', leftValue: '={{ $json.senderKnown }}', rightValue: true, operator: { type: 'boolean', operation: 'equals' } }],
+          combinator: 'and',
+        },
+        options: {},
+      },
+    },
     {
       id: 'n12', name: 'Reply Missing Bank Details',
       type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
-      position: [2660, 500],
+      position: [3260, 380],
       continueOnFail: true,
       credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
@@ -517,7 +621,66 @@ const workflow = {
     {
       id: 'n13', name: 'Mark Read (missing bank details)',
       type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
-      position: [2900, 500],
+      position: [3500, 380],
+      continueOnFail: true,
+      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
+      parameters: {
+        resource: 'message',
+        operation: 'markAsRead',
+        messageId: '={{ $json.messageId }}',
+      },
+    },
+    {
+      id: 'n14a', name: 'Flag Unknown Sender to Ops',
+      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+      position: [3260, 520],
+      continueOnFail: true,
+      parameters: {
+        authentication: 'predefinedCredentialType',
+        nodeCredentialType: 'slackApi',
+        method: 'POST',
+        url: 'https://slack.com/api/chat.postMessage',
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '={{ { channel: "' + OPS_CHANNEL + '", text: ":rotating_light: *Invoice scan — HELD for review (unknown sender, missing bank details)*\\n- From: " + ($json.fromName || "?") + " <" + ($json.fromEmail || "?") + ">\\n- Subject: " + ($json.subject || "?") + "\\n- Parsed as: " + ($json.creatorName || "?") + " — " + ($json.currency || "") + " " + ($json.amount || "") + "\\n- Why held: sender is not @kravemedia.co and not in the Bills tracker\\n- *No auto-reply was sent.* Handle manually (ask for reissue with bank details, or dismiss). Logged On hold; email marked read." } }}',
+        options: {},
+      },
+      credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
+    },
+    {
+      id: 'n14b', name: 'Log On Hold to Bills Tab',
+      type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5,
+      position: [3500, 520],
+      continueOnFail: true,
+      credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
+      parameters: {
+        resource: 'sheet',
+        operation: 'append',
+        documentId: { __rl: true, value: BILLS_SHEET_ID, mode: 'id' },
+        sheetName:  { __rl: true, value: BILLS_SHEET_TAB, mode: 'name' },
+        columns: {
+          mappingMode: 'defineBelow',
+          value: {
+            'Date Received':     '={{ new Date().toISOString().split("T")[0] }}',
+            'Creator / Vendor':  '={{ $json.creatorName }}',
+            'Invoice #':         '={{ $json.invoiceNumber }}',
+            'Airwallex Bill ID': '',
+            'Amount':            '={{ $json.amount }}',
+            'Currency':          '={{ $json.currency }}',
+            'Due Date':          '={{ $json.dueDate }}',
+            'Status':            'On hold — missing bank details',
+            'Slack Thread TS':   '={{ $json.messageId }}',
+            'Notes':             '={{ "Unknown sender " + $json.fromEmail + " — flagged to #ops-command, no auto-reply sent" }}',
+          },
+          schema: [],
+        },
+        options: {},
+      },
+    },
+    {
+      id: 'n14c', name: 'Mark Read (held)',
+      type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
+      position: [3740, 520],
       continueOnFail: true,
       credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
@@ -640,23 +803,31 @@ const workflow = {
     'Extract PDF Attachments':    { main: [[{ node: 'Dedup Filter',           type: 'main', index: 0 }]] },
     'Dedup Filter':               { main: [[{ node: 'Download Attachment',     type: 'main', index: 0 }]] },
     'Download Attachment':        { main: [[{ node: 'Merge Attachment Data',   type: 'main', index: 0 }]] },
-    'Download Attachment':        { main: [[{ node: 'Merge Attachment Data',   type: 'main', index: 0 }]] },
     'Merge Attachment Data':      { main: [[{ node: 'Prepare Claude Request',  type: 'main', index: 0 }]] },
     'Prepare Claude Request':     { main: [[{ node: 'Call Claude API',         type: 'main', index: 0 }]] },
     'Call Claude API':            { main: [[{ node: 'Parse & Validate',        type: 'main', index: 0 }]] },
     'Parse & Validate':  { main: [[{ node: 'Is Invoice?', type: 'main', index: 0 }]] },
-    // Guard: not an invoice → mark read silently
+    // Guard: not an invoice → notify #ops-command, then mark read (never silent)
     'Is Invoice?': { main: [
-      [{ node: 'Has Bank Details?',       type: 'main', index: 0 }],  // true — is an invoice
-      [{ node: 'Mark Read (not invoice)', type: 'main', index: 0 }],  // false — skip
+      [{ node: 'Has Bank Details?',        type: 'main', index: 0 }],  // true — is an invoice
+      [{ node: 'Dedup Notice Per Message', type: 'main', index: 0 }],  // false — skip with visibility
     ]},
+    'Dedup Notice Per Message': { main: [[{ node: 'Post Not-Invoice Notice',  type: 'main', index: 0 }]] },
+    'Post Not-Invoice Notice':  { main: [[{ node: 'Mark Read (not invoice)',  type: 'main', index: 0 }]] },
     // Validation branch
     'Has Bank Details?': { main: [
-      [{ node: 'Build Forward Context',      type: 'main', index: 0 }],  // true
-      [{ node: 'Reply Missing Bank Details', type: 'main', index: 0 }],  // false
+      [{ node: 'Build Forward Context', type: 'main', index: 0 }],  // true
+      [{ node: 'Dedup Reply Gate',      type: 'main', index: 0 }],  // false
     ]},
-    // Missing bank details path
-    'Reply Missing Bank Details': { main: [[{ node: 'Mark Read (missing bank details)', type: 'main', index: 0 }]] },
+    // Missing bank details path: one item per message + known-sender gate
+    'Dedup Reply Gate': { main: [[{ node: 'Known Sender?', type: 'main', index: 0 }]] },
+    'Known Sender?': { main: [
+      [{ node: 'Reply Missing Bank Details', type: 'main', index: 0 }],  // true — known sender, auto-reply OK
+      [{ node: 'Flag Unknown Sender to Ops', type: 'main', index: 0 }],  // false — NO email, flag John
+    ]},
+    'Reply Missing Bank Details':  { main: [[{ node: 'Mark Read (missing bank details)', type: 'main', index: 0 }]] },
+    'Flag Unknown Sender to Ops':  { main: [[{ node: 'Log On Hold to Bills Tab',          type: 'main', index: 0 }]] },
+    'Log On Hold to Bills Tab':    { main: [[{ node: 'Mark Read (held)',                  type: 'main', index: 0 }]] },
     // Email forward path
     'Build Forward Context':           { main: [[{ node: 'Forward PDF to Airwallex Email', type: 'main', index: 0 }]] },
     'Forward PDF to Airwallex Email':  { main: [[{ node: 'Post Slack Prep Report',         type: 'main', index: 0 }]] },
