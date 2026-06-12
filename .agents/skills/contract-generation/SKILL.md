@@ -33,7 +33,7 @@ Turn Noa's deal terms into a filled retainer `.docx` ready to upload to PandaDoc
 
 ## Deal JSON
 
-All term fields are optional — anything omitted renders as a blank fill-in line for Noa (effective date and rounds are normally left blank). `initialPackage` is optional per contract. For custom deals set `isCustom: true` and provide `monthlyFee` + `deliverables[]` + `performanceTiers[]`. Party/signature fields are not placeholders (left blank for PandaDoc). Full schema in `projects/contract-generation/README.md`. Examples: `deals/example-standard.json` (standard), `deals/zenwise.json` (custom).
+All term fields are optional — anything omitted renders as a blank fill-in line for Noa (effective date and rounds are normally left blank). `initialPackage` is optional per contract. For custom deals set `isCustom: true` and provide `monthlyFee` + `deliverables[]`; `performanceTiers[]` is optional (omit for fixed-fee deals — the performance section is skipped). `terminationNotice` optionally overrides the T&C 5.1 notice period (default thirty (30) days). Party/signature fields are not placeholders (left blank for PandaDoc). Full schema in `projects/contract-generation/README.md`. Examples: `deals/example-standard.json` (standard), `deals/zenwise.json` (custom with tiers), `deals/zyg-brands.json` (custom fixed-fee, 7-day notice).
 
 ## Codex Invocation Notes
 

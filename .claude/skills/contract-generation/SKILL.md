@@ -35,7 +35,9 @@
 | `numRounds` | **blank** | Leave blank — Noa fills "deliver ___ Rounds". |
 | `initialPackage` | **blank** | Section 1.1. Blank by default; optionally set the Appendix A package per contract, or `"Custom Package — see Section 2.1a"` for custom deals. |
 | `isCustom` | `false` | `true` = adds the "2.1a Custom Package Pricing" section (Appendix A still kept). |
-| `monthlyFee` / `deliverables[]` / `performanceTiers[]` | — | required when `isCustom: true` |
+| `monthlyFee` / `deliverables[]` | — | required when `isCustom: true` |
+| `performanceTiers[]` | `[]` | optional when custom — omit for fixed-fee deals; the performance section is skipped entirely |
+| `terminationNotice` | `thirty (30) days’` | optional — overrides the T&C 5.1 notice period, e.g. `"seven (7) days’"` |
 
 Anything omitted renders as a blank fill-in line, matching the master PDF. Both shapes keep the full **Appendix A** pricing tables and Terms & Conditions. Party/signature fields (brand name, BR number, signatory name/position, sign dates) are **not placeholders** — they're blank underlines John fills in PandaDoc. Full schema in `projects/contract-generation/README.md`.
 
@@ -50,7 +52,7 @@ Read the full Slack message/thread from Noa. Extract: effective/kickoff date, nu
 
 - **Never ask for information already in the thread.** Read everything first, then ask only for what is genuinely missing — and only the commercial terms (never ask for client legal name, BR number, or signatory details; those are left blank).
 - **Standard deal** = pick a package from Appendix A. Set `isCustom: false`, `initialPackage` = the package name (e.g. "Growth Pack — Creator Led Direct Response").
-- **Custom deal** = base fee + performance incentives (e.g. "2K base + 1x in-platform ROAS"). Set `isCustom: true`, `initialPackage: "Custom Package — see Section 2.1a"`, and capture `monthlyFee`, `deliverables[]`, `performanceTiers[]`.
+- **Custom deal** = base fee + optional performance incentives (e.g. "2K base + 1x in-platform ROAS", or a fixed-fee multi-brand package). Set `isCustom: true`, `initialPackage: "Custom Package — see Section 2.1a"`, and capture `monthlyFee`, `deliverables[]`, and `performanceTiers[]` if the deal has a performance component (omit for fixed-fee).
 
 > Optional context: if it helps identify the deal, you may note the client's contact from Noa's Gmail (`mcp__gmail-noa__gmail_search_messages` → `gmail_get_message`). This is reference only — it is **not** written into the contract.
 
@@ -70,7 +72,7 @@ After John confirms, write `projects/contract-generation/deals/<slug>.json` (sch
 ```
 node generate-contract.js --deal deals/<slug>.json
 ```
-The script prints the absolute path of the generated `.docx`. It fails loudly (no file) if a custom deal lacks `monthlyFee` / `performanceTiers` — fix the JSON and re-run.
+The script prints the absolute path of the generated `.docx`. It fails loudly (no file) if a custom deal lacks `monthlyFee` — fix the JSON and re-run.
 
 > Setup: if `template/retainer-template.docx` doesn't exist yet, run `node reconstruct-template.js`. If `node_modules` is missing, run `npm install` in the project folder.
 
@@ -93,7 +95,7 @@ Give John the output `.docx` path. **John sends it to Noa for approval.** The sk
 
 - Reference PDF and `master/` are read-only — never edit them.
 - Fill commercial terms only. Never fill or fabricate brand name, BR Number, signatory name/position, or sign dates — those are left blank for Noa / John's PandaDoc setup.
-- Custom deals must have `monthlyFee` + ≥1 `performanceTiers` or the generator refuses.
+- Custom deals must have `monthlyFee` or the generator refuses; `performanceTiers` is optional (fixed-fee deals omit it).
 - The template is re-authored from the PDF — if a clause looks wrong, fix the wording in `reconstruct-template.js` and rebuild, never hand-edit the generated `.docx`.
 - Approval gate is non-negotiable for a legal document — John reviews, Noa approves, then PandaDoc. The skill never uploads or sends.
 - Deal terms and generated contracts are local-only artifacts — do not commit `deals/` or `output/`.

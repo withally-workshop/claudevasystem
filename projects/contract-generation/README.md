@@ -69,7 +69,8 @@ node generate-contract.js --deal deals/example-standard.json --out output/acme-r
 ```
 
 The script **fails loudly (non-zero exit, no file written)** if a commercial-term field is
-missing, or if a custom deal lacks `monthlyFee` / `performanceTiers`.
+missing, or if a custom deal lacks `monthlyFee`. (`performanceTiers` is optional — fixed-fee
+custom deals omit it and the performance section is skipped entirely.)
 
 ---
 
@@ -85,10 +86,11 @@ written in when you deliberately provide one.
 | `effectiveDate` | Normally left blank — Noa fills it. Provide e.g. `"2026-06-15"` only if you want it pre-filled. |
 | `numRounds` | Normally left blank — Noa fills it. |
 | `initialPackage` | Section 1.1 Initial Selection. Blank by default; optionally set to an Appendix A package name per contract, or `"Custom Package — see Section 2.1a"` for custom deals. |
-| `isCustom` | `false` = standard. `true` = adds the "2.1a Custom Package Pricing" section; requires `monthlyFee` + ≥1 `performanceTiers`. |
+| `isCustom` | `false` = standard. `true` = adds the "2.1a Custom Package Pricing" section; requires `monthlyFee`. |
 | `monthlyFee` | if custom — e.g. `"USD 2,000 base per month"`. |
-| `deliverables` | if custom — `[{ "item": "..." }]` → bulleted monthly deliverables. |
-| `performanceTiers` | if custom — `[{ "metric": "...", "target": "...", "fee": "..." }]` → "metric — Target … — fee". |
+| `deliverables` | if custom — `[{ "item": "..." }]` → one bullet per item. |
+| `performanceTiers` | if custom, optional — `[{ "metric": "...", "target": "...", "fee": "..." }]` → one bullet per tier ("metric — target — fee") plus a flat-rate/above-base closing sentence. Omit (or `[]`) for fixed-fee deals — the whole performance section is skipped. |
+| `terminationNotice` | optional — overrides the T&C 5.1 notice period, e.g. `"seven (7) days’"`. Defaults to `"thirty (30) days’"`. |
 
 **Party + signature fields are not placeholders.** Brand name, BR number, signatory
 name/position, and sign dates are blank underlines; John fills them in PandaDoc.

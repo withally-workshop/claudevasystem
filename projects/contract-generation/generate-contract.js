@@ -17,8 +17,11 @@
  *     (brandName, brNumber, signatory name/position/dates) are left blank by design —
  *     John sets those up by hand in PandaDoc. They default to empty if omitted, and any
  *     field passed as "BLANK" also renders empty.
- *   - Custom deals (isCustom: true) require monthlyFee + >=1 performanceTier; the
- *     template's {#isCustom}...{/isCustom} section renders the performance regime.
+ *   - Custom deals (isCustom: true) require monthlyFee; performanceTiers are optional
+ *     (fixed-fee custom deals have none). The template's {#isCustom}...{/isCustom} section
+ *     renders the custom pricing, and {#hasPerformanceTiers} gates the performance regime.
+ *   - terminationNotice (optional) overrides T&C 5.1 notice period; defaults to
+ *     "thirty (30) days'" when omitted.
  *   - Fails loudly (non-zero exit, no file written) on any validation or render error,
  *     rather than emitting a half-filled legal document.
  */
@@ -76,13 +79,11 @@ function todayStamp() {
 
 function validateDeal(deal) {
   // Term fields are all optional (blank → fill-in line). Only the custom block must cohere:
-  // the {#isCustom} section needs a fee + at least one performance tier to make sense.
+  // the {#isCustom} section needs a fee. Performance tiers are optional — fixed-fee custom
+  // deals (e.g. Zyg) have none, and the template skips the performance section entirely.
   if (deal.isCustom === true) {
     if (!deal.monthlyFee || String(deal.monthlyFee).trim() === '') {
       fail('isCustom is true but monthlyFee is missing.');
-    }
-    if (!Array.isArray(deal.performanceTiers) || deal.performanceTiers.length === 0) {
-      fail('isCustom is true but performanceTiers is empty — need at least one tier.');
     }
   }
 }
@@ -112,6 +113,10 @@ function buildContext(deal) {
   ctx.monthlyFee = deal.monthlyFee || '';
   ctx.deliverables = Array.isArray(deal.deliverables) ? deal.deliverables : [];
   ctx.performanceTiers = Array.isArray(deal.performanceTiers) ? deal.performanceTiers : [];
+  ctx.hasPerformanceTiers = ctx.performanceTiers.length > 0;
+  // T&C 5.1 notice period — per-deal override (e.g. "seven (7) days’"); default 30 days.
+  const tn = deal.terminationNotice && String(deal.terminationNotice).trim();
+  ctx.terminationNotice = tn || 'thirty (30) days’';
   return ctx;
 }
 
