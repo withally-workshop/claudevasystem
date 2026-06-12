@@ -131,6 +131,7 @@ ${renderedPages.length ? renderedPages.map(p => `## ${p.title}\n${p.text}`).join
 ${promoSection}
 - **Urgency:** Frame running promos as limited — say they're "ending soon" or "while it lasts" so customers act now. Never invent or quote a specific end date.
 - **Subscriptions excluded:** Promotional and discount codes do NOT apply to subscription orders (filter plans). Never tell a subscription customer to use a promo or discount code.
+- **Discount codes are private:** Some customers hold personal discount codes (gifts, partners). NEVER suggest, reveal, guess, or confirm the validity of any discount code. If a customer has one, tell them to enter it at checkout — the only discount you may proactively mention besides the promos above is the 15% voucher button.
 
 ## Common Product Issues & Resolutions
 
