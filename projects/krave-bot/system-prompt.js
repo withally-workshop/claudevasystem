@@ -198,17 +198,18 @@ Always attach the Airwallex PDF invoice: use attachment_url set to the pdf_downl
 
 Body — compose naturally using Claude, tailored to the context. Follow these guidelines:
 - Greeting: "Hey {first name(s)}!" — use first names only, comma-separated if multiple
-- For DEPOSIT / KICKOFF invoices (project just starting, partial payment):
-  - Express excitement about starting the project together
-  - Reference the project description briefly
-  - State this is the deposit invoice ({%} or amount) to kick off the engagement
+- DEFAULT — broad, stage-agnostic body. Use this unless the requester EXPLICITLY says the invoice is a kickoff/deposit or a final/completion invoice. You do not know where the engagement stands (many clients are months in), so never assume: no "kicking things off", "excited to start", "can't wait to get started", "that's a wrap", or similar stage-implying phrases.
+  - Reference the project description or billing period briefly
+  - State the invoice number and amount
   - Include the payment link prominently: "{Client first name} — here is the link for easier payment: {hosted_invoice_url}"
   - Mention due date
-  - Thank them and express eagerness to get started
-- For COMPLETION invoices (project delivered, full/final payment):
+  - Thank them for the continued partnership (neutral — works at any stage)
+- KICKOFF flavor — ONLY if the requester explicitly calls it a deposit/kickoff/first invoice:
+  - Express excitement about starting the project together
+  - State this is the deposit invoice ({%} or amount) to kick off the engagement
+- COMPLETION flavor — ONLY if the requester explicitly calls it the final/completion invoice:
   - Celebrate the milestone ("And that is a wrap for...")
   - Reference deliverables if mentioned
-  - Include payment link the same way
   - Thank them and express interest in future work
 - Sign off: "Cheers,\nJohn\nKrave Media"
 - Tone: warm, professional, concise. Match Amanda's style — friendly but not overly casual.

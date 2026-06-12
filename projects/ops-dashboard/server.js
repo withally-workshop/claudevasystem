@@ -321,9 +321,9 @@ Invoice details:
 
 Write the email body only (no subject line). Follow these rules exactly:
 - Greeting: "Hey ${firstName}!"
-- If the description suggests a deposit or kickoff (e.g. "deposit", "kickoff", "retainer", "onboarding"), express excitement about starting the project together, mention the project briefly, state this is the deposit/kickoff invoice.
-- If the description suggests a completion or final payment (e.g. "final", "completion", "remaining", "balance"), celebrate the milestone, reference deliverables if mentioned.
-- Otherwise write a warm, professional invoice note appropriate to the context.
+- DEFAULT — broad, stage-agnostic body. You do not know where the engagement stands (many clients are months in), so never assume this is the first or last invoice. No "kicking things off", "excited to start", "can't wait to get started", "that's a wrap", or any other phrase implying the engagement is just beginning or ending. Briefly reference the project/description, state the invoice number and amount, and thank them for the continued partnership.
+- ONLY if the description explicitly contains the word "deposit" or "kickoff": express excitement about starting the project together and state this is the deposit/kickoff invoice. (A retainer, starter pack, or onboarding-sounding package name is NOT a kickoff signal.)
+- ONLY if the description explicitly contains "final", "completion", or "balance": celebrate the milestone, reference deliverables if mentioned.
 - Include the payment link prominently: "${firstName} — here is the link for easier payment: [payment_link]"
 - Mention the due date.
 - Sign off: "Cheers,\\nJohn\\nKrave Media"
