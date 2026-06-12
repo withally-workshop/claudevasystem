@@ -31,5 +31,5 @@ Master plan: `alleah-feedback-response.md` | Open questions doc: `noa-verificati
 - 1:1 DMs to team go out as John (`SLACK_JOHN_USER_TOKEN`, John↔Alleah `D0AM5EJ2NE9`), bot for channels.
 
 ## Backlog (ours, not blocked)
-- Wire promos to pull from Shopify so they expire on their own (root cause of stale-answer feedback)
+- ~~Wire promos to pull from Shopify~~ — SHIPPED 2026-06-12 (`8894ac4`): `getActiveDiscounts()` in shopify.js, live promo section in prompt, hardcoded fallback active until scope approved. **Needs John/Noa: approve pending scopes on the Halo-Home Bot app in Shopify admin (Settings → Apps)** — `read_discounts` activates live promos, `read_all_orders` fixes the 60-day window. No redeploy needed after approval (6h cache picks it up).
 - Catalog cleanup: Bamboo Pillowcase Grey priced $423.44 (should be $39); Sweet Citrus OOS
