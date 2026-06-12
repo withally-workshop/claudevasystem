@@ -93,6 +93,51 @@ async function getBlogArticles() {
   }
 }
 
+// Live promotions via GraphQL discountNodes. Returns null (not []) when the
+// scope is missing or the call fails, so the prompt can fall back to its
+// hardcoded promo list instead of claiming "no promotions".
+// Requires read_discounts — requested on the app but pending merchant approval;
+// works automatically once approved in Shopify admin (Settings → Apps).
+async function getActiveDiscounts() {
+  const query = `{
+    discountNodes(first: 50, query: "status:active") {
+      edges { node { discount {
+        __typename
+        ... on DiscountAutomaticBxgy { title status endsAt summary }
+        ... on DiscountAutomaticBasic { title status endsAt summary }
+        ... on DiscountAutomaticFreeShipping { title status endsAt summary }
+        ... on DiscountCodeBasic { title status endsAt summary codes(first: 1) { edges { node { code } } } }
+        ... on DiscountCodeBxgy { title status endsAt summary codes(first: 1) { edges { node { code } } } }
+        ... on DiscountCodeFreeShipping { title status endsAt summary codes(first: 1) { edges { node { code } } } }
+      } } }
+    }
+  }`;
+  try {
+    const res = await fetch(`${BASE}/graphql.json`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) throw new Error(`Shopify GraphQL ${res.status}`);
+    const data = await res.json();
+    if (data.errors?.length) throw new Error(data.errors[0].message);
+    const now = Date.now();
+    return (data.data.discountNodes.edges || [])
+      .map((e) => e.node.discount)
+      .filter((d) => d.title && d.status === 'ACTIVE')
+      .filter((d) => !d.endsAt || new Date(d.endsAt).getTime() > now)
+      .map((d) => ({
+        title: d.title,
+        summary: d.summary || '',
+        code: d.codes?.edges?.[0]?.node?.code || null,
+        automatic: d.__typename.startsWith('DiscountAutomatic'),
+      }));
+  } catch (err) {
+    console.error('Discount fetch failed (falling back to hardcoded promos):', err.message);
+    return null;
+  }
+}
+
 async function getOrdersByEmail(email) {
   const encoded = encodeURIComponent(email);
   const data = await shopifyGet(`/orders.json?status=any&limit=10&query=email:${encoded}`);
@@ -113,4 +158,4 @@ async function getInventoryStatus(products) {
   return { inStock, outOfStock };
 }
 
-module.exports = { getProducts, getPages, getBlogArticles, getOrdersByEmail, getInventoryStatus, getAllRenderedPages, stripHtml };
+module.exports = { getProducts, getPages, getBlogArticles, getOrdersByEmail, getInventoryStatus, getAllRenderedPages, getActiveDiscounts, stripHtml };

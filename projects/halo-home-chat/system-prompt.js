@@ -1,6 +1,29 @@
 const { stripHtml } = require('./shopify');
 
-function buildSystemPrompt({ inventoryStatus, products = [], pages = [], articles = [], renderedPages = [] }) {
+function buildSystemPrompt({ inventoryStatus, products = [], pages = [], articles = [], renderedPages = [], discounts = null }) {
+  // ── Promotions: live from Shopify when the discounts scope is available,
+  //    hardcoded fallback otherwise (discounts === null means fetch unavailable) ──
+  let promoSection;
+  if (Array.isArray(discounts)) {
+    const promoLines = discounts.map((d) => {
+      const detail = d.summary ? ` — ${d.summary.replace(/\.?\s*$/, '.')}` : '';
+      const how = d.automatic
+        ? 'Applies automatically at checkout.'
+        : d.code ? `Redeem with code ${d.code} at checkout.` : '';
+      return `- **${d.title}**${detail} ${how}`.trim();
+    }).join('\n');
+    promoSection = [
+      promoLines || '- No store-wide promotions are running right now besides the 15% voucher below. Do not invent or mention any other promo.',
+      '- **15% off voucher:** Customers can claim 15% off. To redeem, tell them to click the "CLAIM 15% OFF VOUCHER" button on the site — the discount then applies at checkout.',
+      '(The list above is pulled live from Shopify and refreshes automatically — only mention promotions that appear in it.)',
+    ].join('\n');
+  } else {
+    promoSection = [
+      '- **Buy 2 Get 1 Free — Brushed Chrome Showerhead:** Buy 2 Brushed Chrome Showerheads, get a 3rd free. Mention this whenever a customer is considering Brushed Chrome, buying for multiple bathrooms, or shopping for gifts.',
+      '- **15% off voucher:** Customers can claim 15% off. To redeem, tell them to click the "CLAIM 15% OFF VOUCHER" button on the site — the discount then applies at checkout.',
+    ].join('\n');
+  }
+
   // ── Live inventory ──────────────────────────────────────────────────────────
   const inStockList = inventoryStatus.inStock.length
     ? inventoryStatus.inStock.map((p) => `  - ${p}`).join('\n')
@@ -105,9 +128,8 @@ ${renderedPages.length ? renderedPages.map(p => `## ${p.title}\n${p.text}`).join
 - **Response time:** Customer queries are answered within 48 hours, weekends inclusive.
 
 ## Current Promotions
-- **Buy 2 Get 1 Free — Brushed Chrome Showerhead:** Buy 2 Brushed Chrome Showerheads, get a 3rd free. Mention this whenever a customer is considering Brushed Chrome, buying for multiple bathrooms, or shopping for gifts.
-- **15% off voucher:** Customers can claim 15% off. To redeem, tell them to click the "CLAIM 15% OFF VOUCHER" button on the site — the discount then applies at checkout.
-- **Urgency:** Both promos run on an ongoing basis, but always frame them as limited — say they're "ending soon" or "while it lasts" so customers act now. Never invent or quote a specific end date.
+${promoSection}
+- **Urgency:** Frame running promos as limited — say they're "ending soon" or "while it lasts" so customers act now. Never invent or quote a specific end date.
 - **Subscriptions excluded:** Promotional and discount codes do NOT apply to subscription orders (filter plans). Never tell a subscription customer to use a promo or discount code.
 
 ## Common Product Issues & Resolutions

@@ -5,7 +5,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const rateLimit = require('express-rate-limit');
 const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
-const { getProducts, getPages, getBlogArticles, getOrdersByEmail, getInventoryStatus, getAllRenderedPages } = require('./shopify');
+const { getProducts, getPages, getBlogArticles, getOrdersByEmail, getInventoryStatus, getAllRenderedPages, getActiveDiscounts } = require('./shopify');
 const { buildSystemPrompt } = require('./system-prompt');
 const { createSession, getSession, updateSessionEmail, setOwner, appendHistory, getHistory, registerSocket, getSocketId, touchSession } = require('./session');
 const { notifyEscalation, relayCustomerMessage, verifySlackSignature, handleInteraction, handleSlashReply, handleSlashHandback } = require('./slack');
@@ -37,23 +37,25 @@ let catalogCache = {
   pages: [],
   articles: [],
   renderedPages: [],
+  discounts: null,
   lastRefresh: 0,
 };
 const CACHE_TTL = 6 * 60 * 60 * 1000;
 
 async function refreshCatalog() {
   try {
-    const [products, pages, articles] = await Promise.all([
+    const [products, pages, articles, discounts] = await Promise.all([
       getProducts(),
       getPages(),
       getBlogArticles(),
+      getActiveDiscounts(),
     ]);
     const [inventoryStatus, renderedPages] = await Promise.all([
       getInventoryStatus(products),
       getAllRenderedPages(pages),
     ]);
-    catalogCache = { products, inventoryStatus, pages, articles, renderedPages, lastRefresh: Date.now() };
-    console.log(`Catalog refreshed: ${products.length} products, ${pages.length} pages, ${articles.length} articles`);
+    catalogCache = { products, inventoryStatus, pages, articles, renderedPages, discounts, lastRefresh: Date.now() };
+    console.log(`Catalog refreshed: ${products.length} products, ${pages.length} pages, ${articles.length} articles, discounts: ${discounts === null ? 'unavailable (fallback)' : discounts.length}`);
   } catch (err) {
     console.error('Catalog refresh failed:', err.message);
   }
@@ -107,6 +109,7 @@ async function callClaude({ content, historyEntries = [], email }) {
     pages: catalogCache.pages,
     articles: catalogCache.articles,
     renderedPages: catalogCache.renderedPages,
+    discounts: catalogCache.discounts,
   });
 
   let orderContext = '';
