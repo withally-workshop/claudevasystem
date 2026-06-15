@@ -4,28 +4,48 @@ const https = require('https');
 const { randomUUID } = require('crypto');
 
 const AW_BASE = 'api.airwallex.com';
-let _awToken = { token: null, exp: 0 };
+const SPEND_PREFIX = '/api/v1/spend/';
+const LEGAL_ENTITY_ID = process.env.AIRWALLEX_LEGAL_ENTITY_ID || 'le_Zxw2-ECjOaKKebIGraD1AA';
 
-const BILLING_PATHS = ['/api/v1/invoices', '/api/v1/billing_customers', '/api/v1/products', '/api/v1/prices'];
+// Per-key token caches. Spend endpoints (/api/v1/spend/*) need the org-scoped
+// key; everything else uses the main account key. Spend falls back to main if
+// the spend env vars are unset.
+const _tokens = { main: { token: null, exp: 0 }, spend: { token: null, exp: 0 } };
 
-async function getToken() {
-  if (_awToken.token && Date.now() < _awToken.exp - 60000) return _awToken.token;
-  const res = await awRequest('POST', '/api/v1/authentication/login', null, null, true);
-  if (!res.ok) throw new Error('Airwallex auth failed');
-  _awToken = { token: res.body.token, exp: Date.now() + 25 * 60 * 1000 };
-  return _awToken.token;
+function keyFor(which) {
+  if (which === 'spend') {
+    return {
+      clientId: process.env.AIRWALLEX_SPEND_CLIENT_ID || process.env.AIRWALLEX_CLIENT_ID,
+      apiKey: process.env.AIRWALLEX_SPEND_API_KEY || process.env.AIRWALLEX_API_KEY,
+    };
+  }
+  return { clientId: process.env.AIRWALLEX_CLIENT_ID, apiKey: process.env.AIRWALLEX_API_KEY };
 }
 
-function awRequest(method, path, payload, token, isAuth = false) {
+// Endpoints that require an x-api-version header.
+const VERSIONED_PATHS = ['/api/v1/invoices', '/api/v1/billing_customers', '/api/v1/products', '/api/v1/prices', '/api/v1/fx/'];
+
+async function getToken(which) {
+  const cache = _tokens[which];
+  if (cache.token && Date.now() < cache.exp - 60000) return cache.token;
+  const { clientId, apiKey } = keyFor(which);
+  const res = await awRequest('POST', '/api/v1/authentication/login', null, null, { clientId, apiKey });
+  if (!res.ok) throw new Error(`Airwallex auth failed (${which})`);
+  cache.token = res.body.token;
+  cache.exp = Date.now() + 25 * 60 * 1000;
+  return cache.token;
+}
+
+function awRequest(method, path, payload, token, authKeys = null) {
   return new Promise((resolve, reject) => {
     const buf = payload ? Buffer.from(JSON.stringify(payload)) : null;
     const headers = { 'Content-Type': 'application/json' };
-    if (isAuth) {
-      headers['x-client-id'] = process.env.AIRWALLEX_CLIENT_ID;
-      headers['x-api-key'] = process.env.AIRWALLEX_API_KEY;
+    if (authKeys) {
+      headers['x-client-id'] = authKeys.clientId;
+      headers['x-api-key'] = authKeys.apiKey;
     } else {
       headers['Authorization'] = `Bearer ${token}`;
-      if (BILLING_PATHS.some((p) => path.startsWith(p))) headers['x-api-version'] = '2025-06-16';
+      if (VERSIONED_PATHS.some((p) => path.startsWith(p))) headers['x-api-version'] = '2025-06-16';
     }
     if (buf) headers['Content-Length'] = buf.length;
     const req = https.request({ hostname: AW_BASE, path, method, headers }, (res) => {
@@ -44,7 +64,8 @@ function awRequest(method, path, payload, token, isAuth = false) {
 }
 
 async function aw(method, path, payload) {
-  const token = await getToken();
+  const which = path.startsWith(SPEND_PREFIX) ? 'spend' : 'main';
+  const token = await getToken(which);
   const res = await awRequest(method, path, payload, token);
   if (!res.ok) throw new Error(`Airwallex ${res.status}: ${JSON.stringify(res.body)}`);
   return res.body;
@@ -130,15 +151,67 @@ async function createCustomer({ name, email, country_code, address, city }) {
   return aw('POST', '/api/v1/billing_customers/create', body);
 }
 
-async function listBills({ status, page_num = 0, page_size = 20 }) {
+async function listBills({ status, vendor_id, page_num = 0, page_size = 20 }) {
   const p = new URLSearchParams({ page_num, page_size });
   if (status) p.set('status', status);
-  const data = await aw('GET', `/api/v1/bills?${p}`);
-  return { bills: (data.items || []).map((b) => ({ id: b.id, amount: b.amount, currency: b.currency, status: b.status, due_date: b.due_date })) };
+  if (vendor_id) p.set('vendor_id', vendor_id);
+  const data = await aw('GET', `/api/v1/spend/bills?${p}`);
+  return { bills: (data.items || []).map((b) => ({ id: b.id, vendor_id: b.vendor_id, invoice_number: b.invoice_number, amount: b.billing_amount, currency: b.billing_currency, status: b.status, due_date: b.due_date })) };
 }
 
 async function getBill({ bill_id }) {
-  return aw('GET', `/api/v1/bills/${bill_id}`);
+  return aw('GET', `/api/v1/spend/bills/${bill_id}`);
+}
+
+async function listVendors({ name, page_num = 0, page_size = 50 }) {
+  const p = new URLSearchParams({ page_num, page_size });
+  if (name) p.set('name', name);
+  const data = await aw('GET', `/api/v1/spend/vendors?${p}`);
+  return { vendors: (data.items || []).map((v) => ({ id: v.id, name: v.name, country: v.address && v.address.country_code })) };
+}
+
+// Profile only — NEVER write bank details into a vendor. The invoice PDF stays
+// the payment source of truth (Noa reads bank details from the uploaded PDF).
+async function createVendor({ name, email, country_code }) {
+  const body = { request_id: randomUUID(), name };
+  if (email) body.email = email;
+  if (country_code) body.country_code = country_code;
+  return aw('POST', '/api/v1/spend/vendors/create', body);
+}
+
+async function createBill({ external_id, vendor_id, invoice_number, issued_date, due_date, currency, tax_status, description, line_items, legal_entity_id }) {
+  const body = {
+    request_id: randomUUID(),
+    external_id,
+    legal_entity_id: legal_entity_id || LEGAL_ENTITY_ID,
+    vendor_id,
+    invoice_number,
+    issued_date,
+    due_date,
+    billing_currency: currency,
+    tax_status: tax_status || 'TAX_EXCLUSIVE',
+    sync_status: 'NOT_SYNCED',
+    line_items: (line_items || []).map((i) => ({ description: i.description, quantity: String(i.quantity), unit_price: String(i.unit_price) })),
+  };
+  if (description) body.description = description;
+  // No `attachments` field — Airwallex removed it from this endpoint 2026-06-11;
+  // native bill attachments arrive ~Aug 2026. The PDF is uploaded manually in
+  // the webapp (an #ops-command flag prompts John per bill).
+  return aw('POST', '/api/v1/spend/bills/create', body);
+}
+
+async function markBillPaid({ bill_id }) {
+  return aw('POST', `/api/v1/spend/bills/${bill_id}/mark_as_paid`, null);
+}
+
+// Live indicative FX rate (main key). For USD invoice → PHP payout, call with
+// buy_currency=PHP, sell_currency=USD: returns USDPHP rate. Bill amount =
+// invoice_amount × rate × 0.97.
+async function fxRate({ buy_currency, sell_currency, buy_amount }) {
+  const p = new URLSearchParams({ buy_currency, sell_currency });
+  if (buy_amount) p.set('buy_amount', buy_amount);
+  const data = await aw('GET', `/api/v1/fx/rates/current?${p}`);
+  return { currency_pair: data.currency_pair, rate: data.rate, conversion_date: data.conversion_date };
 }
 
 async function markPaid({ invoice_id }) {
@@ -243,13 +316,52 @@ module.exports = {
     },
     {
       name: 'airwallex_list_bills',
-      description: 'List Airwallex AP bills (outgoing payments to creators/vendors).',
-      input_schema: { type: 'object', properties: { status: { type: 'string' }, page_num: { type: 'number' }, page_size: { type: 'number' } } },
+      description: 'List Airwallex Spend AP bills (outgoing payments to creators/vendors). Filter by status (DRAFT, AWAITING_APPROVAL, AWAITING_PAYMENT, PAID, REJECTED) or vendor_id.',
+      input_schema: { type: 'object', properties: { status: { type: 'string' }, vendor_id: { type: 'string' }, page_num: { type: 'number' }, page_size: { type: 'number' } } },
     },
     {
       name: 'airwallex_get_bill',
-      description: 'Get details of a specific Airwallex bill.',
+      description: 'Get details of a specific Airwallex Spend bill by ID. Use for the post-create guard (verify amount/currency/vendor).',
       input_schema: { type: 'object', properties: { bill_id: { type: 'string' } }, required: ['bill_id'] },
+    },
+    {
+      name: 'airwallex_list_vendors',
+      description: 'List Airwallex Spend vendors (the payees for AP bills). Search by name to resolve a vendor_id before creating a bill.',
+      input_schema: { type: 'object', properties: { name: { type: 'string' }, page_num: { type: 'number' }, page_size: { type: 'number' } } },
+    },
+    {
+      name: 'airwallex_create_vendor',
+      description: 'Create a Spend vendor (profile only). Pass name (+ country_code if known). NEVER pass bank details — the invoice PDF is the payment source of truth. Use only when no existing vendor matches the invoice payee.',
+      input_schema: { type: 'object', properties: { name: { type: 'string' }, email: { type: 'string' }, country_code: { type: 'string' } }, required: ['name'] },
+    },
+    {
+      name: 'airwallex_create_bill',
+      description: 'Create an Airwallex Spend AP bill (draft creator/vendor payable). Requires vendor_id (from airwallex_list_vendors/create_vendor). The PDF cannot be attached via API until ~Aug 2026 — upload it manually in the webapp afterward. external_id should be the source Slack ts / Gmail id (idempotency).',
+      input_schema: {
+        type: 'object',
+        properties: {
+          external_id: { type: 'string' },
+          vendor_id: { type: 'string' },
+          invoice_number: { type: 'string' },
+          issued_date: { type: 'string', description: 'ISO8601 e.g. 2026-06-12' },
+          due_date: { type: 'string', description: 'ISO8601' },
+          currency: { type: 'string', description: 'Payout currency (sent as billing_currency)' },
+          tax_status: { type: 'string', description: 'TAX_EXCLUSIVE (default) or TAX_INCLUSIVE' },
+          description: { type: 'string', description: 'Source + conversion note if any' },
+          line_items: { type: 'array', items: { type: 'object', properties: { description: { type: 'string' }, quantity: { type: 'number' }, unit_price: { type: 'number' } }, required: ['quantity', 'unit_price'] } },
+        },
+        required: ['external_id', 'vendor_id', 'invoice_number', 'issued_date', 'due_date', 'currency', 'line_items'],
+      },
+    },
+    {
+      name: 'airwallex_mark_bill_paid',
+      description: 'Mark a Spend AP bill as paid outside Airwallex. (Distinct from airwallex_mark_paid, which is for AR invoices.)',
+      input_schema: { type: 'object', properties: { bill_id: { type: 'string' } }, required: ['bill_id'] },
+    },
+    {
+      name: 'airwallex_fx_rate',
+      description: 'Get the live Airwallex FX rate. For a USD invoice paid in PHP, call buy_currency=PHP, sell_currency=USD → returns the USDPHP rate. Bill amount = invoice_amount × rate × 0.97.',
+      input_schema: { type: 'object', properties: { buy_currency: { type: 'string' }, sell_currency: { type: 'string' }, buy_amount: { type: 'number' } }, required: ['buy_currency', 'sell_currency'] },
     },
     {
       name: 'airwallex_mark_paid',
@@ -275,6 +387,11 @@ module.exports = {
     airwallex_create_customer: createCustomer,
     airwallex_list_bills: listBills,
     airwallex_get_bill: getBill,
+    airwallex_list_vendors: listVendors,
+    airwallex_create_vendor: createVendor,
+    airwallex_create_bill: createBill,
+    airwallex_mark_bill_paid: markBillPaid,
+    airwallex_fx_rate: fxRate,
     airwallex_mark_paid: markPaid,
     airwallex_void_invoice: voidInvoice,
   },
