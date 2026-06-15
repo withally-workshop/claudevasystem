@@ -18,9 +18,10 @@ Turn Noa's deal terms into a filled retainer `.docx` ready to upload to PandaDoc
 ## Key References
 
 - **Full SOP:** `.claude/skills/contract-generation/SKILL.md`
-- **Generator project:** `projects/contract-generation/` (`generate-contract.js`, `README.md`)
+- **Generator project:** `projects/contract-generation/` — `generate-contract.js` (round-based, Appendix A) and `mtm-retainer.js` (month-to-month, FluffCo/Zenwise-style; per-client configs inside the script); `README.md`
 - **Reference (source-of-record):** `projects/contract-generation/master/MASTER CONTRACT - reference (start PDF).pdf`
 - **Template (placeholders):** `projects/contract-generation/template/retainer-template.docx` (authored by `reconstruct-template.js`)
+- **Drive review folder:** "Client Contracts & Invoices" — `1jPHJmiIdTrzLSAhwHLxeVZrr7XxfFiGm` (Agency Work > Finance); John drag-drops the verified docx here for Noa.
 - **John's private channel:** `C0AQZGJDR38`
 - **Agency entity:** Eclipse Ventures PTE LTD (Krave Media), UEN 2024040972, signatory Noa Nederpelt, Director.
 
@@ -28,8 +29,10 @@ Turn Noa's deal terms into a filled retainer `.docx` ready to upload to PandaDoc
 
 1. **Parse Noa's request** — the package (Appendix A name, or custom base-fee + performance). Effective date and # Rounds stay blank by default (Noa fills). Never ask for client legal name / BR number / signatory details (left blank).
 2. **Confirm with John** — John runs the skill himself; show the parsed terms and wait for his "go" before generating.
-3. **Generate** — write `projects/contract-generation/deals/<slug>.json`, run `node generate-contract.js --deal deals/<slug>.json`. Script prints the output `.docx` path; it fails loudly (no file) on an incoherent custom deal.
-4. **Hand to John → Noa approval loop** — John sends the file to Noa. If approved, John uploads to PandaDoc (sets party/sig fields) and sends. If not, John relays feedback → iterate: data changes edit `deals/<slug>.json`; clause-wording changes edit `reconstruct-template.js` + rerun. Never hand-edit the generated `.docx`. The skill never uploads or sends.
+3. **Generate + verify** — round-based: write `deals/<slug>.json`, run `node generate-contract.js --deal deals/<slug>.json`. Month-to-month: edit the client config in `mtm-retainer.js`, run `node mtm-retainer.js`. Script prints the output `.docx` path; `generate-contract.js` fails loudly on an incoherent custom deal. Always verify the docx by extracting its XML (terms read right; tables carry an explicit `tblGrid` or Google Drive preview collapses them).
+4. **Hand to John → Drive → Noa approval loop** — John drag-drops the verified file into the Drive review folder for Noa's inline comments (or straight to PandaDoc). If approved, John uploads to PandaDoc (sets party/sig fields) and sends. If not, John relays feedback → iterate: round-based data edits `deals/<slug>.json`; month-to-month edits the config in `mtm-retainer.js`; clause-wording edits `reconstruct-template.js` + rerun. Never hand-edit the generated `.docx`. The skill never uploads or sends.
+
+> **Drive uploads are manual.** Never route docx bytes through model output / the claude.ai Drive connector — inline base64 corrupts in transit (2026-06-12 incident). A parked `upload-to-drive.js` (service-account, disk→API, hash-verified) is blocked on Drive storage quota until the folder moves to a Workspace Shared Drive with the `krave-ea` SA added.
 
 ## Deal JSON
 
@@ -38,5 +41,5 @@ All term fields are optional — anything omitted renders as a blank fill-in lin
 ## Codex Invocation Notes
 
 - Deal terms and generated contracts are local-only artifacts — `deals/` (except `example-standard.json`) and `output/` are gitignored; do not commit them.
-- Setup: run `node reconstruct-template.js` to (re)build the template; run `npm install` if `node_modules` is missing. The template is re-authored from the start PDF — review wording in Word before real use.
-- Deferred: PandaDoc API draft-creation (same deal JSON), and baking PandaDoc signature tokens into the template.
+- Setup: run `node reconstruct-template.js` to (re)build the round-based template; run `npm install` if `node_modules` is missing. The template is re-authored from the start PDF — review wording in Word before real use.
+- Deferred: Shared-Drive auto-upload via `upload-to-drive.js` (move folder to a Workspace Shared Drive + add the `krave-ea` SA); PandaDoc API draft-creation (same deal JSON); baking PandaDoc signature tokens into the template.
