@@ -5,22 +5,23 @@
 
 ---
 
-> **MIGRATION IN PROGRESS (2026-06-12).** The **manual `/invoice-triage` path (this skill) now creates bills directly via the Airwallex Spend API** — no more forward-by-email. The **n8n email-scan workflow (`DbIJYYQ3FE4HKprB`) and krave-bot still forward-by-email** until Phase 2 promotes this logic to them. So during migration: manual sweep = API; automated email + Slack = email forward. Both end in the same tracker.
+> **PREP & HANDOFF MODEL (2026-06-15).** We do **NOT** create the bill via API — Airwallex can't create a DRAFT or attach a PDF until ~Aug 2026, and an API-created bill lands `AWAITING_PAYMENT` (finalized, no PDF, unuploadable). The email-forward path is also broken (not forwarding). So: **the automation parses, validates, does the FX math, replies to the team (feels fully automated), and hands John a ready-to-create package in #ops-command. John creates the DRAFT bill manually in Airwallex (vendor → fields → upload PDF → submit).** No `airwallex_create_bill` in the flow. The n8n email workflow (`DbIJYYQ3FE4HKprB`) is **deactivated** pending a prep-and-handoff rebuild.
 
-> **Incident guards (2026-06-12, John-approved) — apply to every path including manual.** A client lead's proposal screenshots were misclassified as invoices and got two auto-replies. Hard rules now: (1) **PDF-only** — never ingest images; (2) **classify is-this-an-invoice with context before trusting any extraction**; (3) **one reply per email/message**, never per attachment; (4) **known-sender gate** — bounces (missing bank details / no invoice) only go to `@kravemedia.co` senders or vendors already in the Bills tracker. Unknown sender → **no reply**, just an #ops-command flag + an "On hold" tracker row. See [[external_autoreply_guards]].
+> **Incident guards (2026-06-12 + 2026-06-15) — apply to every path.** (1) **PDF-only** — never ingest images; (2) **classify is-this-an-invoice with context before trusting extraction**; (3) **one reply per message**, never per attachment; (4) **HARDCODED SENDER ALLOWLIST** — only reply to recognized Krave team: **John, Noa, Jeneena, Amanda, Shin, Sybil** (all `@kravemedia.co`). ANY other sender → **no reply at all**, just an #ops-command flag. This is the fix for the client-as-creator misfire. See [[external_autoreply_guards]].
 
 ## What This Skill Does
-Receives creator/vendor invoices (email, Slack channel, Slack DMs), validates each PDF, **creates a draft bill in Airwallex Spend via API**, posts an #ops-command flag so John uploads the PDF (API can't attach until Aug 2026), replies to the requester once, and logs to the Bills tracker. No automated payment — Noa pays every Thursday.
+Receives creator/vendor invoices (Slack DM, channel @mention, manual sweep), validates each PDF, computes vendor match + FX conversion, **posts a ready-to-create prep package to #ops-command for John to create the draft manually**, replies once to the team (allowlisted senders only), and logs to the Bills tracker. No API bill creation, no automated payment — Noa pays every Thursday.
 
 ---
 
 ## Trigger Paths
 
-| Path | Channel | Latency | Handler | Bill method |
+| Path | Channel | Latency | Handler | Method |
 |------|---------|---------|---------|-------------|
-| Manual | `/invoice-triage` | On-demand | **This skill** | **Airwallex API** |
-| Slack DM | John's personal DM | Real-time | Krave bot | email forward (Phase 2: API) |
-| Slack @mention | #payments-invoices-updates | Real-time | Krave bot | email forward (Phase 2: API) |
+| Manual | `/invoice-triage` | On-demand | **This skill** | Prep & handoff |
+| Slack DM | DM to the bot | Real-time | Krave bot | Prep & handoff |
+| Slack @mention | #payments-invoices-updates | Real-time | Krave bot | Prep & handoff |
+| Email | john@kravemedia.co | — | n8n `DbIJYYQ3FE4HKprB` | **Deactivated** (rebuild pending) |
 | Email | john@kravemedia.co | ≤3h | n8n `DbIJYYQ3FE4HKprB` | email forward (Phase 2: API) |
 
 **Strategists must @tag Claude EA** in #payments-invoices-updates to trigger processing. Non-@mention messages are informational.
@@ -108,33 +109,22 @@ Document vision → payee name, email, invoice #, issued/due dates, amount, curr
 ### Step 5 — Derive fields
 Invoice # (generate `INV-`+7 digits if blank) · due date (Friday PHT if blank) · invoice date (today if blank) · currency (infer from bank country if blank).
 
-### Step 6 — Resolve vendor
-Match the alias/live table → UUID, or create vendor (profile only) + 🚨 NEW VENDOR flag. Ambiguous → hold + flag.
+### Step 6 — Resolve vendor (report only)
+Match the alias/live table (`airwallex_list_vendors`) → note "exists" + the name, or "NEW — John creates it". **Do not create the vendor.** Ambiguous → hold + flag.
 
 ### Step 7 — Currency conversion (if needed)
-If invoice currency != payout currency, fetch the live Airwallex rate, multiply by 0.97, compute the billed amount. Record rate + source amount for the description and the 🚨 CONVERTED flag.
+If invoice currency != payout currency, `airwallex_fx_rate` × 0.97 → billed amount. Record rate + source amount for the prep package + 🚨 CONVERTED flag.
 
-### Step 8 — Create the bill
-`airwallex_create_bill`:
-- `external_id` = source message id · `vendor_id` · `legal_entity_id` = `le_Zxw2-ECjOaKKebIGraD1AA`
-- `invoice_number` · `issued_date` · `due_date` · `currency` (payout) · `tax_status` TAX_EXCLUSIVE
-- `line_items` from the invoice (quantity, unit_price; sum must equal the total)
-- `description` = source + conversion note if any
-- **No attachment** — API can't attach until Aug 2026.
+### Step 8 — Post the prep package to #ops-command
+Post the ready-to-create handoff to C0AQZGJDR38 (see Reporting). John creates the DRAFT bill manually from it. **No `airwallex_create_bill`.**
 
-### Step 9 — Post-create guard
-`airwallex_get_bill(bill_id)` → verify billed amount, currency, vendor match what we parsed/computed. Mismatch → 🚨 GUARD MISMATCH, note in tracker, do not reply success.
+### Step 9 — Reply to requester (once, allowlisted senders only)
+Only after the prep package is posted (never on receipt), and only if the sender is on the hardcoded allowlist (John, Noa, Jeneena, Amanda, Shin, Sybil). Plain confirmation, no Airwallex detail. Bounces reply immediately (same allowlist gate). Non-allowlisted sender → no reply, #ops-command flag only. See reply templates.
 
-### Step 10 — #ops-command flag (per bill)
-Post to C0AQZGJDR38 (see Reporting below) so John uploads the PDF.
+### Step 10 — Log to tracker
+Append per invoice (columns A–J): Date Received · Creator/Vendor · Invoice # · **Airwallex Bill ID (BLANK — John fills after creating)** · Amount (payout) · Currency (payout) · Due Date · **Status** · external_id (Slack ts) · Notes (conversion rate, NEW VENDOR, due-date source, flags). Status = `Prepped — awaiting manual creation` / `On hold — <reason>` / `Duplicate`.
 
-### Step 11 — Reply to requester (once)
-Only after **all** bills from that request are created (never on receipt). Bounces are the exception — reply immediately on a failed check, subject to the known-sender gate. See reply templates below.
-
-### Step 12 — Log to tracker
-Append per bill (columns A–J): Date Received · Creator/Vendor · Invoice # · **Airwallex Bill ID** · Amount · Currency · Due Date · **Status** · external_id (Slack ts / Gmail id) · Notes (conversion rate, new-vendor, flags). Status = `Staged in Airwallex` / `On hold — <reason>` / `Duplicate — <bill id>`.
-
-### Step 13 — Save cursor
+### Step 11 — Save cursor
 `slack_set_last_read(channel_id: C09HN2EBPR7, ts: <newest processed>)`.
 
 ---
@@ -143,48 +133,48 @@ Append per bill (columns A–J): Date Received · Creator/Vendor · Invoice # ·
 
 All async, batched per the deep-work tiers — never DMs.
 
-**A. Per-bill creation notice** (every bill — this is John's PDF-upload queue):
+**A. Prep package** (every valid invoice — John's ready-to-create handoff):
 ```
-🧾 Bill created — upload PDF
-[Creator] · [Invoice #]
-[Currency] [Amount]   (converted: from [orig] [amt] @ [rate] ×0.97)
-Bill: https://www.airwallex.com/app/spend/bills/[id]
-Source: [Email from X / Slack @Y]
-→ Open the bill and upload the invoice PDF (API can't attach until Aug).
+🧾 Ready to create — [Creator]
+Vendor: [name] (exists / NEW — create first) · payout [ccy]
+Invoice #[num] · issued [date] · due [date] (source: on-invoice / NET-x / Friday default)
+Bill amount: [payout ccy] [amount]   (from [orig] [amt] @ [rate] ×0.97, if converted)
+Line items: [desc — qty × unit]
+Bank: [bank / acct / SWIFT — validated]
+PDF: [Slack thread link / DM]
+→ New draft bill in Airwallex Spend → vendor above → fill fields → upload the PDF → submit.
 ```
 
 **B. Run summary** (end of each run, only if anything happened):
 ```
-Invoice run [HH:MM PHT] — ✅ N created · ↩️ M bounced · ⏭️ K duplicate
+Invoice run [HH:MM PHT] — 🧾 N prepped · ↩️ M bounced · ⏭️ K duplicate
 ↩️ [Creator] — [reason]
-⏭️ [Creator] — already bill [id]
+⏭️ [Creator] — already in tracker
 ```
-Replaces the old "review drafts by EOD" glance.
 
 **C. Loud flags (🚨, own message)** — only where money can go wrong silently:
 | Flag | When | Why |
 |------|------|-----|
-| 🚨 NEW VENDOR | A vendor profile was created | Parse error → wrong/duplicate vendor; verify name before Noa pays (bank details are in the PDF you upload) |
+| 🚨 NEW VENDOR | Payee not in the vendor list | John must create the vendor in Airwallex first; verify the name |
 | 🚨 CONVERTED | Currency was converted | Conversion changes the paid amount; sanity-check the rate |
-| 🚨 AMOUNT MISMATCH | Message amount ≠ PDF amount | Bill NOT created — confirm the correct figure |
-| 🚨 GUARD MISMATCH | Created bill ≠ parsed values | Catches API-side surprises; rare, critical |
+| 🚨 AMOUNT MISMATCH | Message amount ≠ PDF amount | Not prepped — confirm the correct figure |
+| 🚨 UNKNOWN SENDER | Sender not on the hardcoded allowlist | No reply was sent; John decides whether it's legit |
 
-**Not flagged** (expected, would be noise): routine creation (that's A), invoice-number generation, due-date defaulting.
+**Not flagged** (expected, would be noise): routine prep (that's A), invoice-number generation, due-date defaulting.
 
 ---
 
 ## Reply Templates
 
-**Success (once, after all bills staged).** Plain confirmation only — NEVER include the Airwallex bill link, bill ID, or any Airwallex internal detail (only John has Airwallex access; requesters are often strategists). The bill link/ID go ONLY to the #ops-command 🧾 flag.
-- Slack (thread + ✅): `Done — staged [N] bill(s) for payment: [Creator] [Currency][Amount]; …`
-- Email (in-thread): `Hi [First Name], Done — staged for payment: [list]. Cheers, John / Krave Media`
+Replies go **only** to the hardcoded allowlist: **John, Noa, Jeneena, Amanda, Shin, Sybil** (`@kravemedia.co`). Any other sender → no reply, #ops-command 🚨 UNKNOWN SENDER flag only.
 
-**Bounce — missing bank details** (known-sender gate):
-- `Hi [First Name], [Creator]'s invoice has no bank details. Please ask them to reissue with account number + SWIFT/BIC + bank name — can't stage payment without it.`
+**Success (once, after the prep package is posted).** Plain confirmation, no Airwallex detail, no mention of manual creation (team experiences it as automated):
+- Slack (thread + ✅): `Received — [Creator]'s invoice is staged for payment.`
+- Email (in-thread): `Hi [First Name], Received — staged for payment. Cheers, John / Krave Media`
+
+**Bounce — missing bank details:** `Hi [First Name], [Creator]'s invoice has no bank details. Please ask them to reissue with account number + SWIFT/BIC + bank name — can't stage payment without it.`
 
 **Bounce — no PDF:** `No invoice PDF attached — please send the PDF before I can process this.`
-
-**Unknown sender** (any bounce condition): no reply. Post #ops-command flag + "On hold" tracker row.
 
 ---
 
@@ -194,12 +184,12 @@ Drop (no parse/reply/forward/log/mark-read) email from `airwallex.com` + subdoma
 ---
 
 ## Multiple PDFs Per Request
-One request with 2+ invoices = 2+ independent bills: each parsed, validated, vendor-resolved, created, flagged, and tracker-logged on its own. One good + one bad → good is created, bad bounces. Single combined success reply lists all created bills.
+One request with 2+ invoices = 2+ independent prep packages: each parsed, validated, vendor-matched, FX-converted, and tracker-logged on its own. One good + one bad → prep the good, bounce the bad.
 
 ---
 
 ## Notes
 - VA: @U0AM5EGRVTP · Noa: @U06TBGX9L93
-- Never pay without approval — API bills land `AWAITING_PAYMENT`; Noa runs payments Thursday.
-- John's review shifts from "finalize drafts" to "upload the PDF + scan flags" — money still can't move without Noa.
+- John creates the DRAFT bill manually from each prep package (vendor → fields → upload PDF → submit), then fills the Bill ID in the tracker. Noa pays Thursday.
+- **Aug 2026:** when Airwallex supports DRAFT creation + API attachments, this flips to auto-create (`airwallex_create_bill` + post-create guard + upload). The vendor/FX tools already exist for that day; `legal_entity_id` = `le_Zxw2-ECjOaKKebIGraD1AA`.
 - Phase 2 promotes this exact logic to krave-bot + n8n (`DbIJYYQ3FE4HKprB`), with the Spend key as an n8n `httpCustomAuth` credential (auth in HTTP Request nodes — Code nodes lack `requestWithAuthentication`, see [[n8n_code_node_helpers]]).

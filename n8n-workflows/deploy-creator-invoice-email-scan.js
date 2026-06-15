@@ -21,11 +21,15 @@
  * the PDF to the Airwallex bills inbox (kravemedia@bills.airwallex.com) which
  * auto-creates a draft, replies to the sender, and logs to the Bills tab.
  *
- * MIGRATION (2026-06-12): the manual /invoice-triage path now creates bills
- * directly via the Airwallex Spend API (see references/sops/creator-invoice-
- * management.md). Phase 2 will promote that logic here via an httpCustomAuth
- * Spend credential (Code nodes lack requestWithAuthentication — auth must live
- * in HTTP Request nodes). Until then this workflow stays forward-by-email.
+ * DEACTIVATED 2026-06-15. This workflow was turned off (active=false) because
+ * (a) the success path `Reply Fallback` (n27) replied to ANY sender, ungated,
+ * even when the forward failed (continueOnFail), and (b) the forward to the
+ * Airwallex bills inbox stopped working. The whole flow is moving to the
+ * PREP & HANDOFF model (see references/sops/creator-invoice-management.md):
+ * parse → validate → hardcoded-allowlist reply → #ops-command prep package →
+ * tracker log; John creates the DRAFT bill manually (API can't create DRAFT or
+ * attach a PDF until ~Aug 2026). DO NOT re-deploy/reactivate this script as-is —
+ * rebuild to prep-and-handoff first. John handles emailed invoices manually now.
  *
  * Deploy:
  *   node deploy-creator-invoice-email-scan.js

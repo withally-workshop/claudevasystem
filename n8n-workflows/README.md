@@ -28,7 +28,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Halo - Daily Digest | Active | 10 AM PHT daily (Asia/Manila) | [deploy-halo-home-daily-digest.js](deploy-halo-home-daily-digest.js) |
 | Halo - Inventory Alert | Active | 9 AM PHT daily (Asia/Manila) | [deploy-halo-home-inventory-alert.js](deploy-halo-home-inventory-alert.js) |
 | Halo - Weekly Report | Active | 9 AM PHT Mondays (Asia/Manila) | [deploy-halo-home-weekly-report.js](deploy-halo-home-weekly-report.js) |
-| Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` — Active (reworked + reactivated 2026-06-12 with incident guards — see WORKFLOWS.md Workflow 22) | 09:00/12:00/15:00/18:00 PHT Mon–Fri + webhook | [deploy-creator-invoice-email-scan.js](deploy-creator-invoice-email-scan.js) |
+| Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` — **DEACTIVATED 2026-06-15** (ungated success reply + broken forward; rebuild to prep-and-handoff pending — see WORKFLOWS.md Workflow 22) | (was 09:00/12:00/15:00/18:00 PHT Mon–Fri) | [deploy-creator-invoice-email-scan.js](deploy-creator-invoice-email-scan.js) |
 
 ---
 
