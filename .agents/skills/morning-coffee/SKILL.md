@@ -32,11 +32,11 @@ For full step-by-step logic, read the Claude Code skill:
 Summary of execution order:
 1. Resolve today's date in PHT (UTC+8)
 2. Pull Noa's Google Calendar events for today
-3. Scan `noa@kravemedia.co` Gmail — last 24h inbox; split into `clickup_emails` and `candidate_emails`
-4. Filter candidates: include clients/partners needing reply, contracts, billing alerts, opportunities; exclude noise
-5. Aggregate ClickUp notifications into Project Pulse (tasks closed, status moves, stuck signals)
-6. Pull `#ad-production-internal` and `#payments-invoices-updates` channel history (last 24h) via bot MCP
-7. Pull Noa's Slack DMs and `@Noa` mentions via `slack-noa` user token
+3. Read pre-classified triage labels via `label:` searches — `EA/Urgent` + `EA/Needs-Reply` (attention) and `EA/FYI` (FYI). Morning Coffee is Noa's single email surface: attention **and** FYI. (`label:` search finds FYI even though triage now archives it.)
+4. Bucket: attention items (urgent first, then needs-reply, top 5–7) and a separate compact FYI section (one-liners, capped 5). Exclude internal `@kravemedia.co` and ClickUp mail.
+5. Project Pulse: ClickUp status changes via a **direct Gmail query** `from:notifications@tasks.clickup.com newer_than:1d` — NOT the label buckets (ClickUp mail is `EA/Auto-Sorted` + archived, so it never lands in the buckets; the direct query was the fix for a week of empty Project Pulse).
+6. Pull `#ad-production-internal` and `#payments-invoices-updates` history via bot MCP (channels Noa's own token can't see)
+7. Broaden Slack: via `slack-noa`, scan all `is_member && !is_archived` channels (drop the `is_dormant` filter and the stale priority list) ranked by recent activity, cap 20, surface `@Noa` mentions / direct asks / untouched blockers
 8. Compose warm personal briefing using the output template
 9. Send via `mcp__claude_ai_Slack__slack_send_message` to `U06TBGX9L93` (appears from John personally)
 
@@ -60,7 +60,7 @@ Summary of execution order:
 
 ## Output
 
-A Slack DM to Noa with up to four sections (omit any with no data):
+A Slack DM to Noa with up to five sections (omit any with no data; FYI is a compact one-line-per-item section that always sits below "Needs Your Attention"):
 
 ```
 Good morning Noa ☀️
@@ -72,6 +72,9 @@ Here's your Morning Coffee for [Day, Date]:
 
 *📬 Email — Needs Your Attention*
 - [Sender] | [Subject] — [1-line context] [URGENT if applicable]
+
+*📥 Just So You Know (FYI)*
+- [Sender] | [Subject] — [one-line, no action needed]
 
 *📁 Project Pulse*
 - [N] tasks advanced

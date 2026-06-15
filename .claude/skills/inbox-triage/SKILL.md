@@ -2,7 +2,7 @@
 **Trigger:** "triage inbox", "run email triage", "morning triage", "/inbox-triage", "inbox zero setup", "archive old emails"
 **Account:** noa@kravemedia.co
 **Deliver to:** Noa's Slack DM (~9 AM PHT daily)
-**SOP:** references/sops/inbox-triage.md
+**Live behavior reference:** `n8n-workflows/WORKFLOWS.md` (Workflow 5) + deploy script `n8n-workflows/deploy-inbox-triage-daily.js`
 
 ---
 
@@ -12,7 +12,7 @@ Two modes:
 
 1. **Inbox Zero Setup** *(run once)* — Bulk-moves all pre-2026 email to `Z_Archive`, scans existing labels to understand the current taxonomy, samples 2026 emails to determine the right label structure, then categorizes and moves all 2026 emails out of inbox into the appropriate labels. Result: inbox = 0.
 
-2. **Daily Triage** *(run each morning ~9 AM PHT)* — Reads new inbox email, applies two-layer labels, drafts replies, and posts a clean Slack DM summary to Noa. Inbox stays at 0.
+2. **Daily Triage** *(run each morning ~9 AM PHT)* — Reads new inbox email, applies two-layer labels, drafts replies, archives noise, and posts an audit summary to John's `#ops-command`. **Inbox is the actionable queue:** `EA/Urgent` + `EA/Needs-Reply` + `EA/Unsure` (and client payments) stay in the inbox; only `EA/FYI` + `EA/Auto-Sorted` are archived. Noa's daily read of all of this is the Morning Coffee DM — the `#ops-command` post is John's QA/audit view, not Noa's surface.
 
 ---
 
@@ -152,5 +152,6 @@ Do NOT attempt to classify emails manually in Mode 2 — the n8n workflow handle
 - John's private channel: C0AQZGJDR38 — ALL triage summaries post here (both setup reports and daily triage). John forwards to Noa manually.
 - All drafts saved to Gmail Drafts — Noa reviews and sends herself
 - Never send on Noa's behalf without explicit confirmation
-- **Client payments stay in inbox:** emails labeled `_Payment_Received` (Airwallex client deposits) are classified `EA/FYI` (no draft) but are NOT archived — they remain in the inbox per Noa's rule. The "Archive?" step excludes `_Payment_Received`. Pairs with the Gmail filter routing client deposits to inbox + `_Payment_Received` (see references/sops + setup-filters.js).
+- **Archive rule (as of 2026-06-15):** the daily workflow archives **only** `EA/FYI` + `EA/Auto-Sorted`. `EA/Urgent`, `EA/Needs-Reply`, and `EA/Unsure` stay in the inbox as Noa's actionable queue. The `archive_ok` flag is computed in the deploy script's "Restore Email Metadata" node.
+- **Client payments stay in inbox:** emails labeled `_Payment_Received` (Airwallex client deposits) are classified `EA/FYI` but are explicitly excluded from archiving (the `archive_ok` flag forces `false` for `_Payment_Received`), so they remain in the inbox per Noa's rule. Pairs with the Gmail filter routing client deposits to inbox + `_Payment_Received` (see setup-filters.js).
 - If Noa corrects a mis-tier, update classification rules in this skill

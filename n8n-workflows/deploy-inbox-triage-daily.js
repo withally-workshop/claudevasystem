@@ -11,8 +11,23 @@
  * - Correct removeLabels for archiving (not modify)
  * - Updated known contacts from real inbox audit
  *
+ * 2026-06-15 changes:
+ * - Inbox = actionable queue: archive ONLY EA/FYI + EA/Auto-Sorted. Urgent,
+ *   Needs-Reply, Unsure (and client payments) stay in the inbox. Ends "inbox zero".
+ * - KNOWN-contact match is sender-only (name+email), never the email body — kills
+ *   false Needs-Reply mis-tiers from short tokens (amy/shin/cody) hitting body text.
+ *
  * Deploy:
- *   node deploy-inbox-triage-daily.js
+ *   node deploy-inbox-triage-daily.js   (creates a NEW workflow via the SDK)
+ *
+ * ⚠️  DO NOT re-run this to update the LIVE workflow EuT6REDs5PUaoycE. The live
+ *     workflow carries surgical patches that are NOT in this SDK definition:
+ *       - robust extractFrom (mailparser array format)  — patch-triage-v2.js
+ *       - 'Restore After Draft' node + rewire           — patch-triage-v2.js
+ *     A wholesale redeploy would regress them. Apply live changes via a surgical
+ *     patch script (see patch-triage-v2.js / patch-triage-inbox-queue.js) that
+ *     GETs the workflow, edits nodes by name, and PUTs back (preserves creds).
+ *     This file is the readable definition + carries the same logic for audit.
  *
  * Credentials required (set in n8n):
  *   Gmail account     → vxHex5lFrkakcsPi
@@ -167,6 +182,9 @@ const subject  = headerVal(headers, 'Subject') || $json.Subject || $json.subject
 const labelIds = $json.labelIds || [];
 const bodyText = ($json.textPlain || $json.textHtml || $json.snippet || '').replace(/\\s+/g, ' ').trim().slice(0, 800);
 const haystack = [sender.name, sender.email, subject, $json.snippet || '', bodyText].join(' ').toLowerCase();
+// Sender-only haystack for KNOWN-contact matching — never match short tokens (amy, shin, cody)
+// against the email body, which caused false Needs-Reply mis-tiers.
+const senderHay = (sender.name + ' ' + sender.email).toLowerCase();
 
 const base = {
   id: $json.id,
@@ -196,7 +214,7 @@ if (labelIds.includes('Label_5194298534623747326')) {
 
 // 4. Known contacts — Needs-Reply
 const KNOWN = ['amanda', 'shin', 'joshua', 'amy', 'lucas', 'ani mishra', 'ani hume', 'roshni', 'stashworks', 'nelly', 'welleco', 'clear aligners', 'root labs', 'zenwise', 'comrad', 'john@kravemedia.co', 'anteros', 'joseph', 'cody', 'cashew'];
-if (KNOWN.some(k => haystack.includes(k))) {
+if (KNOWN.some(k => senderHay.includes(k))) {
   return { json: { ...base, tier: 'EA/Needs-Reply', tier_label_id: 'Label_4', draft_required: true, ai_needed: false, is_creator_inbound: false, summary_line: 'Known contact — reply drafted' } };
 }
 
@@ -367,7 +385,15 @@ const restoreMetadata = node({
     position: [2300, 300],
     parameters: {
       mode: "runOnceForEachItem",
-      jsCode: `const orig = $('Resolve Final Tier').item.json;\nreturn { json: { ...orig, labelIds: $json.labelIds || [] } };`,
+      jsCode: `const orig = $('Resolve Final Tier').item.json;
+const labelIds = $json.labelIds || [];
+// Archive ONLY noise tiers. Urgent + Needs-Reply + Unsure stay in the inbox so Noa
+// works actionable mail directly (Morning Coffee resurfaces them from labels too).
+// Client payments (_Payment_Received) are EA/FYI but always kept in inbox.
+const ARCHIVABLE = ['EA/FYI', 'EA/Auto-Sorted'];
+const isPayment = labelIds.includes('Label_5194298534623747326');
+const archive_ok = ARCHIVABLE.includes(orig.tier) && !isPayment;
+return { json: { ...orig, labelIds, archive_ok } };`,
     },
   },
   output: [{
@@ -513,18 +539,16 @@ const checkArchive = ifElse({
     parameters: {
       conditions: {
         combinator: "and",
+        // 'loose' so drafted items reaching Archive? without archive_ok evaluate
+        // undefined -> false -> not archived (their tier is never archivable anyway).
         options: { caseSensitive: true, leftValue: "", typeValidation: "loose", version: 1 },
         conditions: [
           {
-            leftValue: expr("{{ $json.tier }}"),
-            rightValue: "EA/Unsure",
-            operator: { type: "string", operation: "notEquals" },
-          },
-          {
-            // Keep client payments (_Payment_Received) in the inbox — never archive them.
-            // Pairs with the Gmail filter that routes client deposits to inbox+_Payment_Received.
-            leftValue: expr("{{ ($json.labelIds || []).includes('Label_5194298534623747326') }}"),
-            rightValue: false,
+            // archive_ok is computed in Restore Email Metadata: true ONLY for EA/FYI and
+            // EA/Auto-Sorted, and never for client payments (_Payment_Received).
+            // Urgent / Needs-Reply / Unsure are kept in the inbox as the actionable queue.
+            leftValue: expr("{{ $json.archive_ok }}"),
+            rightValue: true,
             operator: { type: "boolean", operation: "equals" },
           },
         ],

@@ -65,7 +65,11 @@ If no events today from either source: omit section silently.
 
 The n8n Inbox Triage workflow (ID: `EuT6REDs5PUaoycE`) runs at 9 AM PHT and labels every unread inbox email with `EA/Urgent`, `EA/Needs-Reply`, `EA/FYI`, or `EA/Auto-Sorted` before morning coffee fires at 10 AM. Read the pre-classified results directly — do NOT re-scan `in:inbox` or re-classify.
 
-Run these two searches in parallel:
+Morning Coffee is Noa's **single email surface**: she gets everything that needs action (`EA/Urgent` + `EA/Needs-Reply`) **and** everything that's just FYI (`EA/FYI`). The 9 AM triage `#ops-command` post is John's audit view, not hers.
+
+> Note: as of 2026-06-15 the triage archives `EA/FYI` mail (removes it from the inbox). The `label:` searches below still find it — a Gmail label search matches archived messages, only `in:inbox` would miss them.
+
+Run these three searches in parallel:
 
 ```
 mcp__gmail-noa__gmail_search_messages
@@ -75,6 +79,10 @@ mcp__gmail-noa__gmail_search_messages
 mcp__gmail-noa__gmail_search_messages
   query: "label:EA/Needs-Reply newer_than:1d"
   max_results: 20
+
+mcp__gmail-noa__gmail_search_messages
+  query: "label:EA/FYI newer_than:1d"
+  max_results: 20
 ```
 
 For each result, read sender, subject, and snippet via `mcp__gmail-noa__gmail_get_message`.
@@ -82,27 +90,39 @@ For each result, read sender, subject, and snippet via `mcp__gmail-noa__gmail_ge
 **Buckets:**
 - `urgent_emails` — from `label:EA/Urgent` query → always surface, mark `[URGENT]`
 - `reply_emails` — from `label:EA/Needs-Reply` query → surface top 5 by recency
+- `fyi_emails` — from `label:EA/FYI` query → surface top 5 by recency in a separate compact FYI section (one-liners, no drafts, no "what's needed"). Client payment receipts (`_Payment_Received`) legitimately land here — keep them.
 
-**Exclude from both buckets:**
+**Exclude from all buckets:**
 - Emails from `@kravemedia.co` (internal — already handled in Slack)
-- ClickUp notification emails → route to Step 3 instead
+- ClickUp notification emails (`notifications@tasks.clickup.com`) → handled in Step 3, never in the FYI section
 
-**Fallback:** If both label queries return zero results (triage didn't run, or ran before any email arrived), fall back to:
+**Fallback:** If all three label queries return zero results (triage didn't run, or ran before any email arrived), fall back to:
 ```
 mcp__gmail-noa__gmail_search_messages
-  query: "in:inbox is:unread newer_than:1d -label:EA/Auto-Sorted -label:EA/FYI"
+  query: "in:inbox newer_than:1d"
   max_results: 30
 ```
-In fallback mode, apply the standard exclude filters (noreply@, newsletters, calendar notifications, SaaS marketing) and classify manually. Note `_(triage labels not found — fallback mode)_` in the briefing.
+In fallback mode, apply the standard exclude filters (noreply@, newsletters, calendar notifications, SaaS marketing, ClickUp) and classify manually into **attention** (real human asks, deadlines, payments-failed) vs **FYI** (informational, receipts, confirmations). Note `_(triage labels not found — fallback mode)_` in the briefing.
 
 **Urgency:** `EA/Urgent` emails are always `[URGENT]`. For `EA/Needs-Reply`, mark `[URGENT]` additionally if the subject or snippet contains a hard deadline today, legal/contract risk, or payment failure.
 
-Limit to top 5–7 across both buckets combined (urgent first, then needs-reply).
+**Limits:** top 5–7 across the two attention buckets combined (urgent first, then needs-reply); FYI capped separately at 5.
 
 ### Step 3 — Aggregate ClickUp notifications (Project Pulse)
 
-From `clickup_emails`, parse each notification for:
+**Source: a direct Gmail query — NOT the Step 2 buckets.** ClickUp notifications are labeled `EA/Auto-Sorted` by triage and archived, so they never appear in the Urgent/Needs-Reply/FYI buckets. Query them directly (this finds them even though they're archived):
+
+```
+mcp__gmail-noa__gmail_search_messages
+  query: "from:notifications@tasks.clickup.com newer_than:1d"
+  max_results: 30
+```
+
+> Why not the ClickUp MCP? The `claude_ai_ClickUp` connector is unreliable in the local scheduled run (claude.ai connectors may not load headless, and it has thrown schema errors). The email notifications carry the same status-change data and are robust. If the MCP later proves stable in cron, this can be upgraded to read tasks directly.
+
+Read each result's subject + snippet via `mcp__gmail-noa__gmail_get_message`, and parse for:
 - `[Person] changed status [Project] Agency Execution / Projects / UGC [old status] → [new status]`
+- `[Person] set the status to: [status] [Project]`
 - `[Person] closed a task [Project]`
 
 Aggregate:
@@ -111,7 +131,7 @@ Aggregate:
 - Stuck signals: same task/project appearing in 3+ notifications without forward movement
 - Group by project when 3+ notifications span multiple projects
 
-If 0 ClickUp emails: omit section.
+If the query returns 0 results: omit the Project Pulse section silently.
 
 ### Step 4 — Pull Slack channel highlights (NEW since last run)
 
@@ -165,24 +185,23 @@ Cap at 7 tasks. If zero tasks found: omit section silently.
 Use the `slack-noa` MCP (Noa's personal user token). The MCP currently exposes: `slack_list_channels`, `slack_get_channel_history`, `slack_get_thread_replies`, `slack_get_user_profile`, `slack_get_users`. **Not available:** DM listing (`conversations.list types=im`), message search (`search.messages`). Personal DMs cannot be surfaced with the current tool surface.
 
 **What to scan:**
-1. `mcp__slack-noa__slack_list_channels` (limit 200) → filter to `is_member: true` AND not `is_dormant`
-2. **Priority channels** (scan first, even if dormant):
-   - `genesis-x-noa-work-log`, `noaos`, `noa-personal-brand-editing`, `kravecore`, `automation-wishlist`, `int-halo`, `creators-discovery`, `inboundleads`
-   - Any channel with `noa-x-` or `x-noa` in the name
-   - Any channel where `num_members <= 4` (likely 1:1 or small group)
-3. For each priority channel: `slack_get_channel_history` limit 10, filter to last 24h
-4. Surface messages where:
+1. `mcp__slack-noa__slack_list_channels` (limit 200) → filter to `is_member: true` AND `is_archived: false`. **Do NOT filter on `is_dormant`** — Slack flags most of Noa's active channels (`noaos`, `kravecore`, client channels) as dormant, and the old filter excluded them, which is why this scan was effectively dead and only the two bot channels in Step 4 surfaced.
+2. Build the scan set (cap **20 channels** to bound cost), prioritized in this order:
+   - **Tier A — active work channels:** names containing `krave-x-`, `int-`, starting with `noa`, containing `creator`, or ending `-reporting`; plus any channel with `num_members <= 4` (1:1s and small working groups).
+   - **Tier B — fill remaining slots** from the rest of her member channels, ranked by `updated` (most recently active first).
+3. For each channel in the set: `slack_get_channel_history` limit 15, filter to messages within the last 24h.
+4. Surface a message where ANY of:
    - `@U06TBGX9L93` is mentioned in the text
-   - Message is from someone other than Noa AND directly addresses her (e.g. "Hi Noa", "Noa can you...")
-   - Message contains a question or blocker that's untouched (no Noa reply, no reaction)
+   - It is from someone other than Noa AND directly addresses her ("Hi Noa", "Noa can you…")
+   - It contains an untouched question or blocker (no Noa reply, no reaction)
 
 **Format:** `[Person] in #[channel] — [1-line context]`
 
-**Limit:** 5 bullets max for this sub-section. Prioritize urgency.
+**Limit:** 7 bullets max for this sub-section. Prioritize urgency, then recency.
 
 If `slack-noa` MCP is unavailable, returns errors, or yields zero relevant items: skip this sub-section silently. Do not note the absence in the output.
 
-**Future improvement:** When `slack-noa` MCP gains `conversations.list types=im` and `search.messages`, replace this approach with direct DM/mention queries.
+**Known limitation:** `slack-noa` exposes `slack_list_channels`, `slack_get_channel_history`, `slack_get_thread_replies`, `slack_get_user_profile`, `slack_get_users` — but **not** DM listing (`conversations.list types=im`) or message search (`search.messages`). Personal DMs from people cannot be surfaced (the John↔Noa DM is the exception, read via John's OAuth in Step 5b). When the MCP gains those scopes, add direct DM/mention queries here.
 
 ### Step 6 — Compose the briefing
 
@@ -198,6 +217,9 @@ Here's your Morning Coffee for [Day, Date]:
 
 *📬 Email — Needs Your Attention*
 - [Sender] | [Subject] — [1-line context + what's needed] [URGENT if applicable]
+
+*📥 Just So You Know (FYI)*
+- [Sender] | [Subject] — [one-line, no action needed]
 
 *📁 Project Pulse*
 - [N] tasks advanced
@@ -215,9 +237,10 @@ _Deep work starts at 1:30 PM — have a good one._
 ```
 
 **Formatting rules:**
-- Omit any section with no data
+- Omit any section with no data (including the FYI section — no "nothing to report")
 - `[URGENT]` inline, never in a separate section
-- Max ~15 bullets total — cut to most urgent if over
+- **FYI is the compact section:** one line per item, no draft mention, no "what's needed", capped at 5. It always sits *below* "Needs Your Attention" — attention first, FYI second.
+- Max ~18 bullets total (attention + pulse + slack + tasks), plus up to 5 FYI — cut attention items to the most urgent if over
 - Slack markdown: `*bold*` for section headers, `_italic_` for sign-off
 - Scannable in under 60 seconds
 - Do not editorialize — state the fact and what's needed

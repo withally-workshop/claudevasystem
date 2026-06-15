@@ -30,7 +30,7 @@
 | 1 | Krave - Payment Detection | `NurOLZkg3J6rur5Q` | Active | Hourly | Detect Airwallex deposits, match invoices, update tracker |
 | 2 | Krave - Invoice Reminder Cron | `Q3IqqLvmX9H49NdE` | Active | 10am PHT Mon–Fri | Send invoice reminders, alert overdue, update tracker, post daily digest |
 | 2b | Krave - Invoice Reminder Reply Detection | `omNFmRcDeiByLOzS` | Active | 10:30am PHT weekdays + `POST /webhook/krave-invoice-reminder-reply-detection` | Scan only `john@kravemedia.co` reminder threads, classify client replies, update reminder attribution columns |
-| 5 | Krave — Inbox Triage Daily v2 | `EuT6REDs5PUaoycE` | Active | 9am PHT weekdays + manual webhook | Classify all unread inbox emails into EA/* tiers using hardcoded rules + GPT-4o-mini fallback, create drafts, archive processed, post Slack summary |
+| 5 | Krave — Inbox Triage Daily v2 | `EuT6REDs5PUaoycE` | Active | 9am PHT weekdays + manual webhook | Classify all unread inbox emails into EA/* tiers using hardcoded rules + GPT-4o-mini fallback, create drafts, archive noise tiers only (FYI + Auto-Sorted), post audit summary to #ops-command |
 | 6 | Krave - Slack Invoice Handler | `t7MMhlUo5H4HQmgL` | Active | Slash command + modal submit | Open the Slack modal and forward normalized submissions to invoice intake |
 | 7 | Krave - Invoice Request Intake | `5XHxhQ7wB2rxE3qz` | Active | Structured Slack modal / manual webhook | Capture invoice requests, create Airwallex drafts, and fall back to manual-ready tracker rows |
 | 8 | Krave - Invoice Approval Polling | `uCS9lzHtVKWlqYlk` | Active | Every 2 hrs Mon-Fri 9am-5pm PHT + `POST /webhook/krave-invoice-approval-polling` | Poll tracker for pending drafts, detect John's "approve" replies, finalize in Airwallex, write tracker link, and reply in the original strategist thread |
@@ -463,7 +463,9 @@ Canonical source of truth: [`.claude/skills/sod-report/SKILL.md`](../.claude/ski
 
 ### Purpose
 
-Classifies all unread inbox emails for `noa@kravemedia.co` into the `EA/*` tier model. Uses a hardcoded rules classifier first (Osome, creator inbound, known contacts, client payments) and falls back to GPT-4o-mini only for unknown senders. Applies labels, creates drafts for Urgent/Needs-Reply tiers, archives non-Unsure emails, and posts a morning summary to `#ops-command` and Noa's Slack DM.
+Classifies all unread inbox emails for `noa@kravemedia.co` into the `EA/*` tier model. Uses a hardcoded rules classifier first (Osome, creator inbound, known contacts, client payments) and falls back to GPT-4o-mini only for unknown senders. Applies labels, creates drafts for Urgent/Needs-Reply tiers, archives only the noise tiers (`EA/FYI` + `EA/Auto-Sorted`), and posts an audit summary to `#ops-command`.
+
+**Inbox = actionable queue (2026-06-15):** `EA/Urgent`, `EA/Needs-Reply`, and `EA/Unsure` (plus client payments) stay in the inbox — only `EA/FYI` and `EA/Auto-Sorted` are archived. The `#ops-command` post is John's QA/audit view; Noa reads the day's mail (Urgent + Needs-Reply + FYI) via the Morning Coffee DM, which is her single surface. The workflow does **not** DM Noa directly.
 
 ### Triggers
 
@@ -504,11 +506,11 @@ Classifies all unread inbox emails for `noa@kravemedia.co` into the `EA/*` tier 
 
 | Scenario | Action |
 |----------|--------|
-| EA/Urgent / EA/Needs-Reply | Apply label, create draft (typeform for creator inbound, AI for all others), archive |
-| EA/FYI / EA/Auto-Sorted | Apply label, archive |
-| EA/FYI with `_Payment_Received` (client payment) | Apply label, **keep in inbox** (Archive? step excludes `_Payment_Received`) |
+| EA/Urgent / EA/Needs-Reply | Apply label, create draft (typeform for creator inbound, AI for all others), **keep in inbox** |
+| EA/FYI / EA/Auto-Sorted | Apply label, **archive** (remove from inbox) |
+| EA/FYI with `_Payment_Received` (client payment) | Apply label, **keep in inbox** (`archive_ok` forced false for `_Payment_Received`) |
 | EA/Unsure | Apply label, keep in inbox |
-| All tiers | Post to `#ops-command` channel + DM Noa |
+| All tiers | Post audit summary to `#ops-command` channel (no Noa DM — Noa reads Morning Coffee) |
 
 ### Error Handling
 
@@ -1536,7 +1538,7 @@ Posts yesterday's Halo Home sales summary + current unfulfilled orders to `#halo
 
 ### Purpose
 
-Replaces the manual email-check step for creator/AP invoice intake. Scans john@kravemedia.co four times a day for unread emails with **PDF attachments only**, classifies + parses each with Claude Sonnet, guards against non-invoices and Airwallex/automated senders, validates bank details (hardstop if missing), **forwards the invoice PDF to the Airwallex bills inbox** (`kravemedia@bills.airwallex.com`), replies to the original sender (known senders only on the failure path), posts a prep report to `#ops-command`, and logs to the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`). This workflow does **not** call the Airwallex Spend API directly — bill creation happens on the Airwallex side from the forwarded email; John reviews/finalizes drafts there.
+Replaces the manual email-check step for creator/AP invoice intake. Scans john@kravemedia.co four times a day for unread emails with **PDF attachments only**, classifies + parses each with Claude Sonnet, guards against non-invoices and Airwallex/automated senders, validates bank details (hardstop if missing), **forwards the invoice PDF to the Airwallex bills inbox** (`kravemedia@bills.airwallex.com`), replies to the original sender (known senders only on the failure path), posts a prep report to `#ops-command`, and logs to the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`). This workflow does **not** call the Airwallex Spend API directly — bill creation happens on the Airwallex side from the forwarded email; John reviews/finalizes drafts there. **Migration note (2026-06-12):** the manual `/invoice-triage` path now creates bills via the Spend API directly (see `references/sops/creator-invoice-management.md`); Phase 2 will promote that logic into this workflow via an `httpCustomAuth` Spend credential. Until then this workflow stays forward-by-email.
 
 > **2026-06-12 incident + guards:** the original version ingested inline images, treated any priced document as an invoice, and replied per attachment — it sent the "missing bank details" reply twice to a client lead whose proposal pricing screenshots matched the query (execution 8041; see `decisions/log.md`). The workflow was killed, reworked with four guards (PDF-only intake, explicit is-invoice classification with email context, per-message reply dedup, known-sender gate on the auto-reply with an #ops-command flag path for unknown senders), and reactivated the same day with John's approval.
 

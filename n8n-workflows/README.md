@@ -204,25 +204,21 @@ node n8n-workflows/deploy-invoice-reminder-reply-detection.js
 
 ---
 
-## Inbox Triage Daily
+## Inbox Triage Daily v2
 
-Reads inbox email from the last 24 hours in `noa@kravemedia.co`, classifies each message into the `EA/*` tier model, creates Gmail drafts for `EA/Urgent` and `EA/Needs-Reply` only when the thread is not already in motion, repairs Gmail labels when needed, leaves `EA/Unsure` in the inbox, and posts the final summary to both `#ops-command` and Noa's Slack DM.
+Reads unread inbox email in `noa@kravemedia.co`, classifies each message into the `EA/*` tier model (hardcoded rules first, GPT-4o-mini fallback for unknown senders), creates Gmail drafts for `EA/Urgent` and `EA/Needs-Reply`, archives only the noise tiers, and posts an audit summary to `#ops-command`.
 
-**Workflow ID:** `3YyEjk1e6oZV786T`
+**Workflow ID:** `EuT6REDs5PUaoycE`
 
 **Draft-only behavior:** creates Gmail drafts only and never sends email automatically.
 
-**Inbox retention:** `EA/Unsure` stays in the inbox for manual review after triage.
+**Inbox = actionable queue (2026-06-15):** archives **only** `EA/FYI` + `EA/Auto-Sorted`. `EA/Urgent`, `EA/Needs-Reply`, and `EA/Unsure` (plus client payments labeled `_Payment_Received`) stay in the inbox so Noa works actionable mail directly. The `#ops-command` post is John's QA/audit view — the workflow does **not** DM Noa. Noa reads the day's mail (Urgent + Needs-Reply + FYI) via the Morning Coffee DM.
 
-**Search scope:** `in:inbox newer_than:1d` so the run covers the last 24 hours of inbox mail, including both read and unread messages that are still in the inbox.
-
-**Already-actioned detection:** if Noa already replied, a draft already exists, or the thread already has an `EA/*` label, the workflow still classifies the email and repairs labels if needed, but it does not create a duplicate draft.
-
-**Morning Triage notes:** already-actioned emails stay in their normal sections with inline notes such as `already replied`, `draft exists`, or `already labeled`.
+**Search scope:** `in:inbox is:unread` minus already-`EA/*`-labeled messages, so the run covers all untriaged unread inbox mail (including weekend backlog). Cap 50 per run.
 
 **Webhook (manual trigger):**
 ```text
-POST https://noatakhel.app.n8n.cloud/webhook/krave-inbox-triage-daily
+POST https://noatakhel.app.n8n.cloud/webhook/krave-inbox-triage-v2
 ```
 
 **Deploy from scratch:**
@@ -232,7 +228,7 @@ node n8n-workflows/deploy-inbox-triage-daily.js
 
 **Credentials required in n8n:**
 - `Gmail account` - `noa@kravemedia.co` OAuth2 for inbox reads, labels, archive, and Gmail drafts
-- `Krave Slack Bot` - summary posts to `#ops-command` plus Noa DM delivery
+- `Krave Slack Bot` - audit summary post to `#ops-command`
 - `OpenAI account` - classification and reply drafting
 
 ---
