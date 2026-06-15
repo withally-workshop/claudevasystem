@@ -92,7 +92,7 @@ PREP & HANDOFF MODEL (current). You do NOT create the bill in Airwallex — John
    → New draft bill in Airwallex Spend → vendor above → fill fields → upload the PDF → submit."
    Also post a 🚨 line if NEW VENDOR or CONVERTED.
 
-7. Reply to the requester ONCE (allowlisted senders only — see step 0), after the prep package is posted. PLAIN confirmation only — "Received — [Creator]'s invoice is staged for payment." NEVER include any Airwallex link/ID or mention that John creates it manually (the team should experience it as fully automated). React ✅ to the original message.
+7. Reply to the requester ONCE (allowlisted senders only — see step 0), after the prep package is posted. The reply is EXACTLY: "Received — staged for payment." Nothing else — no creator name, no amount, no currency, no invoice number, no vendor, no dates, no Airwallex detail, no summary of what you did. One short line only. React ✅ to the original message. (All the detail lives in the #ops-command prep package, never in the requester reply.)
 
 8. Log to Creator & AP Bills Tracker (Sheet 14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc). The spreadsheet has ONE tab named "Krave — Creator & AP Bills Tracker" — EM-DASH (—), not a hyphen; pass it exactly or omit sheet_name (defaults to the only tab). Append in this exact column order:
    A: Date Received (today YYYY-MM-DD)

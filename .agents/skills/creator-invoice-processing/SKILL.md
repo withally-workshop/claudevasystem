@@ -37,7 +37,7 @@ Receive PDF invoices → classify → validate → vendor match + FX math → pr
 5. **Matches vendor** (payee, not sender) against live `airwallex_list_vendors` + alias table — REPORTS exists/NEW, does NOT create
 6. **Converts currency** if invoice ccy ≠ payout ccy (Butanas→PHP, Domingo→USD, Baste→SGD) — `airwallex_fx_rate` × 0.97 + 🚨 CONVERTED
 7. **Posts prep package to #ops-command** (vendor, fields, FX'd amount, bank, PDF link) — John creates the DRAFT bill manually
-8. Replies **once** (allowlisted senders only) — plain "Received — staged for payment", NEVER any Airwallex link/ID
+8. Replies **once** (allowlisted senders only) — EXACTLY "Received — staged for payment", nothing else (no creator/amount/invoice/vendor/dates/Airwallex detail; all detail stays in the #ops-command prep package)
 9. Logs to tracker, status `Prepped — awaiting manual creation`, Bill ID blank (John fills after creating)
 
 **Email path (n8n `DbIJYYQ3FE4HKprB`) is deactivated** (rebuild to prep-and-handoff pending). krave-bot uses the same prep-and-handoff flow as above.

@@ -168,8 +168,8 @@ Invoice run [HH:MM PHT] — 🧾 N prepped · ↩️ M bounced · ⏭️ K dupli
 
 Replies go **only** to the hardcoded allowlist: **John, Noa, Jeneena, Amanda, Shin, Sybil** (`@kravemedia.co`). Any other sender → no reply, #ops-command 🚨 UNKNOWN SENDER flag only.
 
-**Success (once, after the prep package is posted).** Plain confirmation, no Airwallex detail, no mention of manual creation (team experiences it as automated):
-- Slack (thread + ✅): `Received — [Creator]'s invoice is staged for payment.`
+**Success (once, after the prep package is posted).** EXACTLY one line, nothing else — no creator name, amount, currency, invoice #, vendor, dates, Airwallex detail, or summary of work. All detail stays in the #ops-command prep package.
+- Slack (thread + ✅): `Received — staged for payment.`
 - Email (in-thread): `Hi [First Name], Received — staged for payment. Cheers, John / Krave Media`
 
 **Bounce — missing bank details:** `Hi [First Name], [Creator]'s invoice has no bank details. Please ask them to reissue with account number + SWIFT/BIC + bank name — can't stage payment without it.`

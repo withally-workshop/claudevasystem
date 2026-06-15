@@ -68,8 +68,8 @@ For each validated invoice PDF:
 
 ### Step 4 — Confirm to Requester
 
-Reply **once, only after the prep package is posted** (never on receipt), and **only to a hardcoded-allowlist sender** (John, Noa, Jeneena, Amanda, Shin, Sybil). Plain confirmation only — no Airwallex link/ID, no mention of manual creation (team experiences it as automated).
-- **Slack:** thread reply → "Received — [Creator]'s invoice is staged for payment." + react ✅
+Reply **once, only after the prep package is posted** (never on receipt), and **only to a hardcoded-allowlist sender** (John, Noa, Jeneena, Amanda, Shin, Sybil). EXACTLY one line — no creator name, amount, currency, invoice #, vendor, dates, or Airwallex detail. All detail lives in the #ops-command prep package.
+- **Slack:** thread reply → "Received — staged for payment." + react ✅
 - **Email:** in-thread → "Hi [First Name], Received — staged for payment. Cheers, John / Krave Media"
 
 Failed check → reply **immediately** with the specific issue (allowlisted senders only). **Non-allowlisted sender → no reply at all, #ops-command 🚨 flag only.**
