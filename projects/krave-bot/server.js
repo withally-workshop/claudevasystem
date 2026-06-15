@@ -425,6 +425,22 @@ receiver.router.post('/api/chat', async (req, res) => {
   }
 });
 
+// EOD bills reconcile — triggered by the n8n schedule (POST with x-cron-secret).
+// Mirrors Airwallex Spend bills into the Creator & AP Bills Tracker.
+receiver.router.post('/cron/reconcile-bills', async (req, res) => {
+  if (!process.env.CRON_SECRET || (req.headers['x-cron-secret'] || '') !== process.env.CRON_SECRET) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  try {
+    const result = await require('./tools/reconcile').reconcileBills();
+    console.log('reconcile-bills:', JSON.stringify(result));
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    console.error('reconcile-bills error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // health check
 receiver.router.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

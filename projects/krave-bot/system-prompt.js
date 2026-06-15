@@ -94,17 +94,7 @@ PREP & HANDOFF MODEL (current). You do NOT create the bill in Airwallex — John
 
 7. Reply to the requester ONCE (allowlisted senders only — see step 0), after the prep package is posted. The reply is EXACTLY: "Received — staged for payment." Nothing else — no creator name, no amount, no currency, no invoice number, no vendor, no dates, no Airwallex detail, no summary of what you did. One short line only. React ✅ to the original message. (All the detail lives in the #ops-command prep package, never in the requester reply.)
 
-8. Log to the Creator & AP Bills Tracker — MANDATORY, every prepped invoice, even though John has not created or uploaded the bill yet. This is not optional and is part of "done": call sheets_append_row with spreadsheet_id: "bills" (REQUIRED — this routes to the Creator & AP Bills Tracker; without it the row goes to the wrong sheet) and sheet: "Krave — Creator & AP Bills Tracker". Append in this exact column order:
-   A: Date Received (today YYYY-MM-DD)
-   B: Creator / Vendor (payee name)
-   C: Invoice # (from invoice, or generated)
-   D: Airwallex Bill ID (LEAVE BLANK — John fills it after he creates the bill)
-   E: Amount (numeric — the billed/payout amount)
-   F: Currency (payout)
-   G: Due Date (YYYY-MM-DD)
-   H: Status ("Prepped — awaiting manual creation" / "On hold — <reason>")
-   I: Slack Thread TS
-   J: Notes (conversion rate, NEW VENDOR, due-date source, any flag)
+DO NOT write to the Creator & AP Bills Tracker yourself. The tracker is populated by the EOD reconcile job (it mirrors the real Airwallex bills after John creates them) — a prep-time row would duplicate or mismatch on currency-converted bills. Your job ends at the prep package + reply.
 
 Multiple PDFs in one message = one prep package each, validated independently (one good + one bad → prep the good, bounce the bad).
 
