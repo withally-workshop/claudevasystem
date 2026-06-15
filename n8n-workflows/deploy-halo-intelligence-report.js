@@ -37,7 +37,7 @@ const HASHTAGS = [
 const TIKTOK_APIFY_BODY = JSON.stringify({
   hashtags: HASHTAGS,
   resultsType: 'posts',
-  maxPostsPerPage: 20,
+  resultsPerPage: 30, // actor's real per-hashtag cap. Was `maxPostsPerPage` — not in the actor schema, so it was ignored and the actor defaulted to 100/hashtag (8×100=800 results = ~$3.20/run vs the current 8×30=240 ≈ $0.96/run).
   shouldDownloadVideos: false,
   shouldDownloadCovers: false,
   shouldDownloadMusicCovers: false,
@@ -46,7 +46,7 @@ const TIKTOK_APIFY_BODY = JSON.stringify({
 const INSTAGRAM_APIFY_BODY = JSON.stringify({
   hashtags: HASHTAGS,
   resultsType: 'reels', // reels only — 'posts' (the actor default) returns static photos with near-zero engagement
-  resultsLimit: 20,
+  resultsLimit: 30,
 });
 
 // ─── Code node: Score & Rank Posts ────────────────────────────────────────────
@@ -321,9 +321,9 @@ const instagramSection = (instagramTop10 || []).map(summarize).join('\\n\\n');
 const tiktokCount = (tiktokTop10 || []).length;
 const instagramCount = (instagramTop10 || []).length;
 
-const systemPrompt = 'You are a content intelligence analyst for Halo Home — a DTC shower filter brand entering the US market. Halo shower filters remove chlorine, heavy metals, and hard water minerals to protect skin and hair health.\\n\\nHalo ICP groups:\\n1. Skin Conditions (Eczema, Rosacea, Psoriasis, Acne-Prone, Sensitive Skin) — driver: pain, exhaustion, tried everything\\n2. Hair & Scalp Conditions (Hair Loss, Dandruff, Dry/Frizzy Hair, Color-Treated Hair) — driver: frustration, embarrassment, wasted money\\n3. Context & Mindset (Hard Water Refugee, Wellness-Burned, Prevention-Focused) — driver: attribution, skepticism, proactive protection\\n\\nContent pillars: Problem/Solution | Educational | Inspirational | Wellness Hack\\n\\nFormat options (pick the single closest): VSL | B-Roll | B-Roll VO | Talking Head | Skit | Tutorial | Listicle.\\n\\nHook Type options (pick exactly one): Question | Bold Claim | Curiosity Gap | Pain Point | POV / Empathy | Visual Shock | Social Proof. If none fit, use Other.\\n\\nAnalyze the provided social content. For each post return a JSON object: { "hook": "opening line or first-2-seconds description", "hookType": "exactly one Hook Type option", "format": "exactly one Format option", "visualStyle": "short phrase, e.g. Raw & authentic, Polished/cinematic, Aesthetic/moody, Text-heavy", "keyword": "the single core niche topic, e.g. Shower Filter, Hair Loss, Hard Water, Eczema", "cta": "the closing call-to-action or ending line, verbatim if present", "whyItPerformed": "specific analysis — format, pacing, emotional angle", "icpMatch": "which ICP group and why", "contentPillar": "one of the four pillars", "haloAngle": "one sentence — how Halo owns a version of this" }\\n\\nFor trend synthesis: exactly 2 paragraphs. Paragraph 1: cross-platform patterns in format, emotion, and angle. Paragraph 2: what this means for Halo content strategy.';
+const systemPrompt = 'You are a content intelligence analyst for Halo Home — a DTC shower filter brand entering the US market. Halo shower filters remove chlorine, heavy metals, and hard water minerals to protect skin and hair health.\\n\\nHalo ICP groups:\\n1. Skin Conditions (Eczema, Rosacea, Psoriasis, Acne-Prone, Sensitive Skin) — driver: pain, exhaustion, tried everything\\n2. Hair & Scalp Conditions (Hair Loss, Dandruff, Dry/Frizzy Hair, Color-Treated Hair) — driver: frustration, embarrassment, wasted money\\n3. Context & Mindset (Hard Water Refugee, Wellness-Burned, Prevention-Focused) — driver: attribution, skepticism, proactive protection\\n\\nContent pillars: Problem/Solution | Educational | Inspirational | Wellness Hack\\n\\nFormat options (pick the single closest): VSL | B-Roll | B-Roll VO | Talking Head | Skit | Tutorial | Listicle.\\n\\nHook Type options (pick exactly one): Question | Bold Claim | Curiosity Gap | Pain Point | POV / Empathy | Visual Shock | Social Proof. If none fit, use Other.\\n\\nAnalyze the provided social content. For each post return a JSON object: { "hook": "opening line or first-2-seconds description", "hookType": "exactly one Hook Type option", "format": "exactly one Format option", "visualStyle": "short phrase, e.g. Raw & authentic, Polished/cinematic, Aesthetic/moody, Text-heavy", "keyword": "the single core niche topic, e.g. Shower Filter, Hair Loss, Hard Water, Eczema", "cta": "the closing call-to-action or ending line, verbatim if present", "whyItPerformed": "specific analysis — format, pacing, emotional angle", "icpMatch": "which ICP group and why", "contentPillar": "one of the four pillars", "haloAngle": "one sentence — how Halo owns a version of this" }\\n\\nFor trendSynthesis, return a STRUCTURED OBJECT (not prose) with these keys:\\n- overview: { intro: one sentence naming the dominant content currents this week; currents: 2-4 short bullets, each a distinct cross-platform content current }\\n- tiktokHighlights: { items: 2-4 bullets, each citing a REAL creator and a concrete number from the data in the form "@handle — what they did → metric (why it worked)"; insight: one sentence on the standout pattern (e.g. save-to-view behavior), or empty string }\\n- instagramHighlights: same shape as tiktokHighlights\\n- crossPlatformFormat: { title: a named format or aesthetic appearing on BOTH platforms (e.g. "The Cozy Shower Aesthetic"); points: 2-4 short bullets }\\n- haloPriorities: array of EXACTLY 3 objects, each { title: an action-oriented priority headline; points: 2-4 short supporting bullets tying the trend to a concrete Halo content move }\\nGround every bullet in the posts provided — use real handles and real numbers from the data, never invented ones. Keep each bullet to one tight line.';
 
-const userPrompt = 'Week of ' + weekLabel + '\\n\\n=== TOP TIKTOK CONTENT ===\\n' + (tiktokSection || '(no posts)') + '\\n\\n=== TOP INSTAGRAM REELS ===\\n' + (instagramSection || '(no posts)') + '\\n\\nRespond with this JSON (no markdown, raw JSON only):\\n{\\n  "trendSynthesis": "paragraph 1\\\\n\\\\nparagraph 2",\\n  "tiktok": [array of ' + tiktokCount + ' analysis objects in order],\\n  "instagram": [array of ' + instagramCount + ' analysis objects in order]\\n}';
+const userPrompt = 'Week of ' + weekLabel + '\\n\\n=== TOP TIKTOK CONTENT ===\\n' + (tiktokSection || '(no posts)') + '\\n\\n=== TOP INSTAGRAM REELS ===\\n' + (instagramSection || '(no posts)') + '\\n\\nRespond with this JSON (no markdown, raw JSON only):\\n{\\n  "trendSynthesis": {\\n    "overview": { "intro": "one sentence", "currents": ["bullet", "bullet"] },\\n    "tiktokHighlights": { "items": ["@creator — what → metric (why)"], "insight": "one sentence or empty" },\\n    "instagramHighlights": { "items": ["..."], "insight": "..." },\\n    "crossPlatformFormat": { "title": "named format/aesthetic", "points": ["bullet"] },\\n    "haloPriorities": [ { "title": "priority headline", "points": ["bullet", "bullet"] } ]\\n  },\\n  "tiktok": [array of ' + tiktokCount + ' analysis objects in order],\\n  "instagram": [array of ' + instagramCount + ' analysis objects in order]\\n}';
 
 return [{
   json: {
@@ -345,7 +345,7 @@ const claudeResp = $json;
 const scoreData = $('Prepare Claude Request').first().json;
 const { tiktokTop10, instagramTop10, weekLabel, allPosts } = scoreData;
 
-let analysis = { trendSynthesis: '', tiktok: [], instagram: [] };
+let analysis = { trendSynthesis: {}, tiktok: [], instagram: [] };
 try {
   const raw = claudeResp.content?.[0]?.text || '';
   const match = raw.match(/\\{[\\s\\S]*\\}/);
@@ -360,6 +360,61 @@ const enrich = (posts, analysisArr) =>
 const tiktokEnriched = enrich(tiktokTop10, analysis.tiktok);
 const instagramEnriched = enrich(instagramTop10, analysis.instagram);
 
+// ── Structured trend synthesis (Shin's requested sectioned layout) ──────────────
+const ts = (analysis.trendSynthesis && typeof analysis.trendSynthesis === 'object') ? analysis.trendSynthesis : {};
+const sbul = (arr) => (arr || []).filter(Boolean).map(b => '• ' + b).join('\\n');
+
+const synthSlackSections = [];
+if (ts.overview && (ts.overview.intro || (ts.overview.currents || []).length)) {
+  let s = '*:bar_chart: Platform Trends Overview*';
+  if (ts.overview.intro) s += '\\n' + ts.overview.intro;
+  if ((ts.overview.currents || []).length) s += '\\n' + sbul(ts.overview.currents);
+  synthSlackSections.push(s);
+}
+if (ts.tiktokHighlights && (ts.tiktokHighlights.items || []).length) {
+  let s = '*:musical_note: TikTok Highlights*\\n' + sbul(ts.tiktokHighlights.items);
+  if (ts.tiktokHighlights.insight) s += '\\n_' + ts.tiktokHighlights.insight + '_';
+  synthSlackSections.push(s);
+}
+if (ts.instagramHighlights && (ts.instagramHighlights.items || []).length) {
+  let s = '*:camera_with_flash: Instagram Highlights*\\n' + sbul(ts.instagramHighlights.items);
+  if (ts.instagramHighlights.insight) s += '\\n_' + ts.instagramHighlights.insight + '_';
+  synthSlackSections.push(s);
+}
+if (ts.crossPlatformFormat && (ts.crossPlatformFormat.points || []).length) {
+  synthSlackSections.push('*:shower: Cross-Platform Format: ' + (ts.crossPlatformFormat.title || '') + '*\\n' + sbul(ts.crossPlatformFormat.points));
+}
+if ((ts.haloPriorities || []).length) {
+  const pr = ts.haloPriorities.map((p, i) => '*' + (i + 1) + '. ' + (p.title || '') + '*\\n' + sbul(p.points)).join('\\n\\n');
+  synthSlackSections.push('*:dart: Halo Content Priorities*\\n' + pr);
+}
+const synthText = synthSlackSections.length
+  ? synthSlackSections.join('\\n\\n')
+  : (typeof analysis.trendSynthesis === 'string' && analysis.trendSynthesis ? analysis.trendSynthesis : '_(synthesis unavailable this week)_');
+
+const eul = (arr) => '<ul style="margin:6px 0 0;padding-left:20px;line-height:1.6;">' + (arr || []).filter(Boolean).map(b => '<li>' + b + '</li>').join('') + '</ul>';
+const esec = (emoji, title, bodyHtml) => '<div style="margin:0 0 18px;"><h3 style="font-size:14px;margin:0 0 4px;">' + emoji + ' ' + title + '</h3>' + bodyHtml + '</div>';
+let synthHtml = '';
+if (ts.overview && (ts.overview.intro || (ts.overview.currents || []).length)) {
+  synthHtml += esec('📊', 'Platform Trends Overview', (ts.overview.intro ? '<p style="margin:0 0 6px;line-height:1.6;">' + ts.overview.intro + '</p>' : '') + eul(ts.overview.currents));
+}
+if (ts.tiktokHighlights && (ts.tiktokHighlights.items || []).length) {
+  synthHtml += esec('🎵', 'TikTok Highlights', eul(ts.tiktokHighlights.items) + (ts.tiktokHighlights.insight ? '<p style="margin:6px 0 0;color:#6b7280;font-style:italic;">' + ts.tiktokHighlights.insight + '</p>' : ''));
+}
+if (ts.instagramHighlights && (ts.instagramHighlights.items || []).length) {
+  synthHtml += esec('📸', 'Instagram Highlights', eul(ts.instagramHighlights.items) + (ts.instagramHighlights.insight ? '<p style="margin:6px 0 0;color:#6b7280;font-style:italic;">' + ts.instagramHighlights.insight + '</p>' : ''));
+}
+if (ts.crossPlatformFormat && (ts.crossPlatformFormat.points || []).length) {
+  synthHtml += esec('🚿', 'Cross-Platform Format: ' + (ts.crossPlatformFormat.title || ''), eul(ts.crossPlatformFormat.points));
+}
+if ((ts.haloPriorities || []).length) {
+  const pr = ts.haloPriorities.map((p, i) => '<p style="margin:10px 0 2px;"><strong>' + (i + 1) + '. ' + (p.title || '') + '</strong></p>' + eul(p.points)).join('');
+  synthHtml += esec('🎯', 'Halo Content Priorities', pr);
+}
+if (!synthHtml) {
+  synthHtml = '<p style="line-height:1.7;">' + (typeof analysis.trendSynthesis === 'string' && analysis.trendSynthesis ? analysis.trendSynthesis : 'Synthesis unavailable this week.') + '</p>';
+}
+
 function slackLine(post, rank) {
   const a = post.analysis || {};
   return [
@@ -373,8 +428,7 @@ function slackLine(post, rank) {
 const slackText = [
   '*Halo Weekly Intelligence — Week of ' + weekLabel + '*',
   '',
-  '*TREND SYNTHESIS*',
-  analysis.trendSynthesis || '—',
+  synthText,
   '',
   '*TOP TIKTOK CONTENT* _(full analysis in email)_',
   tiktokEnriched.length ? tiktokEnriched.map((p, i) => slackLine(p, i + 1)).join('\\n\\n') : '_(no qualifying TikTok posts this week)_',
@@ -401,16 +455,13 @@ function emailPostHtml(post, rank) {
     '</div>';
 }
 
-const trendHtml = (analysis.trendSynthesis || '').split('\\n\\n')
-  .map(p => '<p style="line-height:1.7;margin:0 0 12px;">' + p + '</p>').join('');
-
 const emailHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"></head>' +
   '<body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:680px;margin:0 auto;padding:24px;color:#111;">' +
   '<h1 style="font-size:20px;margin-bottom:2px;">Halo Weekly Intelligence</h1>' +
   '<p style="color:#6b7280;margin-top:0;font-size:13px;">Week of ' + weekLabel + '</p>' +
   '<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;">' +
   '<h2 style="font-size:15px;margin-bottom:10px;">Trend Synthesis</h2>' +
-  trendHtml +
+  synthHtml +
   '<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;">' +
   '<h2 style="font-size:15px;margin-bottom:12px;">Top TikTok Content</h2>' +
   (tiktokEnriched.length ? tiktokEnriched.map((p, i) => emailPostHtml(p, i + 1)).join('') : '<p style="color:#6b7280;">No qualifying TikTok posts this week.</p>') +
@@ -512,7 +563,7 @@ const workflow = {
       continueOnFail: true,
       parameters: {
         method: 'POST',
-        url: `https://api.apify.com/v2/acts/${TIKTOK_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_KEY}&timeout=300&memory=1024&limit=50`,
+        url: `https://api.apify.com/v2/acts/${TIKTOK_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_KEY}&timeout=300&memory=1024&limit=300`,
         sendBody: true,
         specifyBody: 'json',
         jsonBody: TIKTOK_APIFY_BODY,
@@ -530,7 +581,7 @@ const workflow = {
       continueOnFail: true,
       parameters: {
         method: 'POST',
-        url: `https://api.apify.com/v2/acts/${INSTAGRAM_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_KEY}&timeout=300&memory=512&limit=50`,
+        url: `https://api.apify.com/v2/acts/${INSTAGRAM_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_KEY}&timeout=300&memory=512&limit=300`,
         sendBody: true,
         specifyBody: 'json',
         jsonBody: INSTAGRAM_APIFY_BODY,

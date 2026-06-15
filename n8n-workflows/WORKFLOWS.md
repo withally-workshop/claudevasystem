@@ -730,7 +730,7 @@ Weekly social intelligence pipeline for Halo Home's US market entry. Replaces ma
 [Claude Analysis]
   Per post: hook, hook type, format, visual style, keyword, CTA/ending,
             why it works, ICP match, content pillar, Halo adaptation
-  Plus: 2-paragraph trend synthesis
+  Plus: sectioned trend synthesis (overview · TikTok/IG highlights · cross-platform format · 3 Halo priorities)
   Hook Type + Format constrained to fixed option lists (aligned to Alleah's manual inspo sheet)
         |
 [Format Report]
@@ -764,6 +764,19 @@ Each matched group adds +0.1 to the multiplier (1.0 base → max 1.3).
 | Shower/Water | showertok, hardwater, showerskincare |
 | Wellness | cleanbeauty, wellnesstok, skinconsciousliving, nontoxicbeauty, rituals |
 
+> The live workflow scrapes a fixed 8-hashtag set per platform (`sensitiveskin, eczema, hairloss, scalptok, hardwater, showertok, cleanbeauty, skinbarrier`) baked into the deploy script's `HASHTAGS` array. The clusters above are the full taxonomy the scorer recognizes.
+
+### Scraping Volume & Cost
+
+Both scrapers are Apify **pay-per-result** rental actors — cost scales with results returned, not compute. Per-hashtag caps live in the static Apify bodies in the deploy script:
+
+| Platform | Actor | Cap param | Per run | ~Cost/run (BRONZE tier) |
+|----------|-------|-----------|---------|------------------------|
+| TikTok | `clockworks/tiktok-hashtag-scraper` | `resultsPerPage: 30` | 8 hashtags × 30 = 240 videos | ~$0.96 ($0.004/result) |
+| Instagram | `apify/instagram-hashtag-scraper` | `resultsLimit: 30` | 8 hashtags × 30 = 240 reels | ~$0.55 ($0.0023/result) |
+
+⚠️ TikTok's cap param is **`resultsPerPage`** (default **100**), **not** `maxPostsPerPage` — an unknown field is silently ignored and the actor falls back to 100/hashtag (5× overspend). Keep the transcript add-on (`downloadSubtitlesOptions`) off — it bills per video-minute. The `&limit=300` on the Apify URL caps rows returned to n8n; it is sized above the 240 results/run so the scorer sees every result you pay for (keep it ≥ results/run if you raise the per-hashtag cap again). It does **not** affect what the actor scrapes or bills — that is controlled only by `resultsPerPage` / `resultsLimit`.
+
 ### Outputs
 
 | Scenario | Action |
@@ -790,6 +803,7 @@ Each matched group adds +0.1 to the multiplier (1.0 base → max 1.3).
 | Report ships TikTok-only; Instagram section empty | Instagram Apify body omitted `resultsType`, so the actor defaulted to `posts` (static photos, near-zero engagement) and all results failed the quality gate | Set `resultsType: 'reels'` in `INSTAGRAM_APIFY_BODY`; gate Instagram on views (>=10,000), not likes; redeploy |
 | `Posts` sheet stays empty despite a successful run | `Prepare Sheet Rows` read `$json.sheetRows`, but its upstream node is `Send Email` (Gmail) whose output has no `sheetRows` | Read `$('Format Report').first().json.sheetRows` explicitly; redeploy |
 | A platform returns fewer than 10 posts | Recency (14-day) + quality gates legitimately filtered the pool; best-effort diversity floor cannot fabricate posts | Expected — widen `MAX_AGE_DAYS` or lower the gate only if the team prefers volume over freshness/quality |
+| TikTok scrape billed ~$3.20/run (≈5× expected) | `TIKTOK_APIFY_BODY` set `maxPostsPerPage: 20`, which is **not** a field in `clockworks/tiktok-hashtag-scraper`'s input schema — so it was ignored and the actor used its `resultsPerPage` default of **100** → 8 hashtags × 100 = 800 charged videos × $0.004 = $3.20 | Set `resultsPerPage: 20` (the actor's real per-hashtag cap) → 8×20 = 160 results ≈ $0.64/run; redeploy. Fixed + verified live 2026-06-15 (test run with `resultsPerPage:5` charged exactly 5) |
 
 ### Google Sheet Setup (manual, one-time)
 

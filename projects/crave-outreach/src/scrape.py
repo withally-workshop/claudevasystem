@@ -161,7 +161,7 @@ def _build_run_input(actor_id: str, search_term: str, max_results: int, cfg: dic
         return {
             "hashtags": [search_term.lstrip("#")],
             "resultsType": "posts",
-            "maxPostsPerPage": max_results,
+            "resultsPerPage": max_results,  # actor's real cap param; maxPostsPerPage is not in the schema and is ignored (defaults to 100/hashtag)
             "shouldDownloadVideos": False,
             "shouldDownloadCovers": False,
             "shouldDownloadMusicCovers": False,

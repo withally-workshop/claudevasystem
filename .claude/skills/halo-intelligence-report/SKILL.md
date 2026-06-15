@@ -24,8 +24,9 @@ Triggers the n8n Halo Weekly Intelligence Report workflow, which:
 - **Inspiration Library:** Posts sheet is linked in the "Halo Post Inspiration Library" table of the **Ideas & Moodboard** Slack canvas (`F0A2ATP4D5L`) as the auto-updated TikTok feed; Alleah's manual sheet (`1dX0QCZvvb9W0pQIjNUieXTaO9WlYOObI9Hb6RzZlmEg`) there is the IG-focused complement.
 - **Email recipients:** shin@kravemedia.co, noa@kravemedia.co, john@kravemedia.co, alleahvargas@gmail.com, basteperez021198@gmail.com (Baste — ads inspo)
 - **Email sender:** john@kravemedia.co (gmail-john credential)
-- **Apify TikTok actor:** `clockworks~tiktok-hashtag-scraper` (resultsType: posts)
-- **Apify Instagram actor:** `apify~instagram-hashtag-scraper` (resultsType: reels)
+- **Apify TikTok actor:** `clockworks~tiktok-hashtag-scraper` (resultsType: posts; **`resultsPerPage: 30`** per hashtag — pay-per-result. ⚠️ `maxPostsPerPage` is NOT a valid field; if used it is ignored and the actor defaults to 100/hashtag = ~5× cost)
+- **Apify Instagram actor:** `apify~instagram-hashtag-scraper` (resultsType: reels; `resultsLimit: 30` per hashtag — pay-per-result)
+- **Scrape volume/cost:** 8 hashtags × 30 = 240 results per platform per run → ~$0.96 TikTok + ~$0.55 IG. The Apify URL `&limit` must stay ≥ results/run (currently 300). Keep the transcript add-on off (bills per video-minute).
 
 ## Hashtag Clusters Scraped
 - **Skin:** sensitiveskin, skintok, skinbarrier, eczema, rosacea, acneskin
@@ -68,7 +69,7 @@ Final Score = (Engagement Rate × 0.40 + Saves/Shares Rate × 0.35 + Views Norma
 - ICP match (which group + why)
 - Content pillar (Problem/Solution | Educational | Inspirational | Wellness Hack)
 - Halo Adaptation (one sentence)
-- 2-paragraph trend synthesis at the top of the report
+- Sectioned trend synthesis at the top of the report (Shin's layout): Platform Trends Overview · TikTok Highlights · Instagram Highlights · Cross-Platform Format · 3 numbered Halo Content Priorities. Returned as a structured object; Slack renders emoji-headed sections + bullets, email mirrors it. Falls back to "synthesis unavailable" if Claude's JSON fails to parse.
 
 Hook Type + Format taxonomies mirror Alleah's manual inspo sheet ("🪝 Hook Type Legend" tab) so the automated tracker and her manual pulls read in the same format.
 
