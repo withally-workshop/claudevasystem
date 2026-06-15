@@ -3,33 +3,32 @@
 /**
  * Krave — Creator Invoice Email Scan
  *
- * INCIDENT GUARDS (added 2026-06-12 after execution 8041 sent the "missing
- * bank details" reply twice to a client lead whose proposal screenshots were
- * misclassified as invoices):
- *   1. PDF-only intake — images (inline screenshots, signature graphics) are
- *      never ingested; the Gmail query and the extractor both enforce this.
- *   2. Real classification — Claude is asked IF the document is an invoice
- *      (with email subject/sender context), not just told to extract fields.
- *   3. Replies are deduped per message, never per attachment.
- *   4. The missing-bank-details auto-reply only goes to known senders
- *      (@kravemedia.co or vendors already in the Bills tracker). Unknown
- *      senders get NO email — the case is flagged to #ops-command and logged
- *      On hold instead.
+ * PREP & HANDOFF MODEL (rebuilt 2026-06-15). Scans john@kravemedia.co for unread
+ * emails with PDF attachments, parses + classifies each with Claude, validates,
+ * and HANDS OFF to John — it does NOT create the bill or forward by email.
+ * Per valid invoice: post a ready-to-create prep package to #ops-command (vendor
+ * exists/NEW from a hardcoded map, payout currency, fields, bank, PDF pointer),
+ * reply ONE line to the requester (allowlisted senders only), log the tracker
+ * (status "Prepped — awaiting manual creation", Bill ID blank). John creates the
+ * DRAFT bill manually in Airwallex (API can't create DRAFT or attach PDFs until
+ * ~Aug 2026, at which point this flips to auto-create).
  *
- * Scans john@kravemedia.co every 3 hours (Mon–Fri) for unread emails with PDF
- * attachments. Parses each PDF with Claude, validates bank details, forwards
- * the PDF to the Airwallex bills inbox (kravemedia@bills.airwallex.com) which
- * auto-creates a draft, replies to the sender, and logs to the Bills tab.
+ * GUARDS:
+ *   1. PDF-only intake — images never ingested.
+ *   2. Claude classifies IS-invoice (with email context) before extraction.
+ *   3. One reply/flag per message, never per attachment.
+ *   4. HARDCODED SENDER ALLOWLIST — replies (success + missing-bank) go ONLY to
+ *      @kravemedia.co. Any other sender → no reply, #ops-command flag only.
+ *      (Fixes the 2026-06-12 client-as-creator misfire AND the prior ungated
+ *      success-reply bug that replied even on forward failure.)
  *
- * DEACTIVATED 2026-06-15. This workflow was turned off (active=false) because
- * (a) the success path `Reply Fallback` (n27) replied to ANY sender, ungated,
- * even when the forward failed (continueOnFail), and (b) the forward to the
- * Airwallex bills inbox stopped working. The whole flow is moving to the
- * PREP & HANDOFF model (see references/sops/creator-invoice-management.md):
- * parse → validate → hardcoded-allowlist reply → #ops-command prep package →
- * tracker log; John creates the DRAFT bill manually (API can't create DRAFT or
- * attach a PDF until ~Aug 2026). DO NOT re-deploy/reactivate this script as-is —
- * rebuild to prep-and-handoff first. John handles emailed invoices manually now.
+ * v1 NOTE: live FX is deferred — the prep package shows the invoice amount and
+ * flags a payout-currency conversion (e.g. Butanas USD→PHP) for John to apply at
+ * creation. Vendor match uses a hardcoded map kept in sync with the SOP.
+ *
+ * Was DEACTIVATED 2026-06-15 between the old forward flow and this rebuild.
+ * Reactivate only after a webhook test confirms: prep package posts, reply is
+ * one line to allowlisted senders only, tracker row = "Prepped".
  *
  * Deploy:
  *   node deploy-creator-invoice-email-scan.js
@@ -239,62 +238,59 @@ return output;
 `.trim();
 
 
-const BUILD_FORWARD_CONTEXT = `
+const BUILD_PREP_CONTEXT = `
+// PREP & HANDOFF (2026-06-15): build the #ops-command package John uses to create
+// the DRAFT bill manually. No Airwallex API call, no email forward. Vendor match +
+// payout currency come from a hardcoded map (kept in sync with the SOP); live FX is
+// deferred — John applies the rate at creation (note added for non-payout currency).
 const contexts = $('Parse & Validate').all();
+
+// payee name (lowercased) → payout currency. Default = invoice currency.
+const PAYOUT = {
+  'paul butanas': 'PHP',
+  'jeissa maryce manalili domingo': 'USD', 'jm domingo': 'USD', 'j.m. domingo': 'USD',
+  'sebastian dimaculangan perez': 'SGD', 'baste perez': 'SGD', 'baste': 'SGD', 'sebastian perez': 'SGD',
+};
+// Known existing Airwallex vendors (lowercased). Not here → NEW (John creates it).
+const KNOWN_VENDORS = new Set([
+  'kang ying xuan','marian borynets','hailey nolin','asli yerdelen','nichole zhang',
+  'sebastian dimaculangan perez','priscilla tan','holly crocker','amanda ng','paul butanas',
+  'jeissa maryce manalili domingo','brianna alvarran','diamond danielle','stashworks pte ltd',
+  'alleah grace mapula','jeneena gabrielle briones','reclaim movement llc',
+]);
+
 const output = [];
 $input.all().forEach((item, i) => {
   const ctx = (contexts[i] || { json: {} }).json;
+  const nameKey = String(ctx.creatorName || '').trim().toLowerCase();
+  const exists = KNOWN_VENDORS.has(nameKey);
+  const payoutCcy = PAYOUT[nameKey] || ctx.currency || 'USD';
+  const needsConvert = payoutCcy !== (ctx.currency || '');
 
-  // Slack notification text
+  const bd = ctx.bankDetails || {};
+  const bankStr = [bd.bank_name, bd.account_name, bd.account_number, bd.swift, bd.iban, bd.bsb, bd.routing_number]
+    .filter(Boolean).join(' / ') || 'see PDF';
+  const items = (ctx.lineItems || []).map(li => (li.description || 'item') + ' — ' + (li.quantity || 1) + ' × ' + (li.unit_price || 0)).join('; ');
+
   const lines = [
-    '*Invoice received & forwarded to Airwallex* :white_check_mark:',
-    '- Creator: ' + (ctx.creatorName || 'Unknown'),
-    '- Email: ' + (ctx.creatorEmail || 'Unknown'),
-    '- Invoice #: ' + (ctx.invoiceNumber || 'Unknown'),
-    '- Amount: ' + (ctx.currency || '') + ' ' + (ctx.amount || ''),
-    '- Due: ' + (ctx.dueDate || 'Unknown'),
-    '- Source: ' + (ctx.fromEmail || '') + ' — ' + (ctx.subject || ''),
-  ];
+    ':receipt: *Ready to create — ' + (ctx.creatorName || 'Unknown') + '*',
+    'Vendor: ' + (ctx.creatorName || 'Unknown') + (exists ? ' (exists)' : ' (NEW — create first)') + ' · payout ' + payoutCcy,
+    'Invoice #' + (ctx.invoiceNumber || '?') + ' · issued ' + (ctx.issuedDate || '?') + ' · due ' + (ctx.dueDate || '?'),
+    'Amount: ' + (ctx.currency || '') + ' ' + (ctx.amount || '') + (needsConvert ? ('  → pay in ' + payoutCcy + ', apply live rate ×0.97 at creation') : ''),
+    'Line items: ' + (items || 'Services'),
+    'Bank: ' + bankStr,
+    'PDF: email from ' + (ctx.fromEmail || '') + ' — "' + (ctx.subject || '') + '" (in john@kravemedia.co inbox)',
+    (exists ? '' : ':rotating_light: NEW VENDOR — create the vendor in Airwallex first.'),
+    (needsConvert ? ':rotating_light: CONVERTED payout — verify the rate.' : ''),
+    ':arrow_right: New draft bill in Airwallex Spend → vendor above → fill fields → upload the PDF → submit.',
+  ].filter(Boolean);
 
-  // Build RFC822 MIME email here to avoid n8n expression size limits on pdfBase64
-  const boundary = 'boundary_aw_' + Date.now();
-  const subject = 'Creator Invoice - ' + (ctx.creatorName || 'Unknown') + ' | ' + (ctx.invoiceNumber || 'Unknown') + ' | ' + (ctx.currency || '') + ' ' + (ctx.amount || '');
-  const bodyText = [
-    'Please process the attached creator invoice.',
-    '',
-    'Creator: ' + (ctx.creatorName || ''),
-    'Invoice #: ' + (ctx.invoiceNumber || ''),
-    'Amount: ' + (ctx.currency || '') + ' ' + (ctx.amount || ''),
-    'Line Items: ' + (ctx.lineItems || []).map(li => li.description).join(', '),
-    'Bank: ' + JSON.stringify(ctx.bankDetails || {}),
-    'Issued: ' + (ctx.issuedDate || ''),
-    'Due: ' + (ctx.dueDate || ''),
-  ].join('\\n');
+  // senderKnown gates the one-line requester reply (hardcoded team domain only).
+  const senderKnown = /@kravemedia\\.co$/.test(String(ctx.fromEmail || '').toLowerCase());
 
-  const mimeParts = [
-    'From: john@kravemedia.co',
-    'To: kravemedia@bills.airwallex.com',
-    'Subject: ' + subject,
-    'MIME-Version: 1.0',
-    'Content-Type: multipart/mixed; boundary="' + boundary + '"',
-    '',
-    '--' + boundary,
-    'Content-Type: text/plain; charset=UTF-8',
-    '',
-    bodyText,
-    '',
-    '--' + boundary,
-    'Content-Type: application/pdf',
-    'Content-Transfer-Encoding: base64',
-    'Content-Disposition: attachment; filename="' + (ctx.invoiceNumber || 'invoice') + '.pdf"',
-    '',
-    ctx.pdfBase64 || '',
-    '',
-    '--' + boundary + '--',
-  ];
-  const rawMessage = Buffer.from(mimeParts.join('\\r\\n')).toString('base64url');
-
-  output.push({ json: { ...ctx, slackText: lines.join('\\n'), rawMessage } });
+  // pairedItem set so $('Build Prep Context').item resolves downstream of the
+  // Slack HTTP node (which replaces $json with its response).
+  output.push({ json: { ...ctx, slackText: lines.join('\\n'), payoutCcy, vendorExists: exists, senderKnown }, pairedItem: i });
 });
 return output;
 `.trim();
@@ -355,9 +351,10 @@ for (const item of $input.all()) {
   if (mid && seen.has(mid)) continue;
   if (mid) seen.add(mid);
   const email = String(j.fromEmail || '').toLowerCase();
-  const senderKnown = /@kravemedia\\.co$/.test(email)
-    || names.has(String(j.creatorName || '').trim().toLowerCase())
-    || names.has(String(j.fromName || '').trim().toLowerCase());
+  // HARDCODED allowlist (2026-06-15): reply ONLY to the Krave team domain.
+  // External / unknown senders never get an outbound reply — flagged to
+  // #ops-command instead. (Replaces the old tracker-name matching.)
+  const senderKnown = /@kravemedia\\.co$/.test(email);
   output.push({ json: { ...j, senderKnown } });
 }
 return output;
@@ -702,28 +699,28 @@ const workflow = {
 
     // ── [true] Email forward path ─────────────────────────────────────────────
     {
-      id: 'n25', name: 'Build Forward Context',
+      id: 'n25', name: 'Build Prep Context',
       type: 'n8n-nodes-base.code', typeVersion: 2,
       position: [2900, 200],
-      parameters: { mode: 'runOnceForAllItems', jsCode: BUILD_FORWARD_CONTEXT },
+      parameters: { mode: 'runOnceForAllItems', jsCode: BUILD_PREP_CONTEXT },
     },
     {
-      id: 'n25b', name: 'Forward PDF to Airwallex Email',
-      type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
-      position: [4580, 500],
-      continueOnFail: true,
+      id: 'n25c', name: 'Known Sender? (reply gate)',
+      type: 'n8n-nodes-base.if', typeVersion: 2.1,
+      position: [5060, 240],
       parameters: {
-        method: 'POST',
-        url: 'https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=multipart',
-        authentication: 'predefinedCredentialType',
-        nodeCredentialType: 'gmailOAuth2',
-        sendBody: true,
-        contentType: 'raw',
-        rawContentType: 'message/rfc822',
-        body: '={{ $json.rawMessage }}',
+        conditions: {
+          options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+          combinator: 'and',
+          conditions: [{
+            id: 'cond-sender-known',
+            leftValue: '={{ $(\'Build Prep Context\').item.json.senderKnown }}',
+            rightValue: true,
+            operator: { type: 'boolean', operation: 'true', singleValue: true },
+          }],
+        },
         options: {},
       },
-      credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
     },
     {
       id: 'n26', name: 'Post Slack Prep Report',
@@ -743,24 +740,26 @@ const workflow = {
       credentials: { slackApi: { id: SLACK_CRED_ID, name: 'Krave Slack Bot' } },
     },
     {
-      id: 'n27', name: 'Reply Fallback',
+      id: 'n27', name: 'Reply Received',
       type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
-      position: [5060, 340],
+      position: [5280, 160],
       continueOnFail: true,
       credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
         resource: 'message',
         operation: 'reply',
-        messageId: '={{ $("Parse & Validate").item.json.messageId }}',
+        messageId: '={{ $(\'Build Prep Context\').item.json.messageId }}',
         emailType: 'text',
-        message: '={{ "Hi " + ($("Parse & Validate").item.json.fromName || "there").split(" ")[0] + ",\\n\\nReceived. Staged for payment.\\n\\nCheers,\\nJohn\\nKrave Media" }}',
+        // One line only — no creator/amount/invoice/vendor detail (all detail is in
+        // the #ops-command prep package). Only reached for allowlisted senders.
+        message: '={{ "Hi " + ($(\'Build Prep Context\').item.json.fromName || "there").split(" ")[0] + ",\\n\\nReceived — staged for payment.\\n\\nCheers,\\nJohn\\nKrave Media" }}',
         options: {},
       },
     },
     {
-      id: 'n28', name: 'Log to Bills Tab (pending)',
+      id: 'n28', name: 'Log Prepped to Bills Tab',
       type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5,
-      position: [5300, 340],
+      position: [5500, 340],
       continueOnFail: true,
       credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
       parameters: {
@@ -772,15 +771,15 @@ const workflow = {
           mappingMode: 'defineBelow',
           value: {
             'Date Received':     '={{ new Date().toISOString().split("T")[0] }}',
-            'Creator / Vendor':  '={{ $("Parse & Validate").item.json.creatorName }}',
-            'Invoice #':         '={{ $("Parse & Validate").item.json.invoiceNumber }}',
+            'Creator / Vendor':  '={{ $(\'Build Prep Context\').item.json.creatorName }}',
+            'Invoice #':         '={{ $(\'Build Prep Context\').item.json.invoiceNumber }}',
             'Airwallex Bill ID': '',
-            'Amount':            '={{ $("Parse & Validate").item.json.amount }}',
-            'Currency':          '={{ $("Parse & Validate").item.json.currency }}',
-            'Due Date':          '={{ $("Parse & Validate").item.json.dueDate }}',
-            'Status':            'Forwarded via Email',
-            'Slack Thread TS':   '={{ $("Parse & Validate").item.json.messageId }}',
-            'Notes':             'Source: Email — forwarded to kravemedia@bills.airwallex.com',
+            'Amount':            '={{ $(\'Build Prep Context\').item.json.amount }}',
+            'Currency':          '={{ $(\'Build Prep Context\').item.json.currency }}',
+            'Due Date':          '={{ $(\'Build Prep Context\').item.json.dueDate }}',
+            'Status':            'Prepped — awaiting manual creation',
+            'Slack Thread TS':   '={{ $(\'Build Prep Context\').item.json.messageId }}',
+            'Notes':             '={{ "Source: Email. Payout " + ($(\'Build Prep Context\').item.json.payoutCcy || $(\'Build Prep Context\').item.json.currency) + ($(\'Build Prep Context\').item.json.vendorExists ? "" : " — NEW vendor") + ". Prep package posted to #ops-command; John to create the draft." }}',
           },
           schema: [],
         },
@@ -790,13 +789,13 @@ const workflow = {
     {
       id: 'n29', name: 'Mark Read (fallback)',
       type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
-      position: [5540, 340],
+      position: [5720, 340],
       continueOnFail: true,
       credentials: { gmailOAuth2: { id: GMAIL_CRED_ID, name: 'Gmail account' } },
       parameters: {
         resource: 'message',
         operation: 'markAsRead',
-        messageId: '={{ $("Parse & Validate").item.json.messageId }}',
+        messageId: '={{ $(\'Build Prep Context\').item.json.messageId }}',
       },
     },
   ],
@@ -826,8 +825,8 @@ const workflow = {
     'Post Not-Invoice Notice':  { main: [[{ node: 'Mark Read (not invoice)',  type: 'main', index: 0 }]] },
     // Validation branch
     'Has Bank Details?': { main: [
-      [{ node: 'Build Forward Context', type: 'main', index: 0 }],  // true
-      [{ node: 'Dedup Reply Gate',      type: 'main', index: 0 }],  // false
+      [{ node: 'Build Prep Context', type: 'main', index: 0 }],  // true
+      [{ node: 'Dedup Reply Gate',   type: 'main', index: 0 }],  // false
     ]},
     // Missing bank details path: one item per message + known-sender gate
     'Dedup Reply Gate': { main: [[{ node: 'Known Sender?', type: 'main', index: 0 }]] },
@@ -838,12 +837,16 @@ const workflow = {
     'Reply Missing Bank Details':  { main: [[{ node: 'Mark Read (missing bank details)', type: 'main', index: 0 }]] },
     'Flag Unknown Sender to Ops':  { main: [[{ node: 'Log On Hold to Bills Tab',          type: 'main', index: 0 }]] },
     'Log On Hold to Bills Tab':    { main: [[{ node: 'Mark Read (held)',                  type: 'main', index: 0 }]] },
-    // Email forward path
-    'Build Forward Context':           { main: [[{ node: 'Forward PDF to Airwallex Email', type: 'main', index: 0 }]] },
-    'Forward PDF to Airwallex Email':  { main: [[{ node: 'Post Slack Prep Report',         type: 'main', index: 0 }]] },
-    'Post Slack Prep Report':          { main: [[{ node: 'Reply Fallback',                  type: 'main', index: 0 }]] },
-    'Reply Fallback':                  { main: [[{ node: 'Log to Bills Tab (pending)',       type: 'main', index: 0 }]] },
-    'Log to Bills Tab (pending)':      { main: [[{ node: 'Mark Read (fallback)',             type: 'main', index: 0 }]] },
+    // Prep & handoff path: post the #ops-command package (always), then gate the
+    // one-line requester reply by the hardcoded allowlist; both branches log + mark read.
+    'Build Prep Context':         { main: [[{ node: 'Post Slack Prep Report', type: 'main', index: 0 }]] },
+    'Post Slack Prep Report':     { main: [[{ node: 'Known Sender? (reply gate)', type: 'main', index: 0 }]] },
+    'Known Sender? (reply gate)': { main: [
+      [{ node: 'Reply Received',          type: 'main', index: 0 }],  // true — allowlisted, one-line reply
+      [{ node: 'Log Prepped to Bills Tab', type: 'main', index: 0 }], // false — no reply, still log + flag
+    ]},
+    'Reply Received':             { main: [[{ node: 'Log Prepped to Bills Tab', type: 'main', index: 0 }]] },
+    'Log Prepped to Bills Tab':   { main: [[{ node: 'Mark Read (fallback)',     type: 'main', index: 0 }]] },
   },
 };
 
@@ -890,8 +893,16 @@ async function deploy() {
     console.log('ERROR:', JSON.stringify(result, null, 2).substring(0, 2000));
     return;
   }
-  await n8nRequest('POST', `/api/v1/workflows/${result.id}/activate`);
-  console.log('SUCCESS');
+  // Activation is GATED — this workflow sends outbound email + touches money, so
+  // a deploy must not silently re-enable the schedule. Deploy inactive, test via
+  // the webhook, then re-run with ACTIVATE=1 to enable.
+  if (process.env.ACTIVATE === '1') {
+    await n8nRequest('POST', `/api/v1/workflows/${result.id}/activate`);
+    console.log('SUCCESS — ACTIVATED (schedule + webhook live).');
+  } else {
+    await n8nRequest('POST', `/api/v1/workflows/${result.id}/deactivate`);
+    console.log('SUCCESS — deployed INACTIVE. Re-run with ACTIVATE=1 to enable the schedule.');
+  }
   console.log('Workflow ID:', result.id);
   console.log('Name:', result.name);
   console.log('URL: https://noatakhel.app.n8n.cloud/workflow/' + result.id);

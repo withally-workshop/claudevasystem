@@ -1,7 +1,7 @@
 # KM-SOP-001 — Creator Invoice Management
 **Frequency:** Every 3 hours (weekdays) via scheduled agent + real-time via Krave bot | **Owner:** VA / Finance | **Updated:** June 2026
 
-> **PREP & HANDOFF MODEL (2026-06-15).** The automation does NOT create the bill. Airwallex can't create a DRAFT or attach a PDF until ~Aug 2026, and an API-created bill lands `AWAITING_PAYMENT` (finalized, no PDF, unuploadable); email-forward is also broken. So the automation parses, validates, does the FX math, replies to the team (feels automated), and **posts a ready-to-create prep package to #ops-command. John creates the DRAFT bill manually** in Airwallex (vendor → fields → upload PDF → submit). Flips to auto-create in Aug 2026. The n8n email workflow (`DbIJYYQ3FE4HKprB`) is **DEACTIVATED** (ungated success reply + broken forward) pending a prep-and-handoff rebuild — John handles emailed invoices manually for now.
+> **PREP & HANDOFF MODEL (2026-06-15).** The automation does NOT create the bill. Airwallex can't create a DRAFT or attach a PDF until ~Aug 2026, and an API-created bill lands `AWAITING_PAYMENT` (finalized, no PDF, unuploadable); email-forward is also broken. So the automation parses, validates, does the FX math, replies to the team (feels automated), and **posts a ready-to-create prep package to #ops-command. John creates the DRAFT bill manually** in Airwallex (vendor → fields → upload PDF → submit). Flips to auto-create in Aug 2026. Both the bot and the n8n email workflow (`DbIJYYQ3FE4HKprB`, **rebuilt to prep-and-handoff, deployed INACTIVE** pending webhook test → `ACTIVATE=1`) log the tracker at prep time (status `Prepped — awaiting manual creation`). John handles emailed invoices manually until the email path is enabled.
 
 ## Overview
 Collect creator and vendor invoices, validate each PDF, compute vendor match + FX, **post a prep package to #ops-command for John to create the draft manually**, reply to the team, and log it. Noa processes payments every Thursday.
@@ -28,7 +28,7 @@ Collect creator and vendor invoices, validate each PDF, compute vendor match + F
 Invoice Input
 ├── Slack DM (to bot)    → Krave Bot (real-time)  → prep package → John creates draft
 ├── Slack @mention       → Krave Bot (real-time)  → prep package → John creates draft
-├── Email                → n8n `DbIJYYQ3FE4HKprB` — DEACTIVATED (rebuild pending); John handles manually
+├── Email                → n8n `DbIJYYQ3FE4HKprB` — REBUILT to prep-and-handoff, deployed INACTIVE pending webhook test (ACTIVATE=1 to enable)
 └── /invoice-triage      → Manual on-demand sweep → prep packages
 ```
 
@@ -37,7 +37,7 @@ Invoice Input
 ### Step 1 — Receive Invoice
 
 - Krave bot handles Slack DMs (to the bot) and @mentions instantly when a PDF is attached
-- Email path (n8n `DbIJYYQ3FE4HKprB`) is **deactivated** — John processes emailed invoices manually until the prep-and-handoff rebuild
+- Email path (n8n `DbIJYYQ3FE4HKprB`) is **rebuilt to prep-and-handoff, deployed INACTIVE** — webhook-test then `ACTIVATE=1`; John processes emailed invoices manually until it's enabled
 - Manual run (`/invoice-triage`) sweeps the Slack channel for anything pending
 
 ### Step 2 — Validate Invoice

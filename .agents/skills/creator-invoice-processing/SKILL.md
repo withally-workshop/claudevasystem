@@ -17,7 +17,7 @@ Receive PDF invoices → classify → validate → vendor match + FX math → pr
 
 **Real-time (krave-bot):** Fires when the bot gets a Slack DM with a PDF or a strategist @mentions Claude EA in #payments-invoices-updates with a PDF.
 
-**Email (`DbIJYYQ3FE4HKprB`):** **DEACTIVATED** 2026-06-15 (ungated success reply + broken forward) — pending a prep-and-handoff rebuild. John handles emailed invoices manually for now.
+**Email (`DbIJYYQ3FE4HKprB`):** **REBUILT to prep-and-handoff, deployed INACTIVE** 2026-06-15 — webhook-test then `ACTIVATE=1`. John handles emailed invoices manually until it's enabled.
 
 **Manual skill run:** Follow `.claude/skills/creator-invoice-processing/SKILL.md` step-by-step.
 
@@ -40,7 +40,7 @@ Receive PDF invoices → classify → validate → vendor match + FX math → pr
 8. Replies **once** (allowlisted senders only) — EXACTLY "Received — staged for payment", nothing else (no creator/amount/invoice/vendor/dates/Airwallex detail; all detail stays in the #ops-command prep package)
 9. Logs to tracker, status `Prepped — awaiting manual creation`, Bill ID blank (John fills after creating)
 
-**Email path (n8n `DbIJYYQ3FE4HKprB`) is deactivated** (rebuild to prep-and-handoff pending). krave-bot uses the same prep-and-handoff flow as above.
+**Email path (n8n `DbIJYYQ3FE4HKprB`) is rebuilt to prep-and-handoff, deployed INACTIVE** (webhook-test then ACTIVATE=1). krave-bot uses the same prep-and-handoff flow as above. Both deterministically log the tracker at prep time (status "Prepped — awaiting manual creation").
 
 ## Dedup Signals
 

@@ -41,13 +41,13 @@
 | 13 | LinkedIn Post Consistency Check | `220OeHs02nwJleCT` | Active | 10AM PHT Mon–Fri | Check if any post was marked posted in ClickUp today; alert #noa-linkedin-posts if none found |
 | 14 | Weekly Resource Conversion Report | `G39y9GgsrhnvC91C` | Active | 9AM PHT Mondays | Fetch last 7 days of resource-claimed Kit subscribers, group by resource, post breakdown to #noa-linkedin-posts |
 | 15 | Halo - Weekly Intelligence Report | 5ZqTSaUEtxnAndiY | Active | 7AM PHT Mondays | Scrape TikTok + Instagram by hashtag cluster, score by engagement × ICP relevance, Claude analysis of top 10 per platform, deliver to Slack + Google Sheet + email |
-| 16 | Crave - Daily Lead Push | `ke52OLrSUXk8mPVw` | Inactive (warm-up) | 9AM PHT daily | Read approved Sheet rows, push to Smartlead campaign 3375376, mark outreach_queued |
-| 17 | Crave - Status Sync | `uUGxA3GW1W0vq6el` | Inactive (warm-up) | 9AM PHT daily | Pull Smartlead lead statuses, sync opens/replies/bounces back to Sheet |
+| 16 | Crave - Daily Lead Push | `ke52OLrSUXk8mPVw` | Inactive (Pro-gated) | 9AM PHT daily | Read approved Sheet rows, push to Smartlead campaign 3375376, mark outreach_queued |
+| 17 | Crave - Status Sync | `uUGxA3GW1W0vq6el` | Inactive (Pro-gated) | 9AM PHT daily | Pull Smartlead lead statuses, sync opens/replies/bounces back to Sheet |
 | 18 | Krave — Price Reply Auto-Resubmit | `nzFTk4e9NRi6Jk9r` | Active | **Event-driven** — `POST /webhook/krave-price-reply-resubmit` (no schedule) | Detect bot "price missing" threads with unprocessed amount replies in #payments-invoices-updates, parse receipt + amount, resubmit to intake webhook automatically. **Fully event-driven as of 2026-06-10:** the krave-bot (Render) forwards human messages in this private channel (`message.groups`) to the webhook; ~0 idle execs. History: 24/7 `*/10` (~4,300/mo, blew the 2,500 cap) → throttled `*/30 8-19 * * 1-5` → schedule removed. |
 | 19 | LinkedIn Post Monitor | `wNXs7wqHz5d5naJN` | Inactive (needs actor verification) | Every 30min all day | Scrape Noa's LinkedIn profile via Apify every 30min, detect new posts using workflow static data, alert John in #noa-linkedin-posts with preview + link |
 | 20 | Halo - VA Slack Bot | `XgHWMBeHoPWelE9r` | Active | `app_mention` in #halo-home-shopify | VA @mentions bot → Claude classifies intent → Shopify API → formatted reply in thread |
 | 21 | Halo - Daily Digest | `047cSNvFvUGHaf3O` | Active | 10 AM PHT daily (Asia/Manila) | Pull yesterday's Shopify orders + unfulfilled count → Claude formats → post to #halo-home-shopify |
-| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | **DEACTIVATED 2026-06-15** — ungated success reply (`Reply Fallback` n27 replied to any sender, even on `continueOnFail` forward failure) + broken forward. Pending rebuild to the prep-and-handoff model (parse → validate → hardcoded-allowlist reply → #ops-command prep package → log; no forward, no API create). John handles emailed invoices manually meanwhile. | (was 09:00/12:00/15:00/18:00 PHT Mon–Fri) | Scan john@kravemedia.co for unread invoice PDFs, parse with Claude, validate, hand off to John |
+| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | **REBUILT to prep-and-handoff 2026-06-15; deployed INACTIVE pending a webhook test, then `ACTIVATE=1` to enable.** Parses + classifies → validates → posts #ops-command prep package → one-line reply to hardcoded-allowlist senders only (@kravemedia.co; others get no reply, flag only) → logs "Prepped". No email forward, no API bill creation (John creates the DRAFT manually; flips to auto-create ~Aug 2026). | 09:00/12:00/15:00/18:00 PHT Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` (live only when active) | Scan john@kravemedia.co for unread invoice PDFs, parse, validate, hand John a ready-to-create prep package |
 | 23 | Halo - Inventory Alert | `NBvfYPmjdTXzrKfb` | Active | 9 AM PHT daily (Asia/Manila) | Compare product stock vs previous run; alert #halo-home-shopify on OOS changes + newly low-stock (<10 units) |
 | 24 | Halo - Weekly Report | `7N9gEZb7nDS0EDGu` | Active | 9 AM PHT Mondays (Asia/Manila) | Refill due list (filter buyers 75–105 days ago) + upsell gap (showerhead buyers without filters) → post to #halo-home-shopify |
 
@@ -1324,7 +1324,7 @@ Schedule Trigger
 | SMARTLEAD_API_KEY rotated | Redeploy script with updated key in local `.env` |
 
 ### Activation Note
-Workflow is deployed **inactive**. Activate in the n8n UI on ~2026-06-12 when warm-up completes.
+Workflow is deployed **inactive**. Warm-up is complete, but this workflow calls the Smartlead API, which requires the **Pro plan ($94/mo)** — the current **Base plan has no API**, so it cannot run. Leave inactive; activate only after upgrading to Pro. On Base, lead push is manual (`export_approved.py` → import CSV in the Smartlead UI). See KM-SOP-009.
 
 ---
 
@@ -1372,7 +1372,7 @@ Schedule Trigger
 | SMARTLEAD_API_KEY rotated | Redeploy script with updated key in local `.env` |
 
 ### Activation Note
-Workflow is deployed **inactive**. Activate in the n8n UI on ~2026-06-12 when warm-up completes.
+Workflow is deployed **inactive**. Warm-up is complete, but this workflow calls the Smartlead API, which requires the **Pro plan ($94/mo)** — the current **Base plan has no API**, so it cannot run. Leave inactive; activate only after upgrading to Pro. On Base, lead push is manual (`export_approved.py` → import CSV in the Smartlead UI). See KM-SOP-009.
 
 ---
 
@@ -1538,7 +1538,7 @@ Posts yesterday's Halo Home sales summary + current unfulfilled orders to `#halo
 
 ### Purpose
 
-Replaces the manual email-check step for creator/AP invoice intake. Scans john@kravemedia.co four times a day for unread emails with **PDF attachments only**, classifies + parses each with Claude Sonnet, guards against non-invoices and Airwallex/automated senders, validates bank details (hardstop if missing), **forwards the invoice PDF to the Airwallex bills inbox** (`kravemedia@bills.airwallex.com`), replies to the original sender (known senders only on the failure path), posts a prep report to `#ops-command`, and logs to the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`). This workflow does **not** call the Airwallex Spend API directly — bill creation happens on the Airwallex side from the forwarded email; John reviews/finalizes drafts there. **Migration note (2026-06-12):** the manual `/invoice-triage` path now creates bills via the Spend API directly (see `references/sops/creator-invoice-management.md`); Phase 2 will promote that logic into this workflow via an `httpCustomAuth` Spend credential. Until then this workflow stays forward-by-email.
+Replaces the manual email-check step for creator/AP invoice intake. Scans john@kravemedia.co four times a day for unread emails with **PDF attachments only**, classifies + parses each with Claude Sonnet, guards against non-invoices and Airwallex/automated senders, validates bank details (hardstop if missing), then **PREP & HANDOFF** (rebuilt 2026-06-15): posts a ready-to-create prep package to `#ops-command` (vendor exists/NEW from a hardcoded map, payout currency, fields, bank, PDF pointer), replies **one line** to the requester (hardcoded `@kravemedia.co` allowlist only — others get no reply, an #ops-command flag), and logs the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`) with status `Prepped — awaiting manual creation`, Bill ID blank. **John creates the DRAFT bill manually** in Airwallex (the API can't create a DRAFT or attach a PDF until ~Aug 2026, when this flips to auto-create). No email forward, no API bill creation. **Deployed INACTIVE** after the rebuild — reactivate with `ACTIVATE=1` after a webhook test.
 
 > **2026-06-12 incident + guards:** the original version ingested inline images, treated any priced document as an invoice, and replied per attachment — it sent the "missing bank details" reply twice to a client lead whose proposal pricing screenshots matched the query (execution 8041; see `decisions/log.md`). The workflow was killed, reworked with four guards (PDF-only intake, explicit is-invoice classification with email context, per-message reply dedup, known-sender gate on the auto-reply with an #ops-command flag path for unknown senders), and reactivated the same day with John's approval.
 
@@ -1583,11 +1583,12 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
                │                └─ false → [Flag Unknown Sender to Ops] (→ #ops-command, NO email)
                │                           → [Log On Hold to Bills Tab] (status: On hold — missing bank details)
                │                           → [Mark Read (held)]
-               └─ true  → [Build Forward Context] (builds Slack text + RFC822 MIME w/ PDF)
-                          → [Forward PDF to Airwallex Email] (→ kravemedia@bills.airwallex.com)
-                          → [Post Slack Prep Report] (→ #ops-command C0AQZGJDR38)
-                          → [Reply Fallback] (→ sender: "Received. Staged for payment.")
-                          → [Log to Bills Tab (pending)] (status: Forwarded via Email)
+               └─ true  → [Build Prep Context] (vendor exists/NEW + payout ccy from hardcoded map; builds #ops-command package text; senderKnown flag; pairedItem set)
+                          → [Post Slack Prep Report] (→ #ops-command C0AQZGJDR38: ready-to-create package)
+                          → [Known Sender? (reply gate)]
+                              ├─ true  → [Reply Received] (→ sender, one line: "Received — staged for payment.")
+                              │           → [Log Prepped to Bills Tab] (status: Prepped — awaiting manual creation)
+                              └─ false → [Log Prepped to Bills Tab] (no reply)
                           → [Mark Read (fallback)]
 ```
 
@@ -1596,23 +1597,23 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
 - **Sender blocklist (NEVER reply to Airwallex):** Two layers. (1) `-from:airwallex.com` in the Search Inbox query keeps platform mail out of the pipeline (saves Claude calls). (2) `isBlockedSender()` in Extract PDF Attachments hard-drops any email from `airwallex.com` (+ subdomains), `no-reply`/`noreply`, `notifications@`, or `mailer-daemon`/`postmaster` — never parsed, replied to, forwarded, logged, or marked read; left untouched in the inbox. `kravemedia.co` is **not** blocked — strategists send/forward invoices and may use that domain.
 - **PDF-only intake (2026-06-12 guard):** the Gmail query (`filename:pdf`) and the extractor both exclude images. Inline pricing screenshots on a client sales thread were the trigger for the 2026-06-12 misfire.
 - **Is Invoice? guard (2026-06-12 guard):** Claude is asked to CLASSIFY first — `is_invoice` is true only for an actual invoice/bill issued TO Krave Media, judged with email context (sender, subject). Proposals, quotes, pricing pages, receipts, contracts, and Krave's own outbound invoices are explicitly not invoices. `isInvoice` requires Claude's `is_invoice === true` plus the name/amount sanity floor. A Claude parse failure fails safe to the not-invoice path. Nothing is skipped silently anymore: every not-invoice skip posts a one-line notice (with Claude's reason) to `#ops-command` before marking read.
-- **Known-sender gate on the failure path (2026-06-12 guard):** the "missing bank details" auto-reply only goes to senders who are `@kravemedia.co` or whose name matches an existing vendor in the Bills tracker (column B, matched against parsed creator name or From name). Unknown senders get **no email** — the case is flagged to `#ops-command`, logged to the tracker as `On hold — missing bank details`, and marked read. Fail-safe: if the tracker read failed, every sender is treated as unknown.
+- **Hardcoded sender allowlist (2026-06-15, BOTH reply paths):** replies — the success "Received — staged for payment" AND the missing-bank-details reissue — go ONLY to `@kravemedia.co` senders (the `Known Sender?` IF nodes test `senderKnown`, set by a hardcoded domain check). Any other sender gets **no email** — flagged to `#ops-command` and logged. This closed the prior hole where the success reply (`Reply Fallback`) was ungated and fired even on forward failure. (The old tracker-name matching was removed.)
 - **Per-message replies (2026-06-12 guard):** `Dedup Reply Gate` and `Dedup Notice Per Message` collapse N failing attachments from one email into ONE reply/flag/notice. The incident's duplicate emails came from per-attachment replies.
 - **Dedup (3 layers):** (1) `is:unread` search + mark-as-read at the end of every path. (2) **Tracker dedup** — `Fetch Existing Bills` reads range B:I of the tracker once at the top; `Dedup Filter` drops any candidate whose Gmail messageId already has a row (column I = index 7 in the range). The On-hold log row also feeds this, so held emails are never reprocessed. Fail-open: if the read errors, everything is processed. (3) Multiple PDFs in one email each get their own item but share the messageId (see limitation below).
 - **Multiple PDFs per email:** Extract Attachments splits one email into N items (one per PDF). Each PDF is processed independently on the forward path. *Limitation:* tracker dedup keys on messageId only, so if a run forwards PDF A but fails before PDF B, a later run skips both (messageId already present). Mark-as-read mitigates in practice.
 - **Invoice number:** Auto-generated as `MMDDYYYY-[FirstInitialLastName]` if missing.
 - **Due date:** Defaults to Friday of current week (PHT) if not on invoice.
-- **Bank details hardstop:** Known sender → reply asking to reissue; unknown sender → #ops-command flag + On-hold log. Either way: marked read, never forwarded.
-- **Forward-by-email (not Spend API):** On a valid invoice, the PDF is rebuilt into an RFC822 MIME message and sent to `kravemedia@bills.airwallex.com`; a prep report goes to `#ops-command`; the sender gets a confirmation reply; a row is logged as "Forwarded via Email."
+- **Bank details hardstop:** Allowlisted sender → reply asking to reissue; non-allowlisted → #ops-command flag + On-hold log. Either way: marked read.
+- **Prep & handoff (not forward, not API create):** On a valid invoice, `Build Prep Context` matches the vendor (hardcoded map → exists/NEW) and payout currency, then posts a ready-to-create package to `#ops-command`; allowlisted senders get the one-line reply; a row is logged as `Prepped — awaiting manual creation` with a blank Bill ID. **John creates the DRAFT bill manually** in Airwallex (vendor → fields → upload PDF → submit). Live FX is deferred to creation (the package flags non-payout currency, e.g. Butanas USD→PHP). Flips to auto-create ~Aug 2026.
 
 ### Outputs
 
 | Scenario | Action |
 |----------|--------|
-| Valid invoice with bank details | PDF forwarded to kravemedia@bills.airwallex.com, Slack prep report to #ops-command, confirmation reply to sender, logged to tracker as "Forwarded via Email", email marked read |
-| Not an invoice (Claude classification) | One notice per email to #ops-command (with Claude's reason), email marked read — no reply, no forward, no tracker row |
-| Missing bank details, KNOWN sender (@kravemedia.co or tracker vendor) | One reissue reply per email, marked read, not forwarded |
-| Missing bank details, UNKNOWN sender | NO email sent — flagged to #ops-command, logged as "On hold — missing bank details", marked read |
+| Valid invoice with bank details | Prep package posted to #ops-command; one-line reply to allowlisted sender (non-allowlisted → no reply); logged "Prepped — awaiting manual creation" (blank Bill ID); marked read. John creates the draft manually. |
+| Not an invoice (Claude classification) | One notice per email to #ops-command (with Claude's reason), email marked read — no reply, no tracker row |
+| Missing bank details, allowlisted sender (@kravemedia.co) | One reissue reply per email, marked read |
+| Missing bank details, non-allowlisted sender | NO email sent — flagged to #ops-command, logged "On hold — missing bank details", marked read |
 | Blocked sender (Airwallex / no-reply / notifications / mailer-daemon) | Dropped at Extract — left untouched in inbox |
 | Already in tracker (duplicate messageId) | Dropped at Dedup Filter — not reprocessed |
 | No unread PDF emails | Workflow exits with 0 items, nothing happens |
@@ -1623,8 +1624,8 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
 |---------|-----------|
 | Tracker read (`Fetch Existing Bills`) fails | `continueOnFail` — Dedup Filter fails open (processes everything); Dedup Reply Gate fails SAFE (all senders treated unknown → flag path, no auto-reply) |
 | Claude API fails | Parse & Validate gets empty response → `isInvoice` false → #ops-command notice + marked read, no reply |
-| Forward to Airwallex email fails | `continueOnFail` — downstream Slack/reply/log/mark-read still run |
-| Gmail reply fails | `continueOnFail` — mark read still runs |
+| Slack prep package post fails | `continueOnFail` — reply gate / log / mark-read still run |
+| Gmail reply fails | `continueOnFail` — log + mark read still run |
 | Sheets append fails | `continueOnFail` — email still marked read |
 
 ---
@@ -1761,7 +1762,7 @@ Every Monday at 9 AM PHT, posts two proactive lists to `#halo-home-shopify`: (1)
 - [ ] Ensure `APIFY_API_KEY` and `ANTHROPIC_API_KEY` are in local `.env` — the deploy script bakes them into the workflow nodes at deploy time (n8n Starter has no env-var support); rotate by redeploying
 - [ ] Create the `Posts` tab in the Halo Intelligence Report Google Sheet (`1V_sjvMaCngWyB_5-ElMFdMetlsR2OdgD2QP42QQ5au4`) with the required columns before the first run
 - [ ] Verify Apify actor IDs (`clockworks~tiktok-hashtag-scraper`, `apify~instagram-hashtag-scraper`) at apify.com/store
-- [ ] Activate Crave - Daily Lead Push (workflow 16) and Crave - Status Sync (workflow 17) in n8n UI after warm-up completes (~2026-06-12) — both are deployed inactive
+- [ ] Crave - Daily Lead Push (workflow 16) and Crave - Status Sync (workflow 17) require Smartlead **Pro** (API). Base plan has no API — leave inactive. Activate only after upgrading to Pro; until then push is manual (KM-SOP-009)
 - [ ] After deploying crave workflows, set the returned WORKFLOW_ID in `deploy-crave-lead-push.js` and `deploy-crave-status-sync.js` for future redeploys
 - [ ] Test by webhook after any workflow change
 - [ ] **Halo Home:** Set `SHOPIFY_ACCESS_TOKEN` and `HALO_HOME_SLACK_CHANNEL_ID` in n8n environment variables before deploying any Halo workflows

@@ -21,14 +21,14 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | LinkedIn Post Consistency Check | Active | 10AM PHT Mon–Fri | [deploy-linkedin-post-consistency-check.js](deploy-linkedin-post-consistency-check.js) |
 | Weekly Resource Conversion Report | Active | 9AM PHT Mondays | [deploy-weekly-resource-conversion-report.js](deploy-weekly-resource-conversion-report.js) |
 | Halo Weekly Intelligence Report | Active | 7AM PHT Mondays | [deploy-halo-intelligence-report.js](deploy-halo-intelligence-report.js) |
-| Crave - Daily Lead Push | Inactive (warm-up) | 9AM PHT daily | [deploy-crave-lead-push.js](deploy-crave-lead-push.js) |
-| Crave - Status Sync | Inactive (warm-up) | 9AM PHT daily | [deploy-crave-status-sync.js](deploy-crave-status-sync.js) |
+| Crave - Daily Lead Push | Inactive (Pro-gated) | 9AM PHT daily | [deploy-crave-lead-push.js](deploy-crave-lead-push.js) |
+| Crave - Status Sync | Inactive (Pro-gated) | 9AM PHT daily | [deploy-crave-status-sync.js](deploy-crave-status-sync.js) |
 | LinkedIn Post Monitor | Inactive (needs actor verification) | Every 30min all day | [deploy-linkedin-post-monitor.js](deploy-linkedin-post-monitor.js) |
 | Halo - VA Slack Bot | Active | Slack `app_mention` in #halo-home-shopify | [deploy-halo-home-slack-bot.js](deploy-halo-home-slack-bot.js) |
 | Halo - Daily Digest | Active | 10 AM PHT daily (Asia/Manila) | [deploy-halo-home-daily-digest.js](deploy-halo-home-daily-digest.js) |
 | Halo - Inventory Alert | Active | 9 AM PHT daily (Asia/Manila) | [deploy-halo-home-inventory-alert.js](deploy-halo-home-inventory-alert.js) |
 | Halo - Weekly Report | Active | 9 AM PHT Mondays (Asia/Manila) | [deploy-halo-home-weekly-report.js](deploy-halo-home-weekly-report.js) |
-| Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` — **DEACTIVATED 2026-06-15** (ungated success reply + broken forward; rebuild to prep-and-handoff pending — see WORKFLOWS.md Workflow 22) | (was 09:00/12:00/15:00/18:00 PHT Mon–Fri) | [deploy-creator-invoice-email-scan.js](deploy-creator-invoice-email-scan.js) |
+| Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` — **REBUILT to prep-and-handoff 2026-06-15; deployed INACTIVE** pending webhook test, then `ACTIVATE=1` to enable (see WORKFLOWS.md Workflow 22) | 09:00/12:00/15:00/18:00 PHT Mon–Fri (when active) | [deploy-creator-invoice-email-scan.js](deploy-creator-invoice-email-scan.js) |
 
 ---
 
@@ -63,7 +63,7 @@ Reads the Crave Creator Outreach Sheet for rows where `status=approved` and `out
 
 **Workflow ID:** `ke52OLrSUXk8mPVw`
 **Schedule:** 9AM PHT daily
-**Status:** Inactive — activate after warm-up completes (~2026-06-12)
+**Status:** Inactive — requires Smartlead Pro (API); Base plan has no API. Activate only after upgrading to Pro (until then, push is manual via `export_approved.py` + UI import; see KM-SOP-009)
 
 **Deploy:**
 ```bash
@@ -84,7 +84,7 @@ Pulls all leads from Smartlead campaign 3375376. Matches to Sheet rows by email.
 
 **Workflow ID:** `uUGxA3GW1W0vq6el`
 **Schedule:** 9AM PHT daily
-**Status:** Inactive — activate after warm-up completes (~2026-06-12)
+**Status:** Inactive — requires Smartlead Pro (API); Base plan has no API. Activate only after upgrading to Pro (until then, push is manual via `export_approved.py` + UI import; see KM-SOP-009)
 
 **Deploy:**
 ```bash

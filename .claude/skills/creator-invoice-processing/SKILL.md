@@ -5,7 +5,7 @@
 
 ---
 
-> **PREP & HANDOFF MODEL (2026-06-15).** We do **NOT** create the bill via API — Airwallex can't create a DRAFT or attach a PDF until ~Aug 2026, and an API-created bill lands `AWAITING_PAYMENT` (finalized, no PDF, unuploadable). The email-forward path is also broken (not forwarding). So: **the automation parses, validates, does the FX math, replies to the team (feels fully automated), and hands John a ready-to-create package in #ops-command. John creates the DRAFT bill manually in Airwallex (vendor → fields → upload PDF → submit).** No `airwallex_create_bill` in the flow. The n8n email workflow (`DbIJYYQ3FE4HKprB`) is **deactivated** pending a prep-and-handoff rebuild.
+> **PREP & HANDOFF MODEL (2026-06-15).** We do **NOT** create the bill via API — Airwallex can't create a DRAFT or attach a PDF until ~Aug 2026, and an API-created bill lands `AWAITING_PAYMENT` (finalized, no PDF, unuploadable). The email-forward path is also broken (not forwarding). So: **the automation parses, validates, does the FX math, replies to the team (feels fully automated), and hands John a ready-to-create package in #ops-command. John creates the DRAFT bill manually in Airwallex (vendor → fields → upload PDF → submit).** No `airwallex_create_bill` in the flow. The n8n email workflow (`DbIJYYQ3FE4HKprB`) is **rebuilt to this same prep-and-handoff model, deployed INACTIVE** pending a webhook test (then `ACTIVATE=1`).
 
 > **Incident guards (2026-06-12 + 2026-06-15) — apply to every path.** (1) **PDF-only** — never ingest images; (2) **classify is-this-an-invoice with context before trusting extraction**; (3) **one reply per message**, never per attachment; (4) **HARDCODED SENDER ALLOWLIST** — only reply to recognized Krave team: **John, Noa, Jeneena, Amanda, Shin, Sybil** (all `@kravemedia.co`). ANY other sender → **no reply at all**, just an #ops-command flag. This is the fix for the client-as-creator misfire. See [[external_autoreply_guards]].
 
@@ -21,7 +21,7 @@ Receives creator/vendor invoices (Slack DM, channel @mention, manual sweep), val
 | Manual | `/invoice-triage` | On-demand | **This skill** | Prep & handoff |
 | Slack DM | DM to the bot | Real-time | Krave bot | Prep & handoff |
 | Slack @mention | #payments-invoices-updates | Real-time | Krave bot | Prep & handoff |
-| Email | john@kravemedia.co | — | n8n `DbIJYYQ3FE4HKprB` | **Deactivated** (rebuild pending) |
+| Email | john@kravemedia.co | ≤3h when active | n8n `DbIJYYQ3FE4HKprB` | Prep & handoff — **rebuilt, deployed INACTIVE** pending test (ACTIVATE=1) |
 | Email | john@kravemedia.co | ≤3h | n8n `DbIJYYQ3FE4HKprB` | email forward (Phase 2: API) |
 
 **Strategists must @tag Claude EA** in #payments-invoices-updates to trigger processing. Non-@mention messages are informational.

@@ -5,7 +5,10 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
+// Default tracker = AR client-invoice sheet. The Creator & AP Bills Tracker is a
+// DIFFERENT spreadsheet (14kiX9…) — callers MUST pass spreadsheet_id for bills.
 const SHEET_ID = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50';
+const BILLS_SHEET_ID = '14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc';
 let _tokenCache = { token: null, exp: 0 };
 
 function loadServiceAccount() {
@@ -57,23 +60,33 @@ async function getToken() {
   return res.access_token;
 }
 
-async function getRows({ sheet = 'Invoices', range = 'A:Z' }) {
+// spreadsheet_id accepts the full ID, or the alias "bills" for the Creator & AP
+// Bills Tracker. Defaults to the AR client-invoice sheet.
+function resolveSheetId(spreadsheet_id) {
+  if (!spreadsheet_id) return SHEET_ID;
+  if (spreadsheet_id === 'bills') return BILLS_SHEET_ID;
+  return spreadsheet_id;
+}
+
+async function getRows({ sheet = 'Invoices', range = 'A:Z', spreadsheet_id }) {
   const token = await getToken();
+  const sid = resolveSheetId(spreadsheet_id);
   const r = encodeURIComponent(`${sheet}!${range}`);
-  const res = await httpsGet(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${r}`, { Authorization: `Bearer ${token}` });
+  const res = await httpsGet(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${r}`, { Authorization: `Bearer ${token}` });
   if (!res.ok) return { error: `Sheets API error: ${JSON.stringify(res.body)}` };
   const [headers, ...rows] = res.body.values || [];
   return { rows: rows.map((r) => Object.fromEntries((headers || []).map((h, i) => [h, r[i] || '']))) };
 }
 
-async function appendRow({ sheet = 'Invoices', values }) {
+async function appendRow({ sheet = 'Invoices', values, spreadsheet_id }) {
   const token = await getToken();
+  const sid = resolveSheetId(spreadsheet_id);
   const r = encodeURIComponent(`${sheet}!A:A`);
   const buf = Buffer.from(JSON.stringify({ values: [values], majorDimension: 'ROWS' }));
   const res = await new Promise((resolve, reject) => {
     const req = https.request({
       hostname: 'sheets.googleapis.com',
-      path: `/v4/spreadsheets/${SHEET_ID}/values/${r}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      path: `/v4/spreadsheets/${sid}/values/${r}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'Content-Length': buf.length },
     }, (res) => {
@@ -88,13 +101,14 @@ async function appendRow({ sheet = 'Invoices', values }) {
   return res.ok ? { ok: true, updated: res.body.updates } : { error: 'Failed to append row' };
 }
 
-async function updateRow({ sheet = 'Invoices', range, values }) {
+async function updateRow({ sheet = 'Invoices', range, values, spreadsheet_id }) {
   const token = await getToken();
+  const sid = resolveSheetId(spreadsheet_id);
   const r = encodeURIComponent(`${sheet}!${range}`);
   const buf = Buffer.from(JSON.stringify({ values }));
   const res = await new Promise((resolve, reject) => {
     const req = https.request({
-      hostname: 'sheets.googleapis.com', path: `/v4/spreadsheets/${SHEET_ID}/values/${r}?valueInputOption=USER_ENTERED`, method: 'PUT',
+      hostname: 'sheets.googleapis.com', path: `/v4/spreadsheets/${sid}/values/${r}?valueInputOption=USER_ENTERED`, method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'Content-Length': buf.length },
     }, (res) => {
       let body = '';
@@ -112,36 +126,39 @@ module.exports = {
   definitions: [
     {
       name: 'sheets_get_rows',
-      description: 'Read rows from the Krave invoice tracker Google Sheet.',
+      description: 'Read rows from a Krave tracker Google Sheet. Default = AR client-invoice tracker. For the Creator & AP Bills Tracker pass spreadsheet_id "bills".',
       input_schema: {
         type: 'object',
         properties: {
           sheet: { type: 'string', description: 'Sheet tab name (default: Invoices)' },
           range: { type: 'string', description: 'A1 notation range (default: A:Z for all columns)' },
+          spreadsheet_id: { type: 'string', description: 'Spreadsheet ID, or "bills" for the Creator & AP Bills Tracker. Omit for the default AR invoice tracker.' },
         },
       },
     },
     {
       name: 'sheets_append_row',
-      description: 'Append a new row to the Krave invoice tracker. Use after creating an Airwallex invoice to log it in the tracker.',
+      description: 'Append a new row to a Krave tracker. For an AR client invoice, omit spreadsheet_id (default tab "Invoices"). For a creator/AP bill, pass spreadsheet_id "bills" and sheet "Krave — Creator & AP Bills Tracker".',
       input_schema: {
         type: 'object',
         properties: {
-          sheet: { type: 'string', description: 'Sheet tab name (default: Invoices)' },
-          values: { type: 'array', description: 'Ordered array of cell values matching tracker columns: [Date Created, Client Name, Email Address, Project Description, Invoice #, Amount, Currency, Due Date, Payment Status, Invoice URL, Requested By]', items: { type: 'string' } },
+          sheet: { type: 'string', description: 'Sheet tab name (default: Invoices; for bills use "Krave — Creator & AP Bills Tracker")' },
+          values: { type: 'array', description: 'Ordered cell values. AR invoice cols: [Date Created, Client Name, Email, Project, Invoice #, Amount, Currency, Due Date, Payment Status, Invoice URL, Requested By]. Bills cols: [Date Received, Creator/Vendor, Invoice #, Airwallex Bill ID, Amount, Currency, Due Date, Status, Slack Thread TS, Notes]', items: { type: 'string' } },
+          spreadsheet_id: { type: 'string', description: 'Pass "bills" for the Creator & AP Bills Tracker. Omit for the default AR invoice tracker.' },
         },
         required: ['values'],
       },
     },
     {
       name: 'sheets_update_row',
-      description: 'Update a cell range in the Krave invoice tracker Google Sheet.',
+      description: 'Update a cell range in a Krave tracker Google Sheet. Pass spreadsheet_id "bills" for the Creator & AP Bills Tracker; omit for the default AR invoice tracker.',
       input_schema: {
         type: 'object',
         properties: {
           sheet: { type: 'string', description: 'Sheet tab name (default: Invoices)' },
           range: { type: 'string', description: 'A1 notation range to update (e.g. B5:C5)' },
           values: { type: 'array', description: '2D array of values [[row1col1, row1col2], ...]' },
+          spreadsheet_id: { type: 'string', description: 'Pass "bills" for the Creator & AP Bills Tracker. Omit for the default AR invoice tracker.' },
         },
         required: ['range', 'values'],
       },
