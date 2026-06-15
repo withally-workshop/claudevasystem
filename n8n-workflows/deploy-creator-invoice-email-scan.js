@@ -26,9 +26,10 @@
  * flags a payout-currency conversion (e.g. Butanas USD→PHP) for John to apply at
  * creation. Vendor match uses a hardcoded map kept in sync with the SOP.
  *
- * Was DEACTIVATED 2026-06-15 between the old forward flow and this rebuild.
- * Reactivate only after a webhook test confirms: prep package posts, reply is
- * one line to allowlisted senders only, tracker row = "Prepped".
+ * ACTIVE — tested end-to-end + activated 2026-06-15 (sample invoice noa→john ran
+ * the full success path: prep package posted to #ops-command, one-line reply to
+ * the allowlisted sender, email marked read, no tracker write). Activation is
+ * gated behind ACTIVATE=1 so a plain redeploy won't silently re-enable it.
  *
  * Deploy:
  *   node deploy-creator-invoice-email-scan.js
