@@ -38,9 +38,9 @@ Receive PDF invoices → classify → validate → vendor match + FX math → pr
 6. **Converts currency** if invoice ccy ≠ payout ccy (Butanas→PHP, Domingo→USD, Baste→SGD) — `airwallex_fx_rate` × 0.97 + 🚨 CONVERTED
 7. **Posts prep package to #ops-command** (vendor, fields, FX'd amount, bank, PDF link) — John creates the DRAFT bill manually
 8. Replies **once** (allowlisted senders only) — EXACTLY "Received — staged for payment", nothing else (no creator/amount/invoice/vendor/dates/Airwallex detail; all detail stays in the #ops-command prep package)
-9. Logs to tracker, status `Prepped — awaiting manual creation`, Bill ID blank (John fills after creating)
+9. Does NOT write the tracker — the EOD reconcile (`FdtmNRozitg711BQ` → bot `/cron/reconcile-bills`) mirrors real Airwallex bills into it after John creates them
 
-**Email path (n8n `DbIJYYQ3FE4HKprB`) is rebuilt to prep-and-handoff, deployed INACTIVE** (webhook-test then ACTIVATE=1). krave-bot uses the same prep-and-handoff flow as above. Both deterministically log the tracker at prep time (status "Prepped — awaiting manual creation").
+**Email path (n8n `DbIJYYQ3FE4HKprB`) is rebuilt to prep-and-handoff, deployed INACTIVE** (webhook-test then ACTIVATE=1). krave-bot uses the same prep-and-handoff flow as above. Neither writes the tracker — the **EOD reconcile** (`Krave — Creator Bills EOD Reconcile`, `FdtmNRozitg711BQ`, 19:00 PHT → bot `/cron/reconcile-bills`) mirrors real Airwallex bills into the tracker (fills Bill IDs + appends missing).
 
 ## Dedup Signals
 

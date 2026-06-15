@@ -10,7 +10,7 @@
 > **Incident guards (2026-06-12 + 2026-06-15) — apply to every path.** (1) **PDF-only** — never ingest images; (2) **classify is-this-an-invoice with context before trusting extraction**; (3) **one reply per message**, never per attachment; (4) **HARDCODED SENDER ALLOWLIST** — only reply to recognized Krave team: **John, Noa, Jeneena, Amanda, Shin, Sybil** (all `@kravemedia.co`). ANY other sender → **no reply at all**, just an #ops-command flag. This is the fix for the client-as-creator misfire. See [[external_autoreply_guards]].
 
 ## What This Skill Does
-Receives creator/vendor invoices (Slack DM, channel @mention, manual sweep), validates each PDF, computes vendor match + FX conversion, **posts a ready-to-create prep package to #ops-command for John to create the draft manually**, replies once to the team (allowlisted senders only), and logs to the Bills tracker. No API bill creation, no automated payment — Noa pays every Thursday.
+Receives creator/vendor invoices (Slack DM, channel @mention, manual sweep), validates each PDF, computes vendor match + FX conversion, **posts a ready-to-create prep package to #ops-command for John to create the draft manually**, and replies once to the team (allowlisted senders only). It does NOT write the Bills tracker — a separate EOD reconcile mirrors the real Airwallex bills into it. No API bill creation, no automated payment — Noa pays every Thursday.
 
 ---
 
@@ -121,8 +121,8 @@ Post the ready-to-create handoff to C0AQZGJDR38 (see Reporting). John creates th
 ### Step 9 — Reply to requester (once, allowlisted senders only)
 Only after the prep package is posted (never on receipt), and only if the sender is on the hardcoded allowlist (John, Noa, Jeneena, Amanda, Shin, Sybil). Plain confirmation, no Airwallex detail. Bounces reply immediately (same allowlist gate). Non-allowlisted sender → no reply, #ops-command flag only. See reply templates.
 
-### Step 10 — Log to tracker
-Append per invoice (columns A–J): Date Received · Creator/Vendor · Invoice # · **Airwallex Bill ID (BLANK — John fills after creating)** · Amount (payout) · Currency (payout) · Due Date · **Status** · external_id (Slack ts) · Notes (conversion rate, NEW VENDOR, due-date source, flags). Status = `Prepped — awaiting manual creation` / `On hold — <reason>` / `Duplicate`.
+### Step 10 — Do NOT write the tracker at prep time
+The Creator & AP Bills Tracker is populated **only** by the EOD reconcile job (`Krave — Creator Bills EOD Reconcile`, n8n `FdtmNRozitg711BQ` → bot `/cron/reconcile-bills`), which mirrors the real Airwallex bills (fills Bill IDs by invoice#+amount+currency, appends bills not yet in the sheet). A prep-time row would duplicate or mismatch on currency-converted bills. The prep package in #ops-command is the only output here.
 
 ### Step 11 — Save cursor
 `slack_set_last_read(channel_id: C09HN2EBPR7, ts: <newest processed>)`.

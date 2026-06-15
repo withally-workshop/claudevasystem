@@ -29,6 +29,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Halo - Inventory Alert | Active | 9 AM PHT daily (Asia/Manila) | [deploy-halo-home-inventory-alert.js](deploy-halo-home-inventory-alert.js) |
 | Halo - Weekly Report | Active | 9 AM PHT Mondays (Asia/Manila) | [deploy-halo-home-weekly-report.js](deploy-halo-home-weekly-report.js) |
 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` — **REBUILT to prep-and-handoff 2026-06-15; deployed INACTIVE** pending webhook test, then `ACTIVATE=1` to enable (see WORKFLOWS.md Workflow 22) | 09:00/12:00/15:00/18:00 PHT Mon–Fri (when active) | [deploy-creator-invoice-email-scan.js](deploy-creator-invoice-email-scan.js) |
+| Krave — Creator Bills EOD Reconcile | `FdtmNRozitg711BQ` — Active. POSTs the krave-bot `/cron/reconcile-bills` endpoint; bot mirrors Airwallex Spend bills into the Creator & AP Bills Tracker (fills Bill IDs + appends missing) | 19:00 PHT Mon–Fri | [deploy-creator-bills-reconcile-trigger.js](deploy-creator-bills-reconcile-trigger.js) |
 
 ---
 

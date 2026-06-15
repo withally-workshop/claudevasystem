@@ -1,7 +1,7 @@
 # KM-SOP-001 — Creator Invoice Management
 **Frequency:** Every 3 hours (weekdays) via scheduled agent + real-time via Krave bot | **Owner:** VA / Finance | **Updated:** June 2026
 
-> **PREP & HANDOFF MODEL (2026-06-15).** The automation does NOT create the bill. Airwallex can't create a DRAFT or attach a PDF until ~Aug 2026, and an API-created bill lands `AWAITING_PAYMENT` (finalized, no PDF, unuploadable); email-forward is also broken. So the automation parses, validates, does the FX math, replies to the team (feels automated), and **posts a ready-to-create prep package to #ops-command. John creates the DRAFT bill manually** in Airwallex (vendor → fields → upload PDF → submit). Flips to auto-create in Aug 2026. Both the bot and the n8n email workflow (`DbIJYYQ3FE4HKprB`, **rebuilt to prep-and-handoff, deployed INACTIVE** pending webhook test → `ACTIVATE=1`) log the tracker at prep time (status `Prepped — awaiting manual creation`). John handles emailed invoices manually until the email path is enabled.
+> **PREP & HANDOFF MODEL (2026-06-15).** The automation does NOT create the bill. Airwallex can't create a DRAFT or attach a PDF until ~Aug 2026, and an API-created bill lands `AWAITING_PAYMENT` (finalized, no PDF, unuploadable); email-forward is also broken. So the automation parses, validates, does the FX math, replies to the team (feels automated), and **posts a ready-to-create prep package to #ops-command. John creates the DRAFT bill manually** in Airwallex (vendor → fields → upload PDF → submit). Flips to auto-create in Aug 2026. The bot is live; the n8n email workflow (`DbIJYYQ3FE4HKprB`) is **rebuilt to prep-and-handoff, deployed INACTIVE** pending a webhook test → `ACTIVATE=1` (John handles emailed invoices manually until then). **The tracker is filled by a separate EOD reconcile** (`FdtmNRozitg711BQ`, 19:00 PHT → bot `/cron/reconcile-bills`) that mirrors real Airwallex bills — neither the bot nor the email workflow writes a bill row at prep time (see Step 5).
 
 ## Overview
 Collect creator and vendor invoices, validate each PDF, compute vendor match + FX, **post a prep package to #ops-command for John to create the draft manually**, reply to the team, and log it. Noa processes payments every Thursday.
@@ -62,7 +62,7 @@ For each validated invoice PDF:
 1. **Match the vendor** — the bill's vendor is the invoice *payee*, not the sender. Match the parsed payee name against live vendors (`airwallex_list_vendors`) + the alias table below. Report "exists" or "NEW — John creates it". **Do NOT create the vendor.** Ambiguous multi-match → hold + flag.
 2. **Convert currency** if the invoice currency differs from the vendor's payout currency (see Currency Rules) — `airwallex_fx_rate` × 0.97, rate + source amount recorded for the package.
 3. **Post the prep package to #ops-command (C0AQZGJDR38)** — vendor (exists/NEW) + payout ccy, invoice #, issued/due dates (+ due-date source), billed amount (+ conversion), line items, validated bank details, and a link to the PDF (Slack thread / DM). This is John's ready-to-create handoff.
-4. Log to the tracker with status `Prepped — awaiting manual creation`; **Airwallex Bill ID left blank** (John fills it after creating the draft).
+4. **Do NOT write the tracker here.** The Creator & AP Bills Tracker is populated only by the EOD reconcile (below), which mirrors the real Airwallex bills. A prep-time row would duplicate/mismatch on currency-converted bills.
 
 **No `airwallex_create_bill` / `airwallex_create_vendor` in this flow** (kept for the Aug 2026 auto-create flip). No email forward.
 
@@ -74,15 +74,17 @@ Reply **once, only after the prep package is posted** (never on receipt), and **
 
 Failed check → reply **immediately** with the specific issue (allowlisted senders only). **Non-allowlisted sender → no reply at all, #ops-command 🚨 flag only.**
 
-### Step 5 — Log to Tracker
+### Step 5 — Tracker is filled by the EOD reconcile (not at prep)
 
-Append to **Creator & AP Bills Tracker** (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`), single tab `Krave — Creator & AP Bills Tracker` (EM-DASH `—`, not a hyphen — pass exactly or omit to default to the only tab)
+The **Creator & AP Bills Tracker** (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`, single tab `Krave — Creator & AP Bills Tracker`, EM-DASH `—`) is a mirror of the real Airwallex bills, populated **only** by the EOD reconcile job — **nothing writes a row at prep time** (a prep-time row would duplicate/mismatch on currency-converted bills).
 
-Columns: Date Received | Creator/Vendor | Invoice # | Airwallex Bill ID (blank until John creates) | Amount | Currency | Due Date | Status | Slack Thread TS | Notes
+**EOD reconcile** (`Krave — Creator Bills EOD Reconcile`, n8n `FdtmNRozitg711BQ`, 19:00 PHT Mon–Fri → bot `POST /cron/reconcile-bills`; logic in `projects/krave-bot/tools/reconcile.js`, also runnable standalone via `n8n-workflows/reconcile-creator-bills.mjs --apply`): lists Airwallex Spend bills, then for each — already in sheet by Bill ID → skip; matches a row missing its Bill ID (invoice# + amount + currency) → fill the Bill ID; no match → append. No status column maintained — a filled Bill ID is the signal the bill exists. (On-hold rows for missing-bank-details are the one exception that IS written at intake.)
+
+Columns: Date Received | Creator/Vendor | Invoice # | Airwallex Bill ID | Amount | Currency | Due Date | Status | Slack Thread TS | Notes
 
 ### Step 6 — John Creates the Draft & Uploads the PDF
 
-For each #ops-command 🧾 prep package: John creates a new DRAFT bill in Airwallex Spend (select/create the vendor, paste the pre-filled fields, upload the invoice PDF, submit), scans 🚨 flags (new vendor, conversion, amount mismatch), and fills the Airwallex Bill ID back into the tracker.
+For each #ops-command 🧾 prep package: John creates a new DRAFT bill in Airwallex Spend (select/create the vendor, paste the pre-filled fields, upload the invoice PDF, submit) and scans 🚨 flags. The EOD reconcile then adds it to the tracker automatically — **no manual tracker entry**. (Use the invoice # from the prep package so reconcile matches it.)
 
 ### Step 7 — Noa Processes Payments
 

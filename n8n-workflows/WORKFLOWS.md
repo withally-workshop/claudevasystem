@@ -47,9 +47,10 @@
 | 19 | LinkedIn Post Monitor | `wNXs7wqHz5d5naJN` | Inactive (needs actor verification) | Every 30min all day | Scrape Noa's LinkedIn profile via Apify every 30min, detect new posts using workflow static data, alert John in #noa-linkedin-posts with preview + link |
 | 20 | Halo - VA Slack Bot | `XgHWMBeHoPWelE9r` | Active | `app_mention` in #halo-home-shopify | VA @mentions bot → Claude classifies intent → Shopify API → formatted reply in thread |
 | 21 | Halo - Daily Digest | `047cSNvFvUGHaf3O` | Active | 10 AM PHT daily (Asia/Manila) | Pull yesterday's Shopify orders + unfulfilled count → Claude formats → post to #halo-home-shopify |
-| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | **REBUILT to prep-and-handoff 2026-06-15; deployed INACTIVE pending a webhook test, then `ACTIVATE=1` to enable.** Parses + classifies → validates → posts #ops-command prep package → one-line reply to hardcoded-allowlist senders only (@kravemedia.co; others get no reply, flag only) → logs "Prepped". No email forward, no API bill creation (John creates the DRAFT manually; flips to auto-create ~Aug 2026). | 09:00/12:00/15:00/18:00 PHT Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` (live only when active) | Scan john@kravemedia.co for unread invoice PDFs, parse, validate, hand John a ready-to-create prep package |
+| 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | **REBUILT to prep-and-handoff 2026-06-15; deployed INACTIVE pending a webhook test, then `ACTIVATE=1` to enable.** Parses + classifies → validates → posts #ops-command prep package → one-line reply to hardcoded-allowlist senders only (@kravemedia.co; others get no reply, flag only). No email forward, no API bill creation, no tracker write (the EOD reconcile, #25, owns the tracker; John creates the DRAFT manually; flips to auto-create ~Aug 2026). | 09:00/12:00/15:00/18:00 PHT Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` (live only when active) | Scan john@kravemedia.co for unread invoice PDFs, parse, validate, hand John a ready-to-create prep package |
 | 23 | Halo - Inventory Alert | `NBvfYPmjdTXzrKfb` | Active | 9 AM PHT daily (Asia/Manila) | Compare product stock vs previous run; alert #halo-home-shopify on OOS changes + newly low-stock (<10 units) |
 | 24 | Halo - Weekly Report | `7N9gEZb7nDS0EDGu` | Active | 9 AM PHT Mondays (Asia/Manila) | Refill due list (filter buyers 75–105 days ago) + upsell gap (showerhead buyers without filters) → post to #halo-home-shopify |
+| 25 | Krave — Creator Bills EOD Reconcile | `FdtmNRozitg711BQ` | Active | 19:00 PHT Mon–Fri | POSTs krave-bot `/cron/reconcile-bills`; bot mirrors Airwallex Spend bills into the Creator & AP Bills Tracker (fills Bill IDs by invoice#+amount+currency, appends missing) |
 
 ---
 
@@ -1600,11 +1601,10 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
                └─ true  → [Build Prep Context] (vendor exists/NEW + payout ccy from hardcoded map; builds #ops-command package text; senderKnown flag; pairedItem set)
                           → [Post Slack Prep Report] (→ #ops-command C0AQZGJDR38: ready-to-create package)
                           → [Known Sender? (reply gate)]
-                              ├─ true  → [Reply Received] (→ sender, one line: "Received — staged for payment.")
-                              │           → [Log Prepped to Bills Tab] (status: Prepped — awaiting manual creation)
-                              └─ false → [Log Prepped to Bills Tab] (no reply)
-                          → [Mark Read (fallback)]
+                              ├─ true  → [Reply Received] (→ sender, one line: "Received — staged for payment.") → [Mark Read (fallback)]
+                              └─ false → [Mark Read (fallback)] (no reply)
 ```
+(No tracker write here — the EOD reconcile, Workflow 25, mirrors real Airwallex bills into the tracker.)
 
 ### Key Logic
 
@@ -1624,7 +1624,7 @@ Replaces the manual email-check step for creator/AP invoice intake. Scans john@k
 
 | Scenario | Action |
 |----------|--------|
-| Valid invoice with bank details | Prep package posted to #ops-command; one-line reply to allowlisted sender (non-allowlisted → no reply); logged "Prepped — awaiting manual creation" (blank Bill ID); marked read. John creates the draft manually. |
+| Valid invoice with bank details | Prep package posted to #ops-command; one-line reply to allowlisted sender (non-allowlisted → no reply); marked read. John creates the draft manually; the EOD reconcile (Workflow 25) adds it to the tracker. No tracker write here. |
 | Not an invoice (Claude classification) | One notice per email to #ops-command (with Claude's reason), email marked read — no reply, no tracker row |
 | Missing bank details, allowlisted sender (@kravemedia.co) | One reissue reply per email, marked read |
 | Missing bank details, non-allowlisted sender | NO email sent — flagged to #ops-command, logged "On hold — missing bank details", marked read |
@@ -1757,6 +1757,57 @@ Every Monday at 9 AM PHT, posts two proactive lists to `#halo-home-shopify`: (1)
 |---------|-----------|
 | Shopify API fails | `onError: continueRegularOutput`; corresponding section shows empty data |
 | No orders in window | Build Report Data returns empty arrays; Claude formats gracefully |
+
+---
+
+## Workflow 25 — Krave — Creator Bills EOD Reconcile
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/FdtmNRozitg711BQ`
+**Deploy script:** `n8n-workflows/deploy-creator-bills-reconcile-trigger.js`
+
+### Purpose
+
+Keeps the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`) a faithful mirror of the real Airwallex Spend bills, with zero manual entry. Every weekday EOD it triggers the krave-bot to list Airwallex bills and fill in whatever the sheet is missing. This is the ONLY thing that writes bill rows to the tracker — the intake flows (bot + email) just post #ops-command prep packages; John creates the DRAFT bill manually in Airwallex, and this job picks it up.
+
+### Triggers
+
+| Type | Details |
+|------|---------|
+| Schedule | `0 19 * * 1-5` (Asia/Manila) — 19:00 PHT, Mon–Fri |
+
+### Node Flow
+
+```text
+[Schedule Trigger (EOD)] → [POST reconcile endpoint] — HTTP POST https://krave-ai.onrender.com/cron/reconcile-bills, header x-cron-secret
+```
+
+### Reconcile Logic (runs in the bot: `projects/krave-bot/tools/reconcile.js`)
+
+- Lists Airwallex Spend bills + vendors (spend key) and reads the tracker.
+- For each bill: already in the sheet by **Bill ID** → skip; matches a row missing its Bill ID (**invoice# + amount + currency**) → fill the Bill ID; no match → **append** a new row (vendor name resolved from vendor_id).
+- No status column maintained — a filled Bill ID is the signal the bill exists. On-hold (missing-bank) rows are untouched.
+- Standalone equivalent for manual/local runs: `node n8n-workflows/reconcile-creator-bills.mjs` (dry-run) / `--apply`.
+
+### Outputs
+
+| Scenario | Action |
+|----------|--------|
+| Bill missing from sheet | Row appended |
+| Sheet row missing its Bill ID | Bill ID filled in place |
+| Bill already tracked | Skipped |
+| Endpoint returns | `{ ok, total, filled, added }` (logged by the bot) |
+
+### Error Handling
+
+| Failure | Behaviour |
+|---------|-----------|
+| Bad/missing `x-cron-secret` | Bot returns 403; nothing runs |
+| Airwallex or Sheets error | Bot returns 500; n8n run shows failure; sheet unchanged for that run; next EOD retries |
+
+### Credentials / setup
+
+- **`CRON_SECRET`** — shared secret; set on the krave-ai Render service env AND in local `.env` (the deploy script bakes it into the HTTP header at deploy time). Rotate by updating both and redeploying.
+- The bot's existing `AIRWALLEX_SPEND_*` + Google service account envs do all the work — no new n8n Airwallex credential needed.
 
 ---
 

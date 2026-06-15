@@ -756,36 +756,9 @@ const workflow = {
         options: {},
       },
     },
-    {
-      id: 'n28', name: 'Log Prepped to Bills Tab',
-      type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5,
-      position: [5500, 340],
-      continueOnFail: true,
-      credentials: { googleSheetsOAuth2Api: { id: SHEETS_CRED_ID, name: 'Google Sheets account' } },
-      parameters: {
-        resource: 'sheet',
-        operation: 'append',
-        documentId: { __rl: true, value: BILLS_SHEET_ID, mode: 'id' },
-        sheetName:  { __rl: true, value: BILLS_SHEET_TAB, mode: 'name' },
-        columns: {
-          mappingMode: 'defineBelow',
-          value: {
-            'Date Received':     '={{ new Date().toISOString().split("T")[0] }}',
-            'Creator / Vendor':  '={{ $(\'Build Prep Context\').item.json.creatorName }}',
-            'Invoice #':         '={{ $(\'Build Prep Context\').item.json.invoiceNumber }}',
-            'Airwallex Bill ID': '',
-            'Amount':            '={{ $(\'Build Prep Context\').item.json.amount }}',
-            'Currency':          '={{ $(\'Build Prep Context\').item.json.currency }}',
-            'Due Date':          '={{ $(\'Build Prep Context\').item.json.dueDate }}',
-            'Status':            'Prepped — awaiting manual creation',
-            'Slack Thread TS':   '={{ $(\'Build Prep Context\').item.json.messageId }}',
-            'Notes':             '={{ "Source: Email. Payout " + ($(\'Build Prep Context\').item.json.payoutCcy || $(\'Build Prep Context\').item.json.currency) + ($(\'Build Prep Context\').item.json.vendorExists ? "" : " — NEW vendor") + ". Prep package posted to #ops-command; John to create the draft." }}',
-          },
-          schema: [],
-        },
-        options: {},
-      },
-    },
+    // (Removed "Log Prepped to Bills Tab" 2026-06-15 — the tracker is now populated
+    // solely by the EOD reconcile job, which mirrors real Airwallex bills. A prep-
+    // time row would duplicate/mismatch on currency-converted bills.)
     {
       id: 'n29', name: 'Mark Read (fallback)',
       type: 'n8n-nodes-base.gmail', typeVersion: 2.1,
@@ -842,11 +815,10 @@ const workflow = {
     'Build Prep Context':         { main: [[{ node: 'Post Slack Prep Report', type: 'main', index: 0 }]] },
     'Post Slack Prep Report':     { main: [[{ node: 'Known Sender? (reply gate)', type: 'main', index: 0 }]] },
     'Known Sender? (reply gate)': { main: [
-      [{ node: 'Reply Received',          type: 'main', index: 0 }],  // true — allowlisted, one-line reply
-      [{ node: 'Log Prepped to Bills Tab', type: 'main', index: 0 }], // false — no reply, still log + flag
+      [{ node: 'Reply Received',      type: 'main', index: 0 }],  // true — allowlisted, one-line reply
+      [{ node: 'Mark Read (fallback)', type: 'main', index: 0 }], // false — no reply
     ]},
-    'Reply Received':             { main: [[{ node: 'Log Prepped to Bills Tab', type: 'main', index: 0 }]] },
-    'Log Prepped to Bills Tab':   { main: [[{ node: 'Mark Read (fallback)',     type: 'main', index: 0 }]] },
+    'Reply Received':             { main: [[{ node: 'Mark Read (fallback)', type: 'main', index: 0 }]] },
   },
 };
 
