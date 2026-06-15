@@ -41,22 +41,28 @@ COL_STATUS = 14
 COL_NOTES = 15
 COL_OUTREACH_SENT_AT = 16
 
-DEFAULT_SUBJECT = "Collaboration opportunity with Krave Media"
+# Noa-approved copy (Slack DM 2026-05-25, "this is good to go!"). Sign-off changed to Mimi.
+# Single email, Typeform CTA. Only {first_name} is merged.
+DEFAULT_SUBJECT = "We found your TikTok — want in on paid briefs?"
 
 DEFAULT_BODY = """\
 Hi {first_name},
 
-I came across your TikTok (@{handle}) and loved your content — your {niche} videos really stand out.
+I came across your profile and love your energy! Your content has the kind of natural, engaging feel that performs really well in ads, and that's exactly what we look for!
 
-I'm Ivana from Krave Media. We work with brands to create authentic UGC content, and we think you'd be a great fit for some of our upcoming campaigns.
+We're Krave Media and we work with some of the fastest-growing DTC brands in the US and Europe like Casetify, IM8 by David Beckham, and Maelys. We're building out our own creator network so our strategist team can match creators directly to paid briefs that fit their niche.
 
-Would you be open to a quick chat about potential collaboration opportunities?
+If you join, you'll get first look at paid briefs matched to your niche, you set your own rates and keep 100% of what you earn, and you work directly with brand teams. Most of our creators end up doing 6+ campaigns a year with us, and you'll also get early access to our private creator Discord — a jobs board, work-sharing space, and a direct line to our brand partners.
 
-Looking forward to connecting!
+It only takes 5 minutes to get in:
+https://form.typeform.com/to/lAPIxgqv
 
-Best,
-Ivana
-Krave Media
+Once you're in, our strategist team will reach out directly with briefs that fit you.
+
+Would love to have you on the team!
+
+Cheers,
+Mimi
 """
 
 

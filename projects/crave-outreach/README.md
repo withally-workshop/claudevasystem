@@ -2,9 +2,13 @@
 
 ## Overview
 
-Two-phase pipeline: TikTok creator discovery → niche classification → Google Sheet (Phase 1), then email outreach via `ivana@kravemedia.co` (Phase 2).
+Two-phase pipeline: TikTok creator discovery → niche classification → Google Sheet (Phase 1), then cold email outreach via Smartlead from `hello@joinkravemedia.co` (sender name Mimi) (Phase 2).
 
 **Sheet:** [Crave Creator Outreach](https://docs.google.com/spreadsheets/d/1eLQrDP3IX9ec9dtFN0UyRdlTplzkLfRG9Asyqj1gLrI/edit)
+
+### Current operating mode (2026-06-15): Smartlead Base — manual, no API
+
+Smartlead is on the **Base plan ($39/mo)**, which has no API. The live Phase 2 flow is manual: `export_approved.py` writes a CSV of Noa-approved leads → John imports it into Smartlead campaign `3375376` in the UI. The n8n auto-push/sync workflows and `src/smartlead.py` (push/sync/stats) require **Pro ($94/mo)** and are inactive. The Gmail path below (`ivana@`, `--outreach-only`) is a legacy fallback, not the live method. **Operating runbook:** `references/sops/crave-creator-outreach.md` (KM-SOP-009).
 
 ## Actor Selection
 
@@ -35,11 +39,12 @@ python src/main.py --search-term "UGC creator" --max-results 500
 # Phase 1 dry run (no Sheet write)
 python src/main.py --search-term "UGC creator" --max-results 100 --dry-run
 
-# Phase 2 — Send outreach emails to approved rows (100/day cap)
-python src/main.py --outreach-only --max-sends 100
+# Phase 2 (LIVE, Base plan) — export approved leads to a Smartlead CSV
+python src/export_approved.py            # -> data/approved_leads.csv (+ --dry-run)
+# then import the CSV into Smartlead campaign 3375376 via the UI (Leads -> Add More Leads)
 
-# Phase 2 dry run (prints emails, no sending)
-python src/main.py --outreach-only --max-sends 10 --dry-run
+# Phase 2 (LEGACY Gmail fallback — not the live path)
+python src/main.py --outreach-only --max-sends 100
 ```
 
 ## Pipeline Steps
