@@ -7,9 +7,11 @@ metadata:
 
 # Creator Invoice Processing
 
-> **Email path: reworked + reactivated 2026-06-12 (John-approved) after a client-facing misfire.** The n8n workflow `DbIJYYQ3FE4HKprB` now carries four guards: PDF-only intake, explicit is-invoice classification (with email context), one reply per email, and a known-sender gate — the missing-bank-details auto-reply only goes to @kravemedia.co senders or vendors already in the Bills tracker; unknown senders get NO email, just an #ops-command flag + "On hold" tracker row. Same rule applies to manual runs: never auto-reply to an unknown sender. Slack/DM paths via krave-bot are unaffected.
+> **MIGRATION (2026-06-12).** Manual `/invoice-triage` (this skill) now **creates bills via the Airwallex Spend API**. The n8n email-scan (`DbIJYYQ3FE4HKprB`) and krave-bot still **forward-by-email** until Phase 2. PDFs can't be attached via API until ~Aug 2026 — bills are created without the PDF and John uploads it in the webapp, prompted by an #ops-command 🧾 flag per bill.
 
-Receive PDF invoices from email, Slack channel, or Slack DMs → validate → create draft bill in Airwallex Spend → confirm to requester → log to tracker. John reviews and finalizes all drafts by EOD.
+> **Incident guards (2026-06-12, John-approved) — all paths incl. manual.** PDF-only intake; classify is-invoice with context before extraction; one reply per email; known-sender gate — bounces only to @kravemedia.co senders or tracker vendors; unknown senders get NO email, just an #ops-command flag + "On hold" tracker row. See [[external_autoreply_guards]].
+
+Receive PDF invoices from email, Slack channel, or Slack DMs → validate → resolve vendor → create draft bill in Airwallex Spend → flag #ops-command for PDF upload → confirm to requester once → log to tracker. Noa pays Thursdays.
 
 ## How to Trigger
 
@@ -26,18 +28,19 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 - **#payments-invoices-updates:** C09HN2EBPR7
 - **Creator & AP Bills Tracker:** `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`, tab: `Krave — Creator & AP Bills Tracker`
 
-## What It Does
+## What It Does (manual `/invoice-triage` — API path)
 
-1. Scans email (john@kravemedia.co) and #payments-invoices-updates for unprocessed invoice PDFs (respects Slack cursor + ✅ dedup)
-2. Parses each PDF via document vision — extracts creator name, invoice number, dates, amount, currency, line items, bank details
-3. Validates: hardstop if no bank details (return to sender), hardstop if no PDF. Generates invoice number if missing (`MMDDYYYY-[FirstInitial][LastName]`). Uses Friday of current week if no due date.
-4. Forwards each valid PDF to `kravemedia@bills.airwallex.com` via `gmail_send` with the PDF attached (`attachment_base64`) — Airwallex auto-creates the draft. **Spend/Bills API is live (2026-06-11, via the `spendcreatekey` scoped key) but this flow has NOT switched** — flow switch pending John's decision; do not call `airwallex_create_bill`/`list_vendors`/`create_vendor` in this workflow yet.
-5. Posts a bill prep report to John's channel (C0AQZGJDR38)
-6. Replies to requester:
-   - **Slack:** "Received! Invoice for [Creator] — [Amount] [Currency] forwarded to Airwallex billing. John will review by EOD."
-   - **Email:** "Hi [First Name], Received. Staged for payment. Cheers, John / Krave Media"
-7. Reacts ✅ to Slack message; replies in email thread for email-sourced invoices
-8. Logs to Creator & AP Bills Tracker (Sheet ID: `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`)
+1. Scans email (john@kravemedia.co) and #payments-invoices-updates for unprocessed invoice PDFs (Slack cursor + ✅ + tracker `external_id` dedup)
+2. Parses + **classifies is-invoice** (incident guard) — extracts payee, invoice #, dates, amount, currency, line items, bank details
+3. Validates: hardstop no PDF / no bank details. Invoice # missing → `INV-`+7 digits. Currency missing → infer from bank country. Due date missing → Friday PHT.
+4. **Resolves vendor** (payee, not sender) against live `airwallex_list_vendors` + alias table; unmatched → `airwallex_create_vendor` profile-only (name + country, no bank details) + 🚨 NEW VENDOR
+5. **Converts currency** if invoice currency ≠ vendor payout currency (Butanas→PHP, Domingo→USD, Baste→SGD) — live rate × 0.97, noted in description + 🚨 CONVERTED
+6. **`airwallex_create_bill`** (no attachment — API can't until ~Aug 2026), `legal_entity_id` `le_Zxw2-ECjOaKKebIGraD1AA`; then `airwallex_get_bill` post-create guard
+7. **#ops-command 🧾 flag** per bill so John uploads the PDF in the webapp
+8. Replies to requester **once** after all bills staged (bounces immediately, known-sender gated)
+9. Logs to tracker with **Airwallex Bill ID**, status `Staged in Airwallex`
+
+**n8n email + krave-bot paths still forward-by-email** (Phase 2 promotes this logic): forward PDF to `kravemedia@bills.airwallex.com` via `gmail_send(attachment_base64=...)`, status `Forwarded via Email`.
 
 ## Dedup Signals
 
@@ -53,7 +56,9 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → cr
 
 ## Codex Invocation Notes
 
-- Run order: dedup check → parse → validate → forward to Airwallex billing → reply → log → update cursor
-- Forward step: call `slack_download_file(url_private)` first to get `{ base64 }` (Slack-sourced) or use PDF bytes in memory (email-sourced), then forward to kravemedia@bills.airwallex.com via `gmail_send(attachment_base64=<that base64>)`. NEVER call gmail_send without attachment_base64 — an email without the PDF is useless. If download fails, post a Slack message instead asking for manual forwarding. Post prep report to C0AQZGJDR38.
-- Multiple PDFs in one email = one bill per PDF, each forwarded/logged/replied independently (no merging, no vendor lookup)
-- **No Spend/Bills API** — forward-by-email is the only path until Airwallex releases Spend API access to us
+- Run order (manual/API): dedup → parse + classify → validate → resolve vendor → convert currency → create_bill → get_bill guard → #ops-command 🧾 flag → reply once → log → cursor
+- Create step: `airwallex_create_bill` with NO attachment field (removed from the API 2026-06-11; native attachments ~Aug 2026). John uploads the PDF manually in the webapp after the 🧾 flag.
+- Vendor = invoice payee, not sender. Never write bank details into a vendor profile — the PDF is the payment source of truth.
+- Multiple PDFs in one request = one bill each, independent.
+- Multiple PDFs in one email = one bill per PDF, each resolved/created/logged/replied independently
+- Full step-by-step + reporting/flagging design: `.claude/skills/creator-invoice-processing/SKILL.md` and `references/sops/creator-invoice-management.md`

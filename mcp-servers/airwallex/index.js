@@ -274,7 +274,7 @@ const TOOLS = [
   {
     name: "airwallex_upload_file",
     description:
-      "Upload a PDF file to Airwallex and get back a file_id. Call this BEFORE airwallex_create_bill to attach the invoice PDF. Pass the file_id to airwallex_create_bill as attachment_file_id.",
+      "Upload a PDF to Airwallex (files.airwallex.com) and get back a file_id. NOTE: as of 2026-06-11 Airwallex does NOT support attaching files to bills via API — the attachments field was removed from spend/bills/create and native bill attachments are scheduled for ~Aug 2026 (Q3). Until then, upload the PDF manually in the Airwallex webapp on the bill details page. This tool still works for any other file use.",
     inputSchema: {
       type: "object",
       properties: {
@@ -287,7 +287,7 @@ const TOOLS = [
   {
     name: "airwallex_create_bill",
     description:
-      "Create a new bill in Airwallex Spend (accounts payable). Requires a vendor_id — use airwallex_list_vendors or airwallex_create_vendor first. Optionally pass attachment_file_id from airwallex_upload_file to attach the invoice PDF.",
+      "Create a new bill in Airwallex Spend (accounts payable). Requires a vendor_id — use airwallex_list_vendors or airwallex_create_vendor first. The PDF cannot be attached via API yet (Airwallex Q3 2026) — upload it manually in the webapp after creation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -312,10 +312,6 @@ const TOOLS = [
           description: "TAX_EXCLUSIVE (default) or TAX_INCLUSIVE",
         },
         description: { type: "string", description: "Optional bill description / memo" },
-        attachment_file_id: {
-          type: "string",
-          description: "Optional file_id from airwallex_upload_file — attaches the PDF to the bill",
-        },
         line_items: {
           type: "array",
           description: "Line items — each with description, quantity, unit_price (tax-exclusive)",
@@ -670,7 +666,9 @@ async function handleTool(name, args) {
         })),
       };
       if (args.description) body.description = args.description;
-      if (args.attachment_file_id) body.attachments = [args.attachment_file_id];
+      // NOTE: Airwallex removed `attachments` from spend/bills/create on 2026-06-11.
+      // Native bill attachments are scheduled for ~Aug 2026 (Q3). Until then the PDF
+      // is uploaded manually in the webapp; do NOT send an attachments field here.
       return await airwallexRequest("POST", "/api/v1/spend/bills/create", body);
     }
 

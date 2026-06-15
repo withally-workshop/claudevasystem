@@ -17,9 +17,15 @@
  *      On hold instead.
  *
  * Scans john@kravemedia.co every 3 hours (Mon–Fri) for unread emails with PDF
- * attachments. Parses each PDF with Claude, validates bank details, creates
- * draft bills in Airwallex Spend, replies to the sender, and logs to the Bills
- * tab of the Client Invoice Tracker.
+ * attachments. Parses each PDF with Claude, validates bank details, forwards
+ * the PDF to the Airwallex bills inbox (kravemedia@bills.airwallex.com) which
+ * auto-creates a draft, replies to the sender, and logs to the Bills tab.
+ *
+ * MIGRATION (2026-06-12): the manual /invoice-triage path now creates bills
+ * directly via the Airwallex Spend API (see references/sops/creator-invoice-
+ * management.md). Phase 2 will promote that logic here via an httpCustomAuth
+ * Spend credential (Code nodes lack requestWithAuthentication — auth must live
+ * in HTTP Request nodes). Until then this workflow stays forward-by-email.
  *
  * Deploy:
  *   node deploy-creator-invoice-email-scan.js
