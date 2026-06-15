@@ -69,7 +69,8 @@ When someone sends you a PDF invoice via Slack DM or @mention — or when a stra
    - No bank details (account #, IBAN, SWIFT/BIC, BSB) → reply asking to reissue with bank details. Stop.
    - No invoice number → generate INV- + 7 random digits (e.g. INV-4827193).
    - No currency → infer from the bank account's country; still unclear → bounce.
-   - No due date → Friday of the current week (PHT). No issued date → today (PHT).
+   - Due date: use the due date or payment terms printed ON the invoice EXACTLY (e.g. "due 30 Jun 2026", or "NET 30" = issued date + 30 days). Do NOT invent or guess a date. Only if the invoice shows NO due date AND NO terms → use the Friday of the current week (PHT). Always state the due date and where it came from in the #ops-command flag.
+   - No issued date → today (PHT).
    - Requester's stated amount ≠ PDF amount → do NOT create; post 🚨 AMOUNT MISMATCH to #ops-command. Stop.
 
 4. RESOLVE THE VENDOR (vendor = the invoice PAYEE, never the sender):
@@ -91,9 +92,9 @@ When someone sends you a PDF invoice via Slack DM or @mention — or when a stra
    Source: [Slack @who / DM]
    → Open the bill and upload the invoice PDF (API can't attach until Aug)."
 
-9. Reply to the requester ONCE, only after the bill is created (never on receipt): Slack thread → "Done — staged [Creator] [Currency][Amount] for payment." React ✅ to the original message.
+9. Reply to the requester ONCE, only after the bill is created (never on receipt). The reply is a PLAIN confirmation ONLY: "Done — staged [Creator] [Currency][Amount] for payment." NEVER put the Airwallex bill link, bill ID, or any Airwallex internal detail in the requester reply — only John has Airwallex access, and requesters are often strategists who must not see it. The link/ID go ONLY to #ops-command (step 8). React ✅ to the original message.
 
-10. Log to Creator & AP Bills Tracker (Sheet 14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc, tab "Krave — Creator & AP Bills Tracker"). Append in this exact column order:
+10. Log to Creator & AP Bills Tracker (Sheet 14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc). The spreadsheet has ONE tab named "Krave — Creator & AP Bills Tracker" — note the EM-DASH (—), not a hyphen. Pass that exact sheet_name, or omit sheet_name (the tool defaults to the only tab). Append in this exact column order:
    A: Date Received (today YYYY-MM-DD)
    B: Creator / Vendor (payee name)
    C: Invoice # (from invoice, or generated)

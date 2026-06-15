@@ -71,7 +71,7 @@ Run these checks in order:
 
 ### Step 4 — Confirm to Requester
 
-Reply **once, only after all bills from the request are staged** (never on receipt). Subject to the known-sender gate.
+Reply **once, only after all bills from the request are staged** (never on receipt). Subject to the known-sender gate. Plain confirmation only — **never include the Airwallex bill link, bill ID, or any Airwallex internal detail** (only John has Airwallex access; requesters are often strategists). The link/ID go only to the #ops-command 🧾 flag.
 - **Slack:** thread reply → "Done — staged [N] bill(s) for payment: [Creator] [Currency][Amount]; …" + react ✅
 - **Email:** in-thread → "Hi [First Name], Done — staged for payment: [list]. Cheers, John / Krave Media"
 
@@ -79,7 +79,7 @@ Failed check → reply **immediately** with the specific issue (known senders on
 
 ### Step 5 — Log to Tracker
 
-Append to **Creator & AP Bills Tracker** (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`), tab: `Krave — Creator & AP Bills Tracker`
+Append to **Creator & AP Bills Tracker** (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`), single tab `Krave — Creator & AP Bills Tracker` (EM-DASH `—`, not a hyphen — pass exactly or omit to default to the only tab)
 
 Columns: Date Received | Creator/Vendor | Invoice # | Airwallex Bill ID | Amount | Currency | Due Date | Status | Slack Thread TS | Notes
 

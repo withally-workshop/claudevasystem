@@ -37,7 +37,7 @@ Receive PDF invoices from email, Slack channel, or Slack DMs → validate → re
 5. **Converts currency** if invoice currency ≠ vendor payout currency (Butanas→PHP, Domingo→USD, Baste→SGD) — live rate × 0.97, noted in description + 🚨 CONVERTED
 6. **`airwallex_create_bill`** (no attachment — API can't until ~Aug 2026), `legal_entity_id` `le_Zxw2-ECjOaKKebIGraD1AA`; then `airwallex_get_bill` post-create guard
 7. **#ops-command 🧾 flag** per bill so John uploads the PDF in the webapp
-8. Replies to requester **once** after all bills staged (bounces immediately, known-sender gated)
+8. Replies to requester **once** after all bills staged (bounces immediately, known-sender gated) — plain confirmation only, NEVER the Airwallex link/bill ID (that goes only to the #ops-command 🧾 flag; only John has Airwallex access)
 9. Logs to tracker with **Airwallex Bill ID**, status `Staged in Airwallex`
 
 **n8n email + krave-bot paths still forward-by-email** (Phase 2 promotes this logic): forward PDF to `kravemedia@bills.airwallex.com` via `gmail_send(attachment_base64=...)`, status `Forwarded via Email`.

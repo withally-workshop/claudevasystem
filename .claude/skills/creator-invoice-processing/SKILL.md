@@ -30,7 +30,7 @@ Receives creator/vendor invoices (email, Slack channel, Slack DMs), validates ea
 ## Key Data
 
 - **#payments-invoices-updates:** C09HN2EBPR7 · **#ops-command (reports/flags):** C0AQZGJDR38
-- **Creator & AP Bills Tracker:** `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc`, tab `Krave — Creator & AP Bills Tracker`
+- **Creator & AP Bills Tracker:** `14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc` — the spreadsheet has ONE tab named `Krave — Creator & AP Bills Tracker` (EM-DASH `—`, not a hyphen). Pass it exactly, or omit the tab name (defaults to the only tab).
 - **Airwallex Spend:** org-scoped key `spendcreatekey` (`AIRWALLEX_SPEND_*` in `.mcp.json`; MCP routes `/api/v1/spend/*` through it). `legal_entity_id` = `le_Zxw2-ECjOaKKebIGraD1AA`
 - **Strategists (senders):** Shin, Amanda, Sybil, Jeneena (Slack); editors/internal staff (John DMs)
 - **External requesters who also self-invoice:** Marian Borynets, Paul Butanas, Baste Perez, JM Domingo
@@ -67,7 +67,7 @@ Other existing vendors (Alleah, Priscilla, Amanda Ng, Holly Crocker, Hailey Noli
 | Bank details | Account #, IBAN/SWIFT/BIC, BSB, or equivalent present | **Bounce immediately** — ask to reissue with bank details |
 | Invoice number | Use the invoice's number | If missing → generate `INV-` + 7 random digits (e.g. `INV-4827193`) |
 | Currency | Explicit on invoice | If missing → infer from the bank account's country; still unclear → bounce |
-| Due date | Use the invoice's due date | If missing → Friday of the current week (PHT); if today is Friday, use today |
+| Due date | Use the due date or payment terms printed on the invoice EXACTLY (e.g. "NET 30" = issued date + 30 days). Never invent/guess. | If missing → Friday of the current week (PHT); if today is Friday, use today |
 | Invoice date | Use the invoice's date | If missing → today (PHT) |
 | Amount vs request | If the requester's message states an amount, it must match the PDF | Mismatch → **do not create**, 🚨 flag for John |
 
@@ -175,7 +175,7 @@ Replaces the old "review drafts by EOD" glance.
 
 ## Reply Templates
 
-**Success (once, after all bills staged):**
+**Success (once, after all bills staged).** Plain confirmation only — NEVER include the Airwallex bill link, bill ID, or any Airwallex internal detail (only John has Airwallex access; requesters are often strategists). The bill link/ID go ONLY to the #ops-command 🧾 flag.
 - Slack (thread + ✅): `Done — staged [N] bill(s) for payment: [Creator] [Currency][Amount]; …`
 - Email (in-thread): `Hi [First Name], Done — staged for payment: [list]. Cheers, John / Krave Media`
 
