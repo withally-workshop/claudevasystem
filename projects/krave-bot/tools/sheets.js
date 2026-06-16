@@ -9,6 +9,7 @@ const path = require('path');
 // DIFFERENT spreadsheet (14kiX9…) — callers MUST pass spreadsheet_id for bills.
 const SHEET_ID = '1u5InkNpdLhgfFnE-a1bRRlEOFZ2oJf6EOG1y42_Th50';
 const BILLS_SHEET_ID = '14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24znuJc';
+const BILLS_TAB = 'Krave — Creator & AP Bills Tracker';
 let _tokenCache = { token: null, exp: 0 };
 
 function loadServiceAccount() {
@@ -62,15 +63,27 @@ async function getToken() {
 
 // spreadsheet_id accepts the full ID, or the alias "bills" for the Creator & AP
 // Bills Tracker. Defaults to the AR client-invoice sheet.
-function resolveSheetId(spreadsheet_id) {
+//
+// GUARD (2026-06-16 incident): a creator-bill write that forgot spreadsheet_id
+// used to silently default to the AR client tracker — a Stashworks prep row
+// landed there, in bills column order, mismatched against the AR columns. The
+// bills tab name is the unambiguous signal: any write targeting the Creator &
+// AP Bills tab MUST route to the bills spreadsheet. Refuse the mismatch loudly
+// instead of misfiling money owed to creators into the client AR ledger.
+function resolveSheetId(spreadsheet_id, sheet) {
+  const wantsBillsTab = String(sheet || '').trim() === BILLS_TAB;
+  const routesToBills = spreadsheet_id === 'bills' || spreadsheet_id === BILLS_SHEET_ID;
+  if (wantsBillsTab && !routesToBills) {
+    throw new Error(`Refusing to write the "${BILLS_TAB}" tab to the client/AR tracker — pass spreadsheet_id "bills" for creator/AP bills.`);
+  }
   if (!spreadsheet_id) return SHEET_ID;
   if (spreadsheet_id === 'bills') return BILLS_SHEET_ID;
   return spreadsheet_id;
 }
 
 async function getRows({ sheet = 'Invoices', range = 'A:Z', spreadsheet_id }) {
+  const sid = resolveSheetId(spreadsheet_id, sheet);
   const token = await getToken();
-  const sid = resolveSheetId(spreadsheet_id);
   const r = encodeURIComponent(`${sheet}!${range}`);
   const res = await httpsGet(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${r}`, { Authorization: `Bearer ${token}` });
   if (!res.ok) return { error: `Sheets API error: ${JSON.stringify(res.body)}` };
@@ -79,8 +92,8 @@ async function getRows({ sheet = 'Invoices', range = 'A:Z', spreadsheet_id }) {
 }
 
 async function appendRow({ sheet = 'Invoices', values, spreadsheet_id }) {
+  const sid = resolveSheetId(spreadsheet_id, sheet);
   const token = await getToken();
-  const sid = resolveSheetId(spreadsheet_id);
   const r = encodeURIComponent(`${sheet}!A:A`);
   const buf = Buffer.from(JSON.stringify({ values: [values], majorDimension: 'ROWS' }));
   const res = await new Promise((resolve, reject) => {
@@ -102,8 +115,8 @@ async function appendRow({ sheet = 'Invoices', values, spreadsheet_id }) {
 }
 
 async function updateRow({ sheet = 'Invoices', range, values, spreadsheet_id }) {
+  const sid = resolveSheetId(spreadsheet_id, sheet);
   const token = await getToken();
-  const sid = resolveSheetId(spreadsheet_id);
   const r = encodeURIComponent(`${sheet}!${range}`);
   const buf = Buffer.from(JSON.stringify({ values }));
   const res = await new Promise((resolve, reject) => {
