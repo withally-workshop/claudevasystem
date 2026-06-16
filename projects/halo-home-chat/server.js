@@ -73,7 +73,7 @@ const ESCALATION_KEYWORDS = [
 
 function detectEscalation(message) {
   const lower = message.toLowerCase();
-  if (/talk\s+to\s+(a\s+|the\s+)?(human|person|agent|someone|team)|speak\s+to\s+(a\s+|the\s+)?(human|person|agent|team)|real\s+person|connect\s+me\s+(with|to)\s+(a\s+)?(human|agent|team|person)/i.test(lower)) {
+  if (/talk\s+to\s+(a\s+|the\s+)?(human|person|agent|someone|team)|speak\s+to\s+(a\s+|the\s+)?(human|person|agent|someone|team)|real\s+person|connect\s+me\s+(with|to)\s+(a\s+)?(human|agent|team|person)/i.test(lower)) {
     return { escalate: true, trigger: 'explicit_request', keyword: null };
   }
   for (const kw of ESCALATION_KEYWORDS) {
@@ -97,6 +97,29 @@ function formatTranscript(history) {
     const label = entry.role === 'user' ? 'Customer' : entry.role === 'human_agent' ? 'Agent' : 'Mimi';
     return `${label}: ${entry.content}`;
   }).join('\n');
+}
+
+// Single source of truth for handing a session to a human: one natural handoff
+// bubble + escalate. Used by both the explicit-request short-circuit and the
+// post-Claude escalation path so customers only ever see ONE handoff message.
+async function escalateAndHandoff(socket, sessionId, { email, triggeredBy, reason }) {
+  const bh = isBusinessHours();
+  const handoffMessage = bh
+    ? "Got it. I'm passing this to our Halo support team now, and someone will follow up with you by email shortly."
+    : "Our support team is offline right now, but I've flagged your message and someone will follow up by email within 24 hours.";
+
+  socket.emit('bot_message', { content: handoffMessage, parts: [handoffMessage] });
+  socket.emit('escalated', { sessionId, businessHours: bh });
+
+  try {
+    await setOwner(sessionId, 'human');
+    await appendHistory(sessionId, { role: 'assistant', content: handoffMessage });
+    const fullHistory = await getHistory(sessionId);
+    const transcript = formatTranscript(fullHistory);
+    await notifyEscalation(sessionId, { email, transcript, isBusinessHours: bh, triggeredBy, reason });
+  } catch (err) {
+    console.error('[Socket] escalation error:', err.message);
+  }
 }
 
 // ── Claude API call (shared by socket handler and /chat HTTP endpoint) ────────
@@ -251,12 +274,30 @@ io.on('connection', (socket) => {
     // Keyword / explicit escalation check before calling Claude
     const escalationCheck = detectEscalation(content);
 
+    // Explicit "talk to a human" request: hand off in ONE natural message and
+    // skip Claude. Calling Claude here only produces a filler reply that stacks
+    // on top of the injected handoff — the 3-bubble spam customers complained about.
+    if (escalationCheck.trigger === 'explicit_request') {
+      await escalateAndHandoff(socket, activeSessionId, {
+        email: session.email || email || '',
+        triggeredBy: 'explicit request',
+        reason: null,
+      });
+      return;
+    }
+
     socket.emit('typing', { typing: true });
 
     let botReply;
     try {
       const history = await getHistory(activeSessionId);
-      const historyEntries = history.slice(0, -1).map(e => ({ role: e.role === 'human_agent' ? 'assistant' : e.role, content: e.content }));
+      // After a human handback, give the bot a clean slate: drop everything from
+      // before the handback (the human-handled exchange) so it doesn't resurface
+      // and answer a question from the human-owned part of the conversation.
+      const prior = session.botResumedAt
+        ? history.slice(0, -1).filter(e => e.ts && e.ts >= session.botResumedAt)
+        : history.slice(0, -1);
+      const historyEntries = prior.map(e => ({ role: e.role === 'human_agent' ? 'assistant' : e.role, content: e.content }));
       botReply = await callClaude({ content, historyEntries, email: session.email || email });
     } catch (err) {
       socket.emit('typing', { typing: false });
@@ -281,36 +322,17 @@ io.on('connection', (socket) => {
     try { await appendHistory(activeSessionId, { role: 'assistant', content: cleanReply }); } catch {}
 
     if (shouldEscalate) {
-      const bh = isBusinessHours();
-      const handoffMessage = bh
-        ? "Got it. I'm passing this to our Halo support team now, and someone will follow up with you by email shortly."
-        : "Our support team is offline right now, but I've flagged your message and someone will follow up by email within 24 hours.";
+      const triggeredBy = shippingFeeEscalate
+        ? 'wrong $5 subscription shipping fee — needs refund review'
+        : escalationCheck.keyword
+          ? `keyword: ${escalationCheck.keyword}`
+          : 'Claude judgment';
 
-      socket.emit('bot_message', { content: handoffMessage, parts: [handoffMessage] });
-      socket.emit('escalated', { sessionId: activeSessionId, businessHours: bh });
-
-      try {
-        await setOwner(activeSessionId, 'human');
-        await appendHistory(activeSessionId, { role: 'assistant', content: handoffMessage });
-
-        const fullHistory = await getHistory(activeSessionId);
-        const transcript = formatTranscript(fullHistory);
-        const triggeredBy = shippingFeeEscalate
-          ? 'wrong $5 subscription shipping fee — needs refund review'
-          : escalationCheck.escalate
-            ? (escalationCheck.trigger === 'explicit_request' ? 'explicit request' : `keyword: ${escalationCheck.keyword}`)
-            : 'Claude judgment';
-
-        await notifyEscalation(activeSessionId, {
-          email: session.email || email || '',
-          transcript,
-          isBusinessHours: bh,
-          triggeredBy,
-          reason: shippingFeeEscalate ? 'shipping_fee' : null,
-        });
-      } catch (err) {
-        console.error('[Socket] escalation error:', err.message);
-      }
+      await escalateAndHandoff(socket, activeSessionId, {
+        email: session.email || email || '',
+        triggeredBy,
+        reason: shippingFeeEscalate ? 'shipping_fee' : null,
+      });
     }
   });
 

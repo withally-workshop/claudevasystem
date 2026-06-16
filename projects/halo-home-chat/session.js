@@ -44,6 +44,9 @@ async function setOwner(id, owner) {
   const now = new Date().toISOString();
   await redis.hset(metaKey(id), 'owner', owner, 'lastActivityAt', now);
   if (owner === 'human') await redis.hset(metaKey(id), 'escalatedAt', now);
+  // Mark when the bot resumes control after a handback so it can start from a
+  // clean slate and ignore the human-handled part of the conversation.
+  if (owner === 'bot') await redis.hset(metaKey(id), 'botResumedAt', now);
 }
 
 async function setSlackThread(id, { threadTs, channel }) {
