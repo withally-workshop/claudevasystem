@@ -236,11 +236,25 @@ Do this immediately before any API calls to prevent double-processing.
 
 ### Step 4 — Airwallex API flow
 
-**4a — Customer lookup/create:**
-1. `mcp__krave-airwallex__airwallex_list_customers(email: client_email)` — email-first lookup
-2. If no results → `airwallex_list_customers(name: client_name)` — name fallback
-3. If still no results → `airwallex_create_customer(name: client_name, email: client_email, type: BUSINESS)`
-4. → get `billing_customer_id`
+**4a — Customer lookup/create (SAFETY-CRITICAL — read fully):**
+
+> **Incident 2026-06-17:** a Dojocare invoice was billed to the internal "Krave Test" customer four times. Root cause: the request carried the billing email `john@kravemedia.co`, which maps to **four** internal test customers, and the resolver picked the first one. There was no duplicate guard, so a re-submit created it again each time. The guards below exist to make both failures impossible. Do not skip them.
+
+1. **Email-first lookup:** `mcp__krave-airwallex__airwallex_list_customers(email: client_email)`.
+   - Match strictly by **exact, case-insensitive email within the returned `items`**. Never assume the API narrowed the list, and **never take "the first row."**
+2. **`name` is NOT a working filter.** `airwallex_list_customers(name: ...)` currently returns the **entire** customer list (the `name` parameter is ignored server-side). If you fall back to it, you must do an exact case-insensitive `name` match *within* the results. If that matches 0 or more than 1 customer → do not guess.
+3. **Test-customer HARD BLOCK.** Never create or finalize a real client invoice against any of these internal test records:
+   - any customer whose `email` is `john@kravemedia.co`
+   - any customer whose `name` contains "test" (Krave Test, Krave Internal Test, Test Address Corp)
+   - IDs: `bcus_sgpdgmqz9hic0zyo485`, `bcus_sgpdp7xdxhi30oyhmri`, `bcus_sgpdb6h5zhi2uty4o1o`, `bcus_sgpdn67v7hhopoh228m`
+
+   If the lookup resolves to one of these — **or the request's `client_email` is `john@kravemedia.co` / blank** — **STOP**. Reply in the request thread that the billing email looks like a test/internal address and ask John for the correct client email. Do **not** create the invoice.
+4. **Ambiguity guard.** If the email lookup returns **more than one** customer → STOP and ask which client. A real client email maps to exactly one customer; more than one means a shared/test address.
+5. **Create only when genuinely new:** 0 exact matches AND a real (non-test) client email → `airwallex_create_customer(name: client_name, email: client_email, type: BUSINESS)`.
+6. → get `billing_customer_id`.
+
+**4a.5 — Duplicate guard (prevents the 4× repeat):**
+Before creating the invoice shell, re-read the tracker (`sheets_get_rows`, tab `Invoices`) and check for an existing row with the **same Client Name + Currency + Amount** whose Payment Status (Col J) is `Draft - Pending John Review` or `Invoice Sent` and whose Date Created (Col A) is within the last 3 days. If one exists → **STOP**, reply in the thread linking the existing invoice (Col R), and do not create a second. The ✅ dedup only stops re-processing the *same* Slack message; this catches re-submissions and retries.
 
 **4b — Per line item (create product + price):**
 For each parsed line item:
@@ -354,6 +368,8 @@ Extract from the parent notification message:
 Do this immediately to prevent double-processing.
 
 ### Step 3 — Finalize invoice
+
+**Pre-finalize guard:** finalizing makes the invoice live and triggers the email to the client — it is the externally-visible action. Before finalizing, confirm the invoice is NOT against a test/internal customer (see Step 4a hard block: email `john@kravemedia.co`, name containing "test", or the listed test IDs). If it is, STOP and flag to John — do not finalize or email.
 
 `mcp__krave-airwallex__airwallex_finalize_invoice(invoice_id: invoice_id)`
 

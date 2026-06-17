@@ -626,7 +626,10 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
         |                                       |
         |                                [Resolve Customer]
         |                                       |
-        |                              [Route Customer Exists]
+        |                             [Customer Safety Gate]
+        |                              | blocked         | safe
+        |                              v                 v
+        |                   [Hydrate Fallback] [Route Customer Exists]
         |                               | create     | reuse
         |                               v            v
         |                    [Create Billing Customer] [Prepare Product Payload]
@@ -662,6 +665,7 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 
 ### Intake Rules
 
+- **Customer Safety Gate (2026-06-17):** after `Resolve Customer`, the flow blocks and routes to the manual fallback (DM John, no invoice created) if the request billing email is `john@kravemedia.co`, the email maps to more than one customer (ambiguous), or the resolved customer is an internal test record (name contains "test", or a known test ID). `Resolve Customer` matches by exact email/name within the returned list — it never takes first-of-list (the Airwallex `name` query does not filter server-side). Prevents the 2026-06-17 incident where a Dojocare invoice was billed to "Krave Test" 4×. **Status: in deploy-script source; redeploy `deploy-invoice-request-intake.js` to make live.**
 - Uses a Structured Slack modal so required fields arrive in a predictable payload.
 - Captures `Client Name or Company Name` and `Billing Address` instead of separate company and email fields.
 - Captures `Payout` and `Invoice Date`, then computes the final `Due Date` inside intake.

@@ -309,6 +309,19 @@ const items = Array.isArray($json.customer_lookup_items) ? $json.customer_lookup
 const clientName = (ctx.client_name || '').toLowerCase().trim();
 const clientEmail = (ctx.client_email || '').toLowerCase().trim();
 
+// ── Test/internal customer guard (added 2026-06-17 after a mis-billing incident) ──
+// A Dojocare invoice was billed to "Krave Test" 4x: the request carried
+// john@kravemedia.co (4 internal test customers share that email) and the resolver
+// returned the first match. Never resolve a real invoice to an internal test record;
+// fail safe to the manual fallback (DM John) instead of creating/billing.
+const SENTINEL_EMAILS = ['john@kravemedia.co'];
+const TEST_CUSTOMER_IDS = [
+  'bcus_sgpdgmqz9hic0zyo485',
+  'bcus_sgpdp7xdxhi30oyhmri',
+  'bcus_sgpdb6h5zhi2uty4o1o',
+  'bcus_sgpdn67v7hhopoh228m',
+];
+
 function emailsFor(customer) {
   return [
     customer.email,
@@ -318,17 +331,44 @@ function emailsFor(customer) {
   ].filter(Boolean).map(e => String(e).toLowerCase().trim());
 }
 
-function resolveByEmail(customers) {
-  if (!clientEmail) return null;
-  return customers.find(customer => emailsFor(customer).includes(clientEmail)) || null;
+function isTestCustomer(customer) {
+  if (!customer) return false;
+  if (TEST_CUSTOMER_IDS.includes(customer.id)) return true;
+  if ((customer.name || '').toLowerCase().includes('test')) return true;
+  if (emailsFor(customer).some(e => SENTINEL_EMAILS.includes(e))) return true;
+  return false;
 }
 
-function resolveByName(customers) {
-  return customers.find(c => (c.name || '').toLowerCase().trim() === clientName) || null;
+function block(reason, message) {
+  return { json: { ...ctx, airwallex_customer_id: '', customer_block_reason: reason,
+    status: 'fallback_manual_required', failure_stage: 'customer_safety_block', failure_reason: message } };
 }
 
-const found = resolveByEmail(items) || resolveByName(items);
-return { json: { ...ctx, airwallex_customer_id: found ? found.id : '' } };
+// 1. Sentinel email on the request itself → never proceed.
+if (SENTINEL_EMAILS.includes(clientEmail)) {
+  return block('sentinel_email', 'billing email is an internal/test address (' + clientEmail + ') — confirm the correct client email');
+}
+
+// 2. Exact email match within the returned items (the API name filter does NOT narrow
+//    the list, so never take first-of-list blindly).
+const emailMatches = clientEmail ? items.filter(c => emailsFor(c).includes(clientEmail)) : [];
+if (emailMatches.length > 1) {
+  return block('ambiguous_email', 'billing email ' + clientEmail + ' matches ' + emailMatches.length + ' customers — ambiguous, confirm which client');
+}
+let found = emailMatches.length === 1 ? emailMatches[0] : null;
+
+// 3. Name fallback: exact unique name match within results only (no fuzzy, no first-of-list).
+if (!found && clientName) {
+  const nameMatches = items.filter(c => (c.name || '').toLowerCase().trim() === clientName);
+  found = nameMatches.length === 1 ? nameMatches[0] : null;
+}
+
+// 4. If we resolved to a test/internal customer → block.
+if (found && isTestCustomer(found)) {
+  return block('test_customer_match', 'resolved to internal test customer "' + (found.name || found.id) + '" — confirm the correct client');
+}
+
+return { json: { ...ctx, airwallex_customer_id: found ? found.id : '', customer_block_reason: '' } };
 `.trim();
 
 const LOOKUP_CUSTOMER_CODE = `
@@ -629,6 +669,27 @@ const workflow = {
       typeVersion: 2,
       position: [1280, 260],
       parameters: { mode: 'runOnceForEachItem', jsCode: RESOLVE_CUSTOMER_CODE },
+    },
+    {
+      // Test/internal customer guard (2026-06-17). If Resolve Customer set a
+      // customer_block_reason, route to the manual fallback (DM John) — never create or bill.
+      id: 'n_customer_safety_gate',
+      name: 'Customer Safety Gate',
+      type: 'n8n-nodes-base.if',
+      typeVersion: 2.2,
+      position: [1345, 160],
+      parameters: {
+        conditions: {
+          options: { caseSensitive: true, typeValidation: 'strict', version: 2 },
+          conditions: [{
+            id: 'customer-block-check',
+            leftValue: '={{ $json.customer_block_reason || "" }}',
+            rightValue: '',
+            operator: { type: 'string', operation: 'notEquals' },
+          }],
+          combinator: 'and',
+        },
+      },
     },
     {
       id: 'n_route_customer_exists',
@@ -1242,7 +1303,11 @@ const workflow = {
     ]},
     'Merge Auth Token': { main: [[{ node: 'Lookup Billing Customer', type: 'main', index: 0 }]] },
     'Lookup Billing Customer': { main: [[{ node: 'Resolve Customer', type: 'main', index: 0 }]] },
-    'Resolve Customer': { main: [[{ node: 'Route Customer Exists', type: 'main', index: 0 }]] },
+    'Resolve Customer': { main: [[{ node: 'Customer Safety Gate', type: 'main', index: 0 }]] },
+    'Customer Safety Gate': { main: [
+      [{ node: 'Hydrate Fallback Context', type: 'main', index: 0 }],   // TRUE — blocked: DM John, do not create
+      [{ node: 'Route Customer Exists', type: 'main', index: 0 }],      // FALSE — safe: proceed
+    ]},
     'Route Customer Exists': { main: [
       [{ node: 'Create Billing Customer', type: 'main', index: 0 }],
       [{ node: 'Prepare Product Payload', type: 'main', index: 0 }],

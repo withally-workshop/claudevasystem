@@ -44,6 +44,12 @@ Fields:
 - Line items from the Slack request
 - Currency from request
 
+**Customer safety guards (2026-06-17 incident — invoice billed to "Krave Test" 4x):**
+- Resolve the customer by **exact email match** on the request's billing email. Do not trust the `name` search to filter (it returns the full customer list) and never pick the first row of a list.
+- **Never bill a real invoice to a test/internal customer**: any customer with email `john@kravemedia.co`, any name containing "test" (Krave Test, Krave Internal Test, Test Address Corp). If the request's client email is `john@kravemedia.co` or blank → stop and confirm the correct client email before drafting.
+- If the email maps to more than one customer → stop and confirm which client.
+- **No duplicates:** before drafting, confirm no draft/sent invoice for the same client + amount already exists in the tracker from the last few days.
+
 ### Step 3 - Log to Client Invoice Tracker
 Immediately after drafting in Airwallex, append a row to the Client Invoice Tracker. See the `client-invoice-creation` skill for the exact column mapping. Drafts use Column J `Payment Status = Draft - Pending John Review`.
 

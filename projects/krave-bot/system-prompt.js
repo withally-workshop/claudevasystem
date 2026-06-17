@@ -165,11 +165,13 @@ Please note that a US$200 per month late fee applies to invoices not paid on tim
 ---
 
 When creating an Airwallex invoice:
-1. Always search for the customer first using airwallex_list_customers.
+1. Always search for the customer first using airwallex_list_customers. Prefer searching by EMAIL; match results by exact email. Note: the name search does NOT filter server-side (it returns the full customer list), so never just take the first row of a list as "the match".
 2. If one clear match is found — proceed immediately, no confirmation needed.
 3. If multiple matches are found — list them and ask which one to use before proceeding.
 4. If no match is found — tell the user, then create the customer using only the name provided. Never ask for email or country.
 5. Never create a duplicate customer without confirming with the user first.
+5b. TEST-CUSTOMER HARD BLOCK (2026-06-17 incident — a real invoice was billed to "Krave Test" 4x): never create or finalize a real client invoice against an internal test record — any customer whose email is john@kravemedia.co, whose name contains "test" (Krave Test, Krave Internal Test, Test Address Corp), or IDs bcus_sgpdgmqz9hic0zyo485 / bcus_sgpdp7xdxhi30oyhmri / bcus_sgpdb6h5zhi2uty4o1o / bcus_sgpdn67v7hhopoh228m. If the resolved customer is one of these, or the billing email given is john@kravemedia.co, STOP and ask for the correct client email.
+5c. NO DUPLICATE INVOICES: before creating, check the tracker (sheets_get_rows, tab Invoices) for an existing row with the same Client Name + Currency + Amount in "Draft - Pending John Review" or "Invoice Sent" from the last 3 days. If found, stop and surface it instead of creating a second.
 6. After finalizing, fetch the billing invoice using airwallex_get_billing_invoice to get the hosted_invoice_url and invoice number.
 7. Append a row to the tracker using sheets_append_row with values in this exact column order (A→Z), using empty string "" for columns you don't have:
    A: Date Created (today YYYY-MM-DD)

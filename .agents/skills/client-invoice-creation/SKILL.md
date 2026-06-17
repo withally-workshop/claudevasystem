@@ -56,6 +56,15 @@ Process Slack invoice request receipts into Airwallex drafts (Mode 0/1) and fina
 6. Replies in John's thread + tags strategist in original #payments-invoices-updates thread
 7. If John's reply includes a ClickUp task URL → activates ClickUp sync (see `.agents/skills/clickup-invoice-sync/SKILL.md`)
 
+## Customer Safety Guards (added 2026-06-17 after a mis-billing incident)
+
+A Dojocare invoice was billed to the internal "Krave Test" customer four times. Cause: the request's billing email was `john@kravemedia.co`, which maps to four internal test customers, and the resolver picked the first; no duplicate guard caught the re-submits. Apply these on every create (Mode 1) — full logic in `.claude/skills/client-invoice-creation/SKILL.md` Step 4a:
+
+- **Exact email match only.** Match `airwallex_list_customers(email:)` results by exact case-insensitive email; never take the first row. The `name` param is ignored server-side (returns the full list) — do not rely on it as a filter.
+- **Test-customer HARD BLOCK.** Never create/finalize a real invoice against a customer whose email is `john@kravemedia.co`, whose name contains "test", or whose ID is one of `bcus_sgpdgmqz9hic0zyo485`, `bcus_sgpdp7xdxhi30oyhmri`, `bcus_sgpdb6h5zhi2uty4o1o`, `bcus_sgpdn67v7hhopoh228m`. If the request email is `john@kravemedia.co` or blank → STOP and ask John for the correct client email.
+- **Ambiguity guard.** Email lookup returning >1 customer → STOP and ask which client.
+- **Duplicate guard.** Before creating, check the tracker for a same Client + Currency + Amount row in `Draft - Pending John Review`/`Invoice Sent` from the last 3 days → STOP if found. The ✅ reaction only dedups the same message, not re-submissions.
+
 ## Standard Invoice Memo
 
 Always set this as the `memo` on every Airwallex invoice created. If the receipt includes a project-specific memo, append it after a blank line.
