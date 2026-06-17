@@ -25,6 +25,27 @@ function keyFor(which) {
 // Endpoints that require an x-api-version header.
 const VERSIONED_PATHS = ['/api/v1/invoices', '/api/v1/billing_customers', '/api/v1/products', '/api/v1/prices', '/api/v1/fx/'];
 
+// Internal/test billing customers — never create or finalize a real invoice
+// against these. 2026-06-17 incident: a Dojocare invoice was billed to "Krave
+// Test" 4x because john@kravemedia.co maps to these records and the resolver
+// took the first. The system prompt tells the model to avoid them; this is the
+// deterministic backstop — if the model ever tries, the tool refuses.
+const TEST_CUSTOMER_IDS = new Set([
+  'bcus_sgpdgmqz9hic0zyo485', // Krave Test (USD)
+  'bcus_sgpdp7xdxhi30oyhmri', // Krave Test (SGD)
+  'bcus_sgpdb6h5zhi2uty4o1o', // Krave Internal Test
+  'bcus_sgpdn67v7hhopoh228m', // Test Address Corp
+]);
+
+function assertNotTestCustomer(billing_customer_id) {
+  if (billing_customer_id && TEST_CUSTOMER_IDS.has(billing_customer_id)) {
+    throw new Error(
+      'Refusing to bill internal test customer ' + billing_customer_id +
+      ' — confirm the correct client. The billing email must not be john@kravemedia.co.'
+    );
+  }
+}
+
 async function getToken(which) {
   const cache = _tokens[which];
   if (cache.token && Date.now() < cache.exp - 60000) return cache.token;
@@ -101,6 +122,7 @@ async function getBillingInvoice({ invoice_id }) {
 }
 
 async function createInvoice({ billing_customer_id, currency, days_until_due = 7, collection_method = 'CHARGE_ON_CHECKOUT', linked_payment_account_id, legal_entity_id, memo }) {
+  assertNotTestCustomer(billing_customer_id);
   const body = { request_id: randomUUID(), billing_customer_id, currency, collection_method, days_until_due };
   if (linked_payment_account_id) body.linked_payment_account_id = linked_payment_account_id;
   if (legal_entity_id) body.legal_entity_id = legal_entity_id;
@@ -129,6 +151,9 @@ async function addLineItems({ invoice_id, line_items }) {
 }
 
 async function finalizeInvoice({ invoice_id }) {
+  // Backstop: never finalize (which makes the invoice live + emails it) against a test customer.
+  const inv = await aw('GET', `/api/v1/invoices/${invoice_id}`);
+  assertNotTestCustomer(inv && inv.billing_customer_id);
   return aw('POST', `/api/v1/invoices/${invoice_id}/finalize`, { request_id: randomUUID() });
 }
 
