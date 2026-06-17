@@ -240,6 +240,8 @@ node n8n-workflows/deploy-inbox-triage-daily.js
 
 Accepts invoice requests from a **Structured Slack modal**, normalizes the submission, attempts full Airwallex draft invoice creation, writes the result into the existing Invoices sheet structure in the Client Invoice Tracker, and falls back to a manual-ready row plus John DM alert if any Airwallex step fails.
 
+A **Customer Safety Gate** (2026-06-17) blocks creation and routes to the same manual fallback when the request resolves to an internal test customer (email `john@kravemedia.co`, name containing "test", or a known test ID) or when the billing email is ambiguous (maps to more than one customer). The resolver matches by exact email/name within the returned list and never takes first-of-list — prevents the incident where a Dojocare invoice was billed to "Krave Test" 4×.
+
 **Draft-only behavior:** v1 stops after the Airwallex `draft invoice created` state. It does not auto-finalize or auto-send.
 
 **Airwallex customer resolution:** intake uses email-first customer reuse. If `Email` is present, it looks up an existing Airwallex billing customer by exact email before considering the submitted company/client name. It only falls back to name matching when no email match is found, and only creates a new billing customer when neither lookup resolves.
