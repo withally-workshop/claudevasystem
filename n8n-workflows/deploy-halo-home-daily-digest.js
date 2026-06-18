@@ -54,7 +54,8 @@ Comped ($0): X orders [omit line if comped_count is 0]
 *Unfulfilled — X pending*
   #XXXX  [email]  [items]  X days old
   #XXXX  [email]  [items]  ordered today
-[If no unfulfilled orders]: Unfulfilled: none ✓
+[Use the EXACT unfulfilled_count for X. The orders provided are the oldest first and may be a subset — if unfulfilled_count is greater than the number of rows provided, add a final line "  …and N more" where N = unfulfilled_count minus rows shown.]
+[If unfulfilled_count is 0]: Unfulfilled: none ✓
 
 Use thousands separators on money. Keep it tight. No preamble. If orders is 0, say "No orders yesterday." but still show the unfulfilled section.`;
 
@@ -98,12 +99,14 @@ const topProducts = Object.entries(productMap)
   .sort((a, b) => b[1] - a[1]).slice(0, 5)
   .map(([title, units]) => ({ title, units }));
 
-const unfulfilled = ($json.orders || []).map(o => ({
+// Unfulfilled: count in code (do NOT let the LLM count a truncated list), oldest first.
+const UNFULFILLED_SHOWN = 15;
+const unfulfilledAll = ($json.orders || []).map(o => ({
   name: o.name,
   email: o.email || 'no email',
   items: (o.line_items || []).map(li => li.title + ' x' + li.quantity).join(', '),
   days_old: Math.floor((Date.now() - new Date(o.created_at).getTime()) / 86400000),
-}));
+})).sort((a, b) => b.days_old - a.days_old);
 
 return [{ json: {
   date: $('Build Date Range').item.json.todayFormatted,
@@ -117,7 +120,8 @@ return [{ json: {
     comped_count: comped,
     top_products: topProducts,
   },
-  unfulfilled,
+  unfulfilled_count: unfulfilledAll.length,
+  unfulfilled: unfulfilledAll.slice(0, UNFULFILLED_SHOWN),
 } }];
 `.trim();
 
@@ -204,7 +208,7 @@ const workflow = {
             system: ${JSON.stringify(FORMAT_DIGEST_PROMPT)},
             messages: [{
               role: 'user',
-              content: 'Date: ' + $json.date + '\\n\\nMetrics (use these EXACT numbers, do not recompute):\\n' + JSON.stringify($json.metrics) + '\\n\\nUnfulfilled orders:\\n' + JSON.stringify($json.unfulfilled).slice(0, 3000)
+              content: 'Date: ' + $json.date + '\\n\\nMetrics (use these EXACT numbers, do not recompute):\\n' + JSON.stringify($json.metrics) + '\\n\\nunfulfilled_count (total pending, use exactly): ' + $json.unfulfilled_count + '\\nUnfulfilled orders (oldest first, may be a subset):\\n' + JSON.stringify($json.unfulfilled)
             }]
           }
         }}`,

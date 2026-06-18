@@ -1542,6 +1542,7 @@ Posts yesterday's Halo Home sales summary + current unfulfilled orders to `#halo
 - **Real sales only:** orders with `cancelled_at` set or `test === true` are excluded from revenue, count, AOV, and top products.
 - **$0 comped orders** are counted and reported on their own line (not hidden in revenue).
 - **Day window is true PHT:** `Build Date Range` emits the yesterday window as absolute UTC instants (`…Z`), derived from the PHT midnight boundary. (A `+08:00` offset in the query string gets decoded as a space and dropped, which had made the window a UTC day — pulling 00:00–08:00 PHT orders into the wrong day. Fixed 2026-06-18.)
+- **Unfulfilled count is computed in code** (not by the LLM): `Combine Digest Data` returns `unfulfilled_count` (full total) plus the oldest 15 orders; the formatter prints the exact count and appends "…and N more". (Before this, the LLM counted a 3,000-char-truncated list and under-reported — e.g. "19 pending" when the real open-unfulfilled total was 33.) KNOWN ISSUE (pending Noa's call): the open-unfulfilled set still includes months-old orders and $0/subscription artifacts (orders shipped/handled outside Shopify or never marked fulfilled), so the count overstates real ship-today backlog. A definition rule (age cap / exclude $0 / exclude subscriptions) is not yet applied.
 - **Refunds** are counted via `refunds[]` length / `financial_status` (captures partial refunds, not just fully-refunded).
 - **Definition note:** this is gross-order-value net of refunds (includes tax + shipping). It will not tie exactly to Shopify Analytics "Total/Net sales", which also nets discounts and uses different tax/shipping treatment.
 
@@ -1759,6 +1760,7 @@ Every Monday at 9 AM PHT, posts to `#halo-home-shopify`: (1) a week-over-week an
 ### Key Logic
 
 - **Week-over-week analytics:** `Build Report Data` computes revenue/orders/AOV/refunds for the rolling last 7 days vs the prior 7 days **in code** (Haiku only formats). Revenue is **NET** (gross `total_price` minus refund transactions); orders with `cancelled_at` set or `test === true` are excluded; partial refunds are captured. Same definition as the Daily Digest (#21) — gross-order-value net of refunds, won't tie exactly to Shopify Analytics "sales".
+- **True PHT windows:** `Build Date Ranges` emits all window boundaries (refill, upsell, this-week, last-week) as absolute UTC instants at PHT midnight via `phtMidnightUTC()` — no `+08:00` in the query string (which would decode to a space and silently become a UTC day). Fixed 2026-06-18.
 - **Refill due:** orders containing SKUs `SH-HR-HEADCALCIUM-NA-0013`, `SH-HR-HANDLEPP-NA-0011`, `SH-HR-HEADVITA-LAVENDER-0014`, `SH-HR-FILTERPLAN-0015` created 75–105 days ago
 - **Upsell gap:** orders containing showerhead SKUs (`SH-HH-BrushedChrome-0009`, `SH-HH-MATTEBLACK-0010`) created 14–120 days ago where the same order had no filter SKU
 

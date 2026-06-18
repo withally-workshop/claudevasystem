@@ -16,23 +16,25 @@ const WORKFLOW_ID = process.env.HALO_HOME_WEEKLY_REPORT_WORKFLOW_ID || '';
 const FILTER_SKUS = ['SH-HR-HEADCALCIUM-NA-0013', 'SH-HR-HANDLEPP-NA-0011', 'SH-HR-HEADVITA-LAVENDER-0014', 'SH-HR-FILTERPLAN-0015'];
 const SHOWERHEAD_SKUS = ['SH-HH-BrushedChrome-0009', 'SH-HH-MATTEBLACK-0010'];
 
-// n2: Build date ranges for both queries
+// n2: Build date ranges for all queries.
+// Each boundary is an absolute UTC instant (…Z) at PHT midnight N days ago — NOT a
+// "YYYY-MM-DD" + "+08:00" string. A "+08:00" offset in the query string decodes to a
+// space and gets dropped, which silently turns the window into a UTC day (8h off PHT).
 const BUILD_DATE_RANGES_CODE = `
-function sgtOffset(d) { return new Date(d.getTime() + 8 * 3600 * 1000); }
-function sgtDate(daysAgo) {
-  const d = sgtOffset(new Date());
-  d.setUTCDate(d.getUTCDate() - daysAgo);
-  return d.toISOString().split('T')[0];
+const now = new Date(Date.now() + 8 * 3600 * 1000); // shift to PHT wall clock for date parts
+function phtMidnightUTC(daysAgo) {
+  // PHT midnight today as a UTC instant = (today 00:00 UTC) − 8h; then step back daysAgo days.
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0)
+    - 8 * 3600 * 1000 - daysAgo * 86400000).toISOString();
 }
-const now = sgtOffset(new Date());
 return [{ json: {
-  refillMin: sgtDate(105),
-  refillMax: sgtDate(75),
-  upsellMin: sgtDate(120),
-  upsellMax: sgtDate(14),
-  thisWeekStart: sgtDate(7),   // rolling last 7 days
-  lastWeekStart: sgtDate(14),  // 7-14 days ago
-  lastWeekEnd: sgtDate(7),     // same as thisWeekStart
+  refillMin: phtMidnightUTC(105),
+  refillMax: phtMidnightUTC(75),
+  upsellMin: phtMidnightUTC(120),
+  upsellMax: phtMidnightUTC(14),
+  thisWeekStart: phtMidnightUTC(7),   // rolling last 7 days
+  lastWeekStart: phtMidnightUTC(14),  // 7-14 days ago
+  lastWeekEnd: phtMidnightUTC(7),     // same as thisWeekStart
   weekOf: now.toLocaleDateString('en-SG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Singapore' }),
 } }];
 `.trim();
@@ -163,28 +165,28 @@ const workflow = {
     { id: 'n3', name: 'Fetch Refill Due Orders', type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [700, 300],
       onError: 'continueRegularOutput',
       parameters: { method: 'GET',
-        url: `=https://${SHOPIFY_DOMAIN}/admin/api/2024-10/orders.json?status=any&limit=100&created_at_min={{ $json.refillMin }}T00:00:00+08:00&created_at_max={{ $json.refillMax }}T00:00:00+08:00`,
+        url: `=https://${SHOPIFY_DOMAIN}/admin/api/2024-10/orders.json?status=any&limit=100&created_at_min={{ $json.refillMin }}&created_at_max={{ $json.refillMax }}`,
         sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Shopify-Access-Token', value: SHOPIFY_TOKEN }] }, options: {} } },
 
     // n3b: Fetch showerhead orders from 14-120 days ago (upsell gap window)
     { id: 'n3b', name: 'Fetch Showerhead Orders', type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [940, 300],
       onError: 'continueRegularOutput',
       parameters: { method: 'GET',
-        url: `=https://${SHOPIFY_DOMAIN}/admin/api/2024-10/orders.json?status=any&limit=100&created_at_min={{ $('Build Date Ranges').item.json.upsellMin }}T00:00:00+08:00&created_at_max={{ $('Build Date Ranges').item.json.upsellMax }}T00:00:00+08:00`,
+        url: `=https://${SHOPIFY_DOMAIN}/admin/api/2024-10/orders.json?status=any&limit=100&created_at_min={{ $('Build Date Ranges').item.json.upsellMin }}&created_at_max={{ $('Build Date Ranges').item.json.upsellMax }}`,
         sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Shopify-Access-Token', value: SHOPIFY_TOKEN }] }, options: {} } },
 
     // n3c: Fetch this week's orders (last 7 days) for analytics comparison
     { id: 'n3c', name: 'Fetch This Week Orders', type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [1180, 300],
       onError: 'continueRegularOutput',
       parameters: { method: 'GET',
-        url: `=https://${SHOPIFY_DOMAIN}/admin/api/2024-10/orders.json?status=any&limit=250&created_at_min={{ $('Build Date Ranges').item.json.thisWeekStart }}T00:00:00+08:00`,
+        url: `=https://${SHOPIFY_DOMAIN}/admin/api/2024-10/orders.json?status=any&limit=250&created_at_min={{ $('Build Date Ranges').item.json.thisWeekStart }}`,
         sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Shopify-Access-Token', value: SHOPIFY_TOKEN }] }, options: {} } },
 
     // n3d: Fetch last week's orders (7-14 days ago) for analytics comparison
     { id: 'n3d', name: 'Fetch Last Week Orders', type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [1420, 300],
       onError: 'continueRegularOutput',
       parameters: { method: 'GET',
-        url: `=https://${SHOPIFY_DOMAIN}/admin/api/2024-10/orders.json?status=any&limit=250&created_at_min={{ $('Build Date Ranges').item.json.lastWeekStart }}T00:00:00+08:00&created_at_max={{ $('Build Date Ranges').item.json.lastWeekEnd }}T00:00:00+08:00`,
+        url: `=https://${SHOPIFY_DOMAIN}/admin/api/2024-10/orders.json?status=any&limit=250&created_at_min={{ $('Build Date Ranges').item.json.lastWeekStart }}&created_at_max={{ $('Build Date Ranges').item.json.lastWeekEnd }}`,
         sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Shopify-Access-Token', value: SHOPIFY_TOKEN }] }, options: {} } },
 
     // n4: Combine all responses — refill due, upsell gap, week-over-week analytics

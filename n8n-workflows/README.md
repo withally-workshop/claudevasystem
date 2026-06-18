@@ -343,7 +343,7 @@ node n8n-workflows/deploy-halo-home-slack-bot.js
 
 ## Halo - Daily Digest
 
-Posts yesterday's Halo Home revenue + unfulfilled orders to `#halo-home-shopify` every morning at 10 AM PHT. Totals are computed deterministically in code (net revenue = gross `total_price` minus refunds; cancelled/test orders excluded; $0 comped flagged separately) — Claude Haiku only formats the numbers, it does not compute them.
+Posts yesterday's Halo Home revenue + unfulfilled orders to `#halo-home-shopify` every morning at 10 AM PHT. Totals and the unfulfilled count are computed deterministically in code (net revenue = gross `total_price` minus refunds; cancelled/test orders excluded; $0 comped flagged separately; yesterday window on a true PHT day boundary) — Claude Haiku only formats, it does not compute or count.
 
 **Workflow ID:** `047cSNvFvUGHaf3O`
 **Schedule:** `0 10 * * *` Asia/Manila (10 AM PHT)
