@@ -17,7 +17,7 @@ Use `mcp__shopify__*` tools directly. The `shopify` MCP server is always-on.
 
 | Intent | Primary Tool |
 |--------|-------------|
-| Daily digest (on-demand) | `mcp__shopify__get-orders` yesterday + format as digest, post to `#halo-home-shopify` |
+| Daily digest (on-demand) | `mcp__shopify__get-orders` yesterday + format as digest, post to `#halo-home-shopify`. Revenue = **net** (gross `total_price` − refunds), exclude cancelled/test, count $0 comped separately. See #0 in `.claude` skill |
 | Inventory status (on-demand) | `mcp__shopify__get-products` limit 250, format full status |
 | Abandoned checkouts | `GET /checkouts.json?limit=50` |
 | Discount code lookup | `GET /discount_codes/lookup.json?code={CODE}` |

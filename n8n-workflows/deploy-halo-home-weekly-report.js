@@ -73,13 +73,25 @@ const upsellGap = upsellOrders
   })
   .sort((a, b) => a.days_ago - b.days_ago);
 
-// Analytics: week-over-week comparison
-function calcMetrics(orders) {
-  const revenue = orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
+// Analytics: week-over-week comparison.
+// Revenue is NET (gross total_price minus refund transactions) over real sales only —
+// cancelled and test orders are excluded; partial refunds are captured, not just fully-refunded.
+function num(x) { return parseFloat(x || 0) || 0; }
+function refundValue(o) {
+  return (o.refunds || []).reduce((s, r) =>
+    s + (r.transactions || []).reduce((a, t) => a + num(t.amount), 0), 0);
+}
+function calcMetrics(allOrders) {
+  const orders = (allOrders || []).filter(o => !o.cancelled_at && o.test !== true);
+  const gross = orders.reduce((s, o) => s + num(o.total_price), 0);
+  const refundsValue = orders.reduce((s, o) => s + refundValue(o), 0);
+  const revenue = gross - refundsValue;
   const count = orders.length;
   const aov = count > 0 ? revenue / count : 0;
-  const refunds = orders.filter(o => o.financial_status === 'refunded').length;
-  const refundValue = orders.filter(o => o.financial_status === 'refunded').reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
+  const refunds = orders.filter(o =>
+    (o.refunds || []).length > 0 ||
+    o.financial_status === 'refunded' ||
+    o.financial_status === 'partially_refunded').length;
   const productMap = {};
   for (const o of orders) {
     for (const li of (o.line_items || [])) {
@@ -87,7 +99,7 @@ function calcMetrics(orders) {
     }
   }
   const topProducts = Object.entries(productMap).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([title, qty]) => title + ' x' + qty);
-  return { revenue: revenue.toFixed(2), count, aov: aov.toFixed(2), refunds, refundValue: refundValue.toFixed(2), topProducts };
+  return { revenue: revenue.toFixed(2), count, aov: aov.toFixed(2), refunds, refundValue: refundsValue.toFixed(2), topProducts };
 }
 
 function pct(curr, prev) {
@@ -115,7 +127,7 @@ Format exactly like this:
 *Halo Home — Weekly Ops Report (w/o [date])*
 ─────────────────────────────────────────
 
-*📊 This Week vs Last Week*
+*📊 This Week vs Last Week*  _(revenue net of refunds, excl. cancelled/test orders)_
 Revenue:   *$X,XXX SGD* [↑X% or ↓X%]  (was $X,XXX)
 Orders:    *XX* [↑X% or ↓X%]  (was XX)
 AOV:       *$XXX SGD* [↑X% or ↓X%]  (was $XXX)

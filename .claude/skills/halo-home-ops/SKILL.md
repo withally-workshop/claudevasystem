@@ -28,7 +28,7 @@ Produces the same formatted output as the scheduled Daily Digest workflow, but o
 - Date range: yesterday 00:00 UTC+8 → today 00:00 UTC+8
 - `status: any`, `limit: 250`
 
-**Step 2** — Calculate: total revenue, order count, AOV, top products by units, refund count + value, comped ($0) count.
+**Step 2** — Calculate (match the scheduled workflow's definitions): **net revenue** = gross `total_price` minus refunds, order count, AOV, top products by units, refund count + value, comped ($0) count. **Exclude cancelled and test orders** from revenue/count/AOV; count $0 comped orders separately. Revenue includes tax + shipping, so it won't tie exactly to Shopify Analytics "Total/Net sales".
 
 **Step 3** — Output format:
 ```

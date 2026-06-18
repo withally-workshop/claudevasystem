@@ -1528,25 +1528,34 @@ Posts yesterday's Halo Home sales summary + current unfulfilled orders to `#halo
   ↓
 [Fetch Unfulfilled Orders] — GET /orders.json?fulfillment_status=unfulfilled&status=open
   ↓
-[Combine Digest Data] — aggregator Code node, merges both responses + date
+[Combine Digest Data] — Code node: computes ALL metrics deterministically (net revenue, count, AOV, top products, refunds, comped) + trims unfulfilled list
   ↓
-[Format Digest (Claude Haiku)] — POST Anthropic API
+[Format Digest (Claude Haiku)] — POST Anthropic API — FORMATS the pre-computed numbers only; does no math
   ↓
 [Post to Slack] — #halo-home-shopify (C0B6J5MUZCL)
 ```
+
+### Key Logic
+
+- **Totals are computed in code, not by the LLM.** `Combine Digest Data` does all the arithmetic; `Format Digest` (Haiku) only renders the numbers into the layout. (Before 2026-06-18 Claude summed a 5,000-char truncation of the raw order JSON — roughly one order — so any day with >1 order under-reported. This was the cause of the "Total Order Amounts Look Incorrect" feedback.)
+- **Revenue is NET:** gross `total_price` minus refund transactions (`refunds[].transactions[].amount`).
+- **Real sales only:** orders with `cancelled_at` set or `test === true` are excluded from revenue, count, AOV, and top products.
+- **$0 comped orders** are counted and reported on their own line (not hidden in revenue).
+- **Refunds** are counted via `refunds[]` length / `financial_status` (captures partial refunds, not just fully-refunded).
+- **Definition note:** this is gross-order-value net of refunds (includes tax + shipping). It will not tie exactly to Shopify Analytics "Total/Net sales", which also nets discounts and uses different tax/shipping treatment.
 
 ### Outputs
 
 | Scenario | Action |
 |----------|--------|
-| Orders exist | Slack digest: revenue, count, AOV, top products, refunds, comped + unfulfilled count |
+| Orders exist | Slack digest: net revenue, count, AOV, top products, refunds, comped + unfulfilled count |
 | Zero orders | "No orders yesterday." + unfulfilled section still shown |
 
 ### Error Handling
 
 | Failure | Behaviour |
 |---------|-----------|
-| Shopify API fails | `onError: continueRegularOutput`; Claude formats with whatever data arrived |
+| Shopify API fails | `onError: continueRegularOutput`; Combine Digest Data computes over whatever data arrived |
 
 ---
 
@@ -1716,7 +1725,7 @@ Alerts `#halo-home-shopify` when Halo Home products go out of stock, come back i
 
 ### Purpose
 
-Every Monday at 9 AM PHT, posts two proactive lists to `#halo-home-shopify`: (1) customers in the 75–105 day refill window (due to reorder filters), and (2) showerhead buyers in the last 14–120 days who never bought a filter in the same order (upsell gap). Replaces manual Shopify export and customer segmentation.
+Every Monday at 9 AM PHT, posts to `#halo-home-shopify`: (1) a week-over-week analytics block (revenue, orders, AOV, refunds, top products vs the prior 7 days), (2) customers in the 75–105 day refill window (due to reorder filters), and (3) showerhead buyers in the last 14–120 days who never bought a filter in the same order (upsell gap). Replaces manual Shopify export and customer segmentation.
 
 ### Triggers
 
@@ -1729,21 +1738,26 @@ Every Monday at 9 AM PHT, posts two proactive lists to `#halo-home-shopify`: (1)
 ```text
 [Schedule Trigger — 1 AM UTC Monday / 9 AM PHT]
   ↓
-[Build Date Ranges] — Code node: calculates 75/105-day and 14/120-day windows in UTC+8
+[Build Date Ranges] — Code node: calculates 75/105-day, 14/120-day, and rolling 7-day / 7–14-day windows in UTC+8
   ↓
 [Fetch Refill Due Orders] — GET /orders.json?created_at 75–105 days ago
   ↓
 [Fetch Showerhead Orders] — GET /orders.json?created_at 14–120 days ago
   ↓
-[Build Report Data] — Code node: filters refill orders by filter SKUs; filters showerhead orders by showerhead SKU + no-filter-in-same-order
+[Fetch This Week Orders] — GET /orders.json?created_at last 7 days
   ↓
-[Format Report (Claude Haiku)] — POST Anthropic API
+[Fetch Last Week Orders] — GET /orders.json?created_at 7–14 days ago
+  ↓
+[Build Report Data] — Code node: refill/upsell filtering + week-over-week metrics (computed in code)
+  ↓
+[Format Report (Claude Haiku)] — POST Anthropic API — formats pre-computed numbers only
   ↓
 [Post to Slack] — #halo-home-shopify (C0B6J5MUZCL)
 ```
 
 ### Key Logic
 
+- **Week-over-week analytics:** `Build Report Data` computes revenue/orders/AOV/refunds for the rolling last 7 days vs the prior 7 days **in code** (Haiku only formats). Revenue is **NET** (gross `total_price` minus refund transactions); orders with `cancelled_at` set or `test === true` are excluded; partial refunds are captured. Same definition as the Daily Digest (#21) — gross-order-value net of refunds, won't tie exactly to Shopify Analytics "sales".
 - **Refill due:** orders containing SKUs `SH-HR-HEADCALCIUM-NA-0013`, `SH-HR-HANDLEPP-NA-0011`, `SH-HR-HEADVITA-LAVENDER-0014`, `SH-HR-FILTERPLAN-0015` created 75–105 days ago
 - **Upsell gap:** orders containing showerhead SKUs (`SH-HH-BrushedChrome-0009`, `SH-HH-MATTEBLACK-0010`) created 14–120 days ago where the same order had no filter SKU
 
@@ -1751,9 +1765,10 @@ Every Monday at 9 AM PHT, posts two proactive lists to `#halo-home-shopify`: (1)
 
 | Scenario | Action |
 |----------|--------|
+| Always | Week-over-week block: net revenue, orders, AOV, refunds, top products (this week vs last) |
 | Refill-due customers found | Lists email, items, days since order, order # |
 | Upsell gap found | Lists email, showerhead product, days ago, order # |
-| Either section empty | Shows "none this week ✓" for that section |
+| Either list empty | Shows "none this week ✓" for that section |
 
 ### Error Handling
 

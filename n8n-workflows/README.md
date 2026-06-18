@@ -343,7 +343,7 @@ node n8n-workflows/deploy-halo-home-slack-bot.js
 
 ## Halo - Daily Digest
 
-Posts yesterday's Halo Home revenue + unfulfilled orders to `#halo-home-shopify` every morning at 10 AM PHT.
+Posts yesterday's Halo Home revenue + unfulfilled orders to `#halo-home-shopify` every morning at 10 AM PHT. Totals are computed deterministically in code (net revenue = gross `total_price` minus refunds; cancelled/test orders excluded; $0 comped flagged separately) — Claude Haiku only formats the numbers, it does not compute them.
 
 **Workflow ID:** `047cSNvFvUGHaf3O`
 **Schedule:** `0 10 * * *` Asia/Manila (10 AM PHT)
@@ -377,7 +377,7 @@ node n8n-workflows/deploy-halo-home-inventory-alert.js
 
 ## Halo - Weekly Report
 
-Posts refill due list + upsell gap to `#halo-home-shopify` every Monday at 9 AM PHT.
+Posts a week-over-week analytics block (net revenue, orders, AOV, refunds, top products vs prior 7 days) + refill due list + upsell gap to `#halo-home-shopify` every Monday at 9 AM PHT. Revenue is computed in code (net of refunds, cancelled/test excluded) — same definition as the Daily Digest.
 
 **Workflow ID:** `7N9gEZb7nDS0EDGu`
 **Schedule:** `0 9 * * 1` Asia/Manila (9 AM PHT Mondays)

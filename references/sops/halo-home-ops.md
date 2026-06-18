@@ -20,7 +20,7 @@
 
 ### Sales Snapshot
 - **Ask:** "what came in today / this week / this month"
-- **Output:** Revenue (SGD), order count, AOV, top products, refunds, comped orders
+- **Output:** Net revenue (SGD; gross `total_price` − refunds, cancelled/test excluded), order count, AOV, top products, refunds, comped orders
 - **Data source:** `get-orders` with date range + `created_at` filter
 
 ### Order Lookup
@@ -90,14 +90,15 @@
 ## Automated Workflows
 
 ### Daily Digest
-- **Runs:** 8 AM PHT daily
-- **Posts to:** #halo-home
-- **Content:** Yesterday's revenue, order count, AOV, top products, refunds, comped orders
+- **Runs:** 10 AM PHT daily
+- **Posts to:** #halo-home-shopify
+- **Content:** Yesterday's **net revenue** (gross `total_price` − refunds; cancelled/test orders excluded), order count, AOV, top products, refunds, comped ($0) orders
+- **Calc:** totals are computed deterministically in the `Combine Digest Data` Code node — Claude Haiku only formats the numbers (it does not do the math)
 - **Deploy:** `n8n-workflows/deploy-halo-home-daily-digest.js`
 
 ### Inventory Alert
-- **Runs:** 8 AM PHT daily
-- **Posts to:** #halo-home only when a change is detected
+- **Runs:** 9 AM PHT daily
+- **Posts to:** #halo-home-shopify only when a change is detected
 - **Logic:** Compares current DENY+OOS variants against previous run's saved state
   - First run saves baseline — no alert fires
   - Subsequent runs alert on newly OOS or back-in-stock

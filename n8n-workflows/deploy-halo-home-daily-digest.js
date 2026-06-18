@@ -22,12 +22,12 @@ const yesterday = yest.toISOString().split('T')[0];
 return { json: { today, yesterday, todayFormatted: now.toLocaleDateString('en-SG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Singapore' }) } };
 `.trim();
 
-const FORMAT_DIGEST_PROMPT = `You are an ops assistant for Halo Home. Format the provided data into a concise daily digest for the team's Slack channel.
+const FORMAT_DIGEST_PROMPT = `You are an ops assistant for Halo Home. You are given PRE-COMPUTED metrics. Format them into a concise daily digest for the team's Slack channel. Use every number EXACTLY as provided — do NOT recompute, re-add, round, or infer any figure. Revenue is already net of refunds, in SGD.
 
 Format exactly like this:
 *Halo Home — [Day, Date] Digest*
 ─────────────────────────────
-Revenue:     *$X,XXX SGD*
+Revenue:     *$X,XXX SGD*  (net of refunds)
 Orders:      *XX*
 AOV:         *$XXX SGD*
 
@@ -35,25 +35,76 @@ Top products:
   [product name] — XX units
   [product name] — XX units
 
-Refunds:     X ($XXX SGD) [omit line if none]
-Comped ($0): X orders [omit line if none]
+Refunds:     X ($XXX SGD) [omit line if refunds_count is 0]
+Comped ($0): X orders [omit line if comped_count is 0]
 
 *Unfulfilled — X pending*
   #XXXX  [email]  [items]  X days old
   #XXXX  [email]  [items]  ordered today
 [If no unfulfilled orders]: Unfulfilled: none ✓
 
-Keep it tight. No preamble. If zero orders yesterday, say "No orders yesterday." but still show unfulfilled section.`;
+Use thousands separators on money. Keep it tight. No preamble. If orders is 0, say "No orders yesterday." but still show the unfulfilled section.`;
 
-// Aggregator: combines yesterday orders + unfulfilled orders for Format Digest.
+// Compute digest metrics DETERMINISTICALLY in code — the LLM only formats, it never does math.
+// (Previously Claude summed a 5,000-char truncation of the raw orders, so any day with more than
+//  ~1 order under-reported revenue/orders. This is the fix for Shin's "totals look incorrect".)
+//
+// Revenue is NET: gross total_price minus refund transactions, over real sales only —
+// cancelled and test orders are excluded; $0 comped orders are counted separately.
 // $json = unfulfilled orders (from Fetch Unfulfilled Orders).
-// $('Fetch Yesterday Orders').item.json = yesterday's revenue data.
+// $('Fetch Yesterday Orders').item.json = yesterday's orders.
 // $('Build Date Range').item.json.todayFormatted = formatted date string.
 const COMBINE_DIGEST_DATA_CODE = `
+function num(x) { return parseFloat(x || 0) || 0; }
+function refundValue(o) {
+  return (o.refunds || []).reduce((s, r) =>
+    s + (r.transactions || []).reduce((a, t) => a + num(t.amount), 0), 0);
+}
+
+const rawOrders = $('Fetch Yesterday Orders').item.json.orders || [];
+const orders = rawOrders.filter(o => !o.cancelled_at && o.test !== true);
+
+const gross = orders.reduce((s, o) => s + num(o.total_price), 0);
+const refundsValue = orders.reduce((s, o) => s + refundValue(o), 0);
+const revenueNet = Math.round((gross - refundsValue) * 100) / 100;
+const orderCount = orders.length;
+const comped = orders.filter(o => num(o.total_price) === 0).length;
+const refunds = orders.filter(o =>
+  (o.refunds || []).length > 0 ||
+  o.financial_status === 'refunded' ||
+  o.financial_status === 'partially_refunded').length;
+const aov = orderCount > 0 ? Math.round((revenueNet / orderCount) * 100) / 100 : 0;
+
+const productMap = {};
+for (const o of orders) {
+  for (const li of (o.line_items || [])) {
+    productMap[li.title] = (productMap[li.title] || 0) + (li.quantity || 0);
+  }
+}
+const topProducts = Object.entries(productMap)
+  .sort((a, b) => b[1] - a[1]).slice(0, 5)
+  .map(([title, units]) => ({ title, units }));
+
+const unfulfilled = ($json.orders || []).map(o => ({
+  name: o.name,
+  email: o.email || 'no email',
+  items: (o.line_items || []).map(li => li.title + ' x' + li.quantity).join(', '),
+  days_old: Math.floor((Date.now() - new Date(o.created_at).getTime()) / 86400000),
+}));
+
 return [{ json: {
-  yesterday_orders: $('Fetch Yesterday Orders').item.json.orders || [],
-  unfulfilled_orders: $json.orders || [],
   date: $('Build Date Range').item.json.todayFormatted,
+  metrics: {
+    currency: 'SGD',
+    revenue_net: revenueNet,
+    orders: orderCount,
+    aov,
+    refunds_count: refunds,
+    refunds_value: Math.round(refundsValue * 100) / 100,
+    comped_count: comped,
+    top_products: topProducts,
+  },
+  unfulfilled,
 } }];
 `.trim();
 
@@ -140,7 +191,7 @@ const workflow = {
             system: ${JSON.stringify(FORMAT_DIGEST_PROMPT)},
             messages: [{
               role: 'user',
-              content: 'Date: ' + $json.date + '\\n\\nYesterday orders:\\n' + JSON.stringify($json.yesterday_orders).slice(0, 5000) + '\\n\\nUnfulfilled orders:\\n' + JSON.stringify($json.unfulfilled_orders).slice(0, 3000)
+              content: 'Date: ' + $json.date + '\\n\\nMetrics (use these EXACT numbers, do not recompute):\\n' + JSON.stringify($json.metrics) + '\\n\\nUnfulfilled orders:\\n' + JSON.stringify($json.unfulfilled).slice(0, 3000)
             }]
           }
         }}`,
