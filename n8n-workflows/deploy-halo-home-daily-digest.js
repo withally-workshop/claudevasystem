@@ -12,6 +12,10 @@ const WORKFLOW_ID = process.env.HALO_HOME_DAILY_DIGEST_WORKFLOW_ID || '047cSNvFv
 // Get channel ID: right-click #halo-home in Slack → Copy link → extract C0XXXXXXXX
 const HALO_HOME_CHANNEL_ID = process.env.HALO_HOME_SLACK_CHANNEL_ID || '';
 
+// Emit the yesterday window as absolute UTC instants (…Z), NOT a "+08:00" string.
+// A "+08:00" offset placed in the query string is decoded as a SPACE by the server, so
+// Shopify dropped the offset and used a UTC-midnight day — pulling orders from 00:00–08:00 PHT
+// of the wrong day into the digest. UTC bounds derived from the true PHT day boundary avoid that.
 const BUILD_DATE_CODE = `
 function sgtOffset(d) { return new Date(d.getTime() + 8 * 60 * 60 * 1000); }
 const now = sgtOffset(new Date());
@@ -19,7 +23,16 @@ const today = now.toISOString().split('T')[0];
 // Yesterday in PHT
 const yest = sgtOffset(new Date(Date.now() - 86400000));
 const yesterday = yest.toISOString().split('T')[0];
-return { json: { today, yesterday, todayFormatted: now.toLocaleDateString('en-SG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Singapore' }) } };
+// True PHT day boundaries expressed in UTC: today 00:00 PHT = (today 00:00 UTC) − 8h.
+const todayStartUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0) - 8 * 60 * 60 * 1000);
+const yesterdayStartUTC = new Date(todayStartUTC.getTime() - 86400000);
+return { json: {
+  today,
+  yesterday,
+  createdMin: yesterdayStartUTC.toISOString(),
+  createdMax: todayStartUTC.toISOString(),
+  todayFormatted: now.toLocaleDateString('en-SG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Singapore' }),
+} };
 `.trim();
 
 const FORMAT_DIGEST_PROMPT = `You are an ops assistant for Halo Home. You are given PRE-COMPUTED metrics. Format them into a concise daily digest for the team's Slack channel. Use every number EXACTLY as provided — do NOT recompute, re-add, round, or infer any figure. Revenue is already net of refunds, in SGD.
@@ -145,7 +158,7 @@ const workflow = {
       onError: 'continueRegularOutput',
       parameters: {
         method: 'GET',
-        url: `=https://${SHOPIFY_DOMAIN}/admin/api/2024-10/orders.json?status=any&limit=250&created_at_min={{ $json.yesterday }}T00:00:00+08:00&created_at_max={{ $json.today }}T00:00:00+08:00`,
+        url: `=https://${SHOPIFY_DOMAIN}/admin/api/2024-10/orders.json?status=any&limit=250&created_at_min={{ $json.createdMin }}&created_at_max={{ $json.createdMax }}`,
         sendHeaders: true,
         headerParameters: {
           parameters: [

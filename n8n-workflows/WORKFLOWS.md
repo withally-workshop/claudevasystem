@@ -1541,6 +1541,7 @@ Posts yesterday's Halo Home sales summary + current unfulfilled orders to `#halo
 - **Revenue is NET:** gross `total_price` minus refund transactions (`refunds[].transactions[].amount`).
 - **Real sales only:** orders with `cancelled_at` set or `test === true` are excluded from revenue, count, AOV, and top products.
 - **$0 comped orders** are counted and reported on their own line (not hidden in revenue).
+- **Day window is true PHT:** `Build Date Range` emits the yesterday window as absolute UTC instants (`…Z`), derived from the PHT midnight boundary. (A `+08:00` offset in the query string gets decoded as a space and dropped, which had made the window a UTC day — pulling 00:00–08:00 PHT orders into the wrong day. Fixed 2026-06-18.)
 - **Refunds** are counted via `refunds[]` length / `financial_status` (captures partial refunds, not just fully-refunded).
 - **Definition note:** this is gross-order-value net of refunds (includes tax + shipping). It will not tie exactly to Shopify Analytics "Total/Net sales", which also nets discounts and uses different tax/shipping treatment.
 
