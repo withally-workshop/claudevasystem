@@ -10,6 +10,8 @@ projects/krave-ops-showcase/
 .superpowers/
 reports/ops-report/
 .claude/skills/**/last-run.log
+.claude/skills/**/state.json
+.claude/skills/**/scan-stats.jsonl
 
 # Local Netlify folder
 .netlify
