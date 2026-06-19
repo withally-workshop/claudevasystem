@@ -1700,6 +1700,7 @@ Alerts `#halo-home-shopify` when Halo Home products go out of stock, come back i
 - Low stock: `inventory_management = shopify` + not OOS + `inventory_quantity < 10`
 - State keys: `oos_{variantId}` and `low_{variantId}` stored in workflow static data
 - First run saves baseline; alerts only fire when state changes from the previous run
+- **"Restocked above threshold" only fires when stock goes UP.** A LOW→OOS drop also exits the low bucket but is reported as OOS only — not as a (false) restock. (Fixed 2026-06-18 after a LOW→OOS variant posted both "Out of Stock (new)" and "Restocked" in the same message.)
 
 ### Outputs
 

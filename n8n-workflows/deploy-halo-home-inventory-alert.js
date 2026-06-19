@@ -61,7 +61,9 @@ for (const product of products) {
       currentLowStock[key] = label + ' (' + qty + ' units)';
       if (!prevState['low_' + key]) newlyLowStock.push(label + ' — ' + qty + ' units left');
     } else {
-      if (prevState['low_' + key]) backAboveThreshold.push(label);
+      // Only "restocked above threshold" if it went UP. A LOW->OOS drop also exits the
+      // low bucket but must NOT be reported as restocked (it's covered by newlyOos).
+      if (prevState['low_' + key] && !isOos) backAboveThreshold.push(label);
     }
   }
 }
