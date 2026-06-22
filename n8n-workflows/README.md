@@ -23,6 +23,7 @@ Automated workflows running on n8n Cloud (`noatakhel.app.n8n.cloud`).
 | Halo Weekly Intelligence Report | Active | 7AM PHT Mondays | [deploy-halo-intelligence-report.js](deploy-halo-intelligence-report.js) |
 | Crave - Daily Lead Push | Inactive (Pro-gated) | 9AM PHT daily | [deploy-crave-lead-push.js](deploy-crave-lead-push.js) |
 | Crave - Status Sync | Inactive (Pro-gated) | 9AM PHT daily | [deploy-crave-status-sync.js](deploy-crave-status-sync.js) |
+| Crave - Weekly Creator Scrape | Active | 11AM PHT Mondays | [deploy-crave-weekly-scrape.js](deploy-crave-weekly-scrape.js) |
 | LinkedIn Post Monitor | Inactive (needs actor verification) | Every 30min all day | [deploy-linkedin-post-monitor.js](deploy-linkedin-post-monitor.js) |
 | Halo - VA Slack Bot | Active | Slack `app_mention` in #halo-home-shopify | [deploy-halo-home-slack-bot.js](deploy-halo-home-slack-bot.js) |
 | Halo - Daily Digest | Active | 10 AM PHT daily (Asia/Manila) | [deploy-halo-home-daily-digest.js](deploy-halo-home-daily-digest.js) |
@@ -95,6 +96,29 @@ node n8n-workflows/deploy-crave-status-sync.js
 **Credentials required:**
 - `Google Sheets account` — `83MQOm78gYDvziTO` — Crave Creator Outreach sheet
 - `SMARTLEAD_API_KEY` — baked in at deploy time from local `.env`
+
+---
+
+## Crave - Weekly Creator Scrape
+
+Cloud port of Phase 1 of `projects/crave-outreach/` (Python). Scrapes TikTok UGC creators for US + NL (all configured search terms) via Apify, enriches niche/first-name on new handles (Claude Haiku), dedupes, and does a **status-preserving** upsert into the Crave master Sheet (existing `approved`/`outreach_queued` rows are never reset). Reports to #krave-creator-outreach (detailed) + #ops-command (summary). Discovery only — Noa still reviews and approves; outreach (Phase 2) stays manual on Base.
+
+**Workflow ID:** `9VtIbccU1dFkoko9`
+**Schedule:** 11AM PHT Mondays
+**Status:** Active (2026-06-22)
+
+**Deploy:**
+```bash
+CRAVE_SCRAPE_WF_ID=9VtIbccU1dFkoko9 node n8n-workflows/deploy-crave-weekly-scrape.js
+```
+
+**Credentials required:**
+- `Google Sheets account` — `83MQOm78gYDvziTO` (noa@kravemedia.co) — **must have Editor on the Crave sheet** (it's link-shared read-only; not world-writable due to creator PII)
+- `Apify Token (query)` — `q05geHfB0qtHthav` (httpQueryAuth, scoped api.apify.com)
+- `Anthropic API Key (header)` — `LY6gYSrbEouJMpsb` (httpHeaderAuth, scoped api.anthropic.com)
+- `Krave Slack Bot` — `Bn2U6Cwe1wdiCXzD`
+
+**Notes:** Apify URL uses `&fields=authorMeta,text` to avoid n8n Starter OOM; volume kept modest (US 120 / NL 80) for the same reason. Tune `REGIONS` in the deploy script + re-test to change.
 
 ---
 

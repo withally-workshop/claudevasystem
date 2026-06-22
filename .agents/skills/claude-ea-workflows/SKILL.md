@@ -64,8 +64,9 @@ Use `n8n-workflows/WORKFLOWS.md` for current IDs, status, webhook paths, deploym
 | Morning Coffee — Noa's Daily Briefing | `morning-coffee` | Local Windows Task Scheduler task `KraveEA-MorningCoffee`, Mon–Fri 10:00 AM Asia/Manila. Not an n8n workflow, not a remote CCR — runs locally because it depends on local-only MCP servers (`gmail-noa`, `slack-noa`, `slack` bot). |
 | ClickUp Invoice Sync | `clickup-invoice-sync` | No standalone n8n workflow. Logic embedded in Approval Polling (nodes n18–n23) and Payment Detection (patch cu1–cu3). John includes ClickUp task URL in approval reply to activate. |
 | Halo - Weekly Intelligence Report | `halo-intelligence-report` | Scheduled Monday 7:00 AM Asia/Manila. Apify TikTok + Instagram scrape → score + rank → Claude analysis → Slack + Google Sheet + email delivery. |
-| Crave - Daily Lead Push | `crave-outreach` | Schedule 9am PHT daily. Reads Sheet for approved rows, pushes to Smartlead campaign 3375376, marks outreach_queued. Inactive during warm-up. |
-| Crave - Status Sync | `crave-outreach` | Schedule 9am PHT daily. Pulls Smartlead lead statuses (OPENED, REPLIED, BOUNCED), writes back to Sheet. Inactive during warm-up. |
+| Crave - Weekly Creator Scrape | `crave-outreach` | **Active.** Schedule 11am PHT Mondays (`9VtIbccU1dFkoko9`). Scrape US+NL TikTok creators (all terms) → enrich new → dedupe → status-preserving Sheet upsert → report to #krave-creator-outreach + #ops-command. Cloud port of `src/main.py` Phase 1. |
+| Crave - Daily Lead Push | `crave-outreach` | Schedule 9am PHT daily. Reads Sheet for approved rows, pushes to Smartlead campaign 3375376, marks outreach_queued. Inactive (Pro-gated). |
+| Crave - Status Sync | `crave-outreach` | Schedule 9am PHT daily. Pulls Smartlead lead statuses (OPENED, REPLIED, BOUNCED), writes back to Sheet. Inactive (Pro-gated). |
 
 ## Operating Rules
 

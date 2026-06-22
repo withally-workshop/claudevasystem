@@ -70,11 +70,18 @@ Run weekly: scrape → Noa approves → `export_approved.py` → import the CSV 
 | Reply rate | 5–15% | Below 3% = template needs work |
 | Bounce rate | Below 3% | Above 5% = list quality issue |
 
-## n8n Automation (INACTIVE — Pro-gated)
+## n8n Automation
+
+**ACTIVE — Phase 1 scrape (replaces running `src/main.py` by hand):**
+- **Crave - Weekly Creator Scrape** (`9VtIbccU1dFkoko9`) — Mondays 11 AM PHT. Scrapes US + NL (all search terms) → enrich (new handles) → dedupe → **status-preserving** upsert to the Sheet (`status=new` for new; existing `approved`/`outreach_queued` never reset) → reports to #krave-creator-outreach + #ops-command. Deploy: `n8n-workflows/deploy-crave-weekly-scrape.js`. Full docs: WORKFLOWS.md Workflow 24.
+  - Volume is capped low (US 120 / NL 80) because n8n Cloud Starter OOMs above a few hundred items; the Apify URL also projects `fields=authorMeta,text`. For a bigger pull, run the Python `src/main.py` locally instead, or raise `REGIONS` in the deploy script and re-test.
+  - The Sheets credential is **noa@kravemedia.co** and must keep **Editor** on the Crave sheet (the sheet is link-shared read-only by design; granting edit was the one manual setup step).
+
+**INACTIVE — Phase 2 (Pro-gated):**
 - **Crave - Daily Lead Push** (`ke52OLrSUXk8mPVw`) — pushes approved leads to Smartlead
 - **Crave - Status Sync** (`uUGxA3GW1W0vq6el`) — syncs opens/replies/bounces back to Sheet
 
-Both are **inactive** and depend on the Smartlead API (Pro). Leave off on Base; re-activate after upgrading to Pro.
+Both Phase-2 workflows depend on the Smartlead API (Pro). Leave off on Base; re-activate after upgrading to Pro.
 
 ## Notes
 - Conversions go through the Typeform (`https://form.typeform.com/to/lAPIxgqv`); John can't see submissions — Noa/strategist must action them.

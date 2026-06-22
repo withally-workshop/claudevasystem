@@ -49,6 +49,7 @@
 | 21 | Halo - Daily Digest | `047cSNvFvUGHaf3O` | Active | 10 AM PHT daily (Asia/Manila) | Pull yesterday's Shopify orders + unfulfilled count → Claude formats → post to #halo-home-shopify |
 | 22 | Krave — Creator Invoice Email Scan | `DbIJYYQ3FE4HKprB` | **ACTIVE** (rebuilt to prep-and-handoff; tested end-to-end + activated 2026-06-15). Parses + classifies → validates → posts #ops-command prep package → one-line reply to hardcoded-allowlist senders only (@kravemedia.co; others get no reply, flag only). No email forward, no API bill creation, no tracker write (the EOD reconcile, #25, owns the tracker; John creates the DRAFT manually; flips to auto-create ~Aug 2026). | 09:00/12:00/15:00/18:00 PHT Mon–Fri + `POST /webhook/krave-creator-invoice-email-scan` | Scan john@kravemedia.co for unread invoice PDFs, parse, validate, hand John a ready-to-create prep package |
 | 23 | Halo - Inventory Alert | `NBvfYPmjdTXzrKfb` | Active | 9 AM PHT daily (Asia/Manila) | Compare product stock vs previous run; alert #halo-home-shopify on OOS changes + newly low-stock (<10 units) |
+| 24 | Crave - Weekly Creator Scrape | `9VtIbccU1dFkoko9` | Active | 11 AM PHT Mondays | Scrape TikTok UGC creators (US + NL, all search terms) via Apify, enrich niche/first-name (Claude Haiku, NEW handles only), dedupe, status-preserving upsert to the Crave master Sheet, report to #krave-creator-outreach + #ops-command |
 | 24 | Halo - Weekly Report | `7N9gEZb7nDS0EDGu` | Active | 9 AM PHT Mondays (Asia/Manila) | Refill due list (filter buyers 75–105 days ago) + upsell gap (showerhead buyers without filters) → post to #halo-home-shopify |
 | 25 | Krave — Creator Bills EOD Reconcile | `FdtmNRozitg711BQ` | Active | 19:00 PHT Mon–Fri | POSTs krave-bot `/cron/reconcile-bills`; bot mirrors Airwallex Spend bills into the Creator & AP Bills Tracker (fills Bill IDs by invoice#+amount+currency, appends missing) |
 
@@ -832,11 +833,13 @@ Update `TIKTOK_ACTOR_ID` and `INSTAGRAM_ACTOR_ID` in the deploy script if differ
 |----------------|------|----|---------|---------|
 | Gmail account | Gmail OAuth2 | `vxHex5lFrkakcsPi` | Payment Detection | `noa@kravemedia.co` |
 | Gmail account (john) | Gmail OAuth2 | `vsDW3WpKXqS9HUs3` | Invoice Reminder Cron | `john@kravemedia.co` |
-| Google Sheets account | Google Sheets OAuth2 | `83MQOm78gYDvziTO` | Payment Detection, Invoice Reminder Cron, Invoice Request Intake | `noa@kravemedia.co` |
-| Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | Slack-facing workflow posts, modal handling, and SOD local/manual runs | Krave Slack workspace |
+| Google Sheets account | Google Sheets OAuth2 | `83MQOm78gYDvziTO` | Payment Detection, Invoice Reminder Cron, Invoice Request Intake, Crave Weekly Creator Scrape | `noa@kravemedia.co` |
+| Krave Slack Bot | Slack API (Bot Token) | `Bn2U6Cwe1wdiCXzD` | Slack-facing workflow posts, modal handling, SOD local/manual runs, Crave Weekly Creator Scrape | Krave Slack workspace |
 | OpenAI account | OpenAI API | `UIREXIYn59JOH1zU` | Inbox Triage Daily | OpenAI API |
 | APIFY_API_KEY | Baked into workflow nodes at deploy time (n8n Starter has no env vars) — sourced from local `.env`; rotate by redeploying | — | Halo Intelligence Report | Apify account (apify.com) |
 | ANTHROPIC_API_KEY | Baked into workflow nodes at deploy time (n8n Starter has no env vars) — sourced from local `.env`; rotate by redeploying | — | Halo Intelligence Report | Anthropic API |
+| Apify Token (query) | `httpQueryAuth` (scoped to `api.apify.com`) | `q05geHfB0qtHthav` | Crave Weekly Creator Scrape | Apify account (apify.com) |
+| Anthropic API Key (header) | `httpHeaderAuth` (scoped to `api.anthropic.com`) | `LY6gYSrbEouJMpsb` | Crave Weekly Creator Scrape | Anthropic API |
 
 ### Airwallex
 
@@ -1109,6 +1112,7 @@ node n8n-workflows/deploy-halo-home-slack-bot.js
 node n8n-workflows/deploy-halo-home-daily-digest.js
 node n8n-workflows/deploy-halo-home-inventory-alert.js
 node n8n-workflows/deploy-halo-home-weekly-report.js
+CRAVE_SCRAPE_WF_ID=9VtIbccU1dFkoko9 node n8n-workflows/deploy-crave-weekly-scrape.js   # omit the env var to create fresh
 ```
 
 Most current deploy scripts update the matching live workflow in place and then reactivate it. Older archived copies may still exist in n8n, so confirm the non-archived workflow ID before assuming a stale link is current.
@@ -1392,6 +1396,64 @@ Schedule Trigger
 
 ### Activation Note
 Workflow is deployed **inactive**. Warm-up is complete, but this workflow calls the Smartlead API, which requires the **Pro plan ($94/mo)** — the current **Base plan has no API**, so it cannot run. Leave inactive; activate only after upgrading to Pro. On Base, lead push is manual (`export_approved.py` → import CSV in the Smartlead UI). See KM-SOP-009.
+
+---
+
+## Workflow 24 — Crave - Weekly Creator Scrape
+
+**n8n URL:** `https://noatakhel.app.n8n.cloud/workflow/9VtIbccU1dFkoko9`
+**Deploy script:** `n8n-workflows/deploy-crave-weekly-scrape.js`
+**Live state:** Active as of 2026-06-22. Cloud port of Phase 1 of the Python pipeline in `projects/crave-outreach/` — replaces running `python src/main.py` by hand each week. Phase 2 (export → Smartlead) stays manual on Base (see KM-SOP-009).
+
+### Purpose
+Weekly TikTok UGC-creator discovery. Scrapes US + NL (all configured search terms), classifies niche + first name on **new** creators via Claude Haiku, dedupes, **status-preservingly** upserts the Crave master Sheet, and reports to #krave-creator-outreach (detailed) + #ops-command (summary). Discovery only — never sends outreach; Noa still reviews and flips `status` to `approved`.
+
+### Triggers
+| Type | Details |
+|------|---------|
+| Schedule | weekly, Monday `triggerAtHour: 11` — **11:00 AM PHT** (`settings.timezone: Asia/Manila`) |
+
+### Node Flow
+```
+Schedule Trigger
+  ├─ Fetch US (HTTP — Apify clockworks~tiktok-scraper, run-sync, US proxy, searchQueries=3 US terms)
+  └─ Fetch NL (HTTP — Apify, NL proxy, searchQueries=4 NL terms)
+        → Normalize US / Normalize NL (Code — extract authorMeta+text, region_signal, email regex, follower floor; US≥1000 / NL≥500)
+        → Merge (append)
+        → Dedupe (Code — by handle, then by email keep-higher-follower)
+        → Read Sheet (Google Sheets read — existing handles + statuses)
+        → Prepare Enrich (Code — batch ONLY new handles, ~40/Claude call)
+        → Claude Enrich (HTTP — Haiku, httpHeaderAuth cred)
+        → Apply Enrich (Code — new→Claude niche/name+status=new; existing→preserve Sheet niche/name/status)
+        → Upsert Sheet (Google Sheets appendOrUpdate on `handle`; maps A–N + status only)
+        → Build Reports (Code)
+        → Post Outreach Report (#krave-creator-outreach) → Post Ops Summary (#ops-command)
+```
+
+### Key Logic
+- **Status preservation (critical):** mirrors `src/sheets.py`. Existing handles refresh only cols A–N (handle..scraped_at); `status`/`notes`/`outreach_*`/`replied_at`/`bounced`/`opened_at` are left unmapped so `appendOrUpdate` never touches them. New handles append with `status=new`. This is what stops already-contacted creators (`approved`/`outreach_queued`) from being re-surfaced for outreach.
+- **Enrich new-only:** `Prepare Enrich` filters out handles already in the Sheet (mirrors the Python per-handle cache); existing rows keep their saved niche/first_name. Saves Claude calls and avoids overwriting prior enrichment.
+- **Apify field projection:** the dataset URL uses `&fields=authorMeta,text&clean=true`. clockworks returns large full-video objects; without this projection n8n Cloud Starter **OOMs** holding them (see Runbook).
+- **Region:** `proxyCountryCode` + Dutch search terms bias results; `region_signal` is best-effort from bio/location keywords, not a hard geo-filter.
+- **Volume:** US `totalLimit` 120 / NL 80 (perQuery 40 / 20). Kept modest because n8n Starter retains every node's output in memory and OOMs above a few hundred items — plenty for a weekly incremental run. Tune in the deploy script's `REGIONS` and re-test if you want more.
+
+### Credentials
+Apify via `httpQueryAuth` cred `q05geHfB0qtHthav`; Anthropic via `httpHeaderAuth` cred `LY6gYSrbEouJMpsb` (both domain-scoped, in n8n's encrypted store — NOT baked into the workflow JSON). Sheets `83MQOm78gYDvziTO` (noa@kravemedia.co — **must have Editor on the Crave sheet**, see below). Slack `Bn2U6Cwe1wdiCXzD`.
+
+### Outputs
+| Scenario | Action |
+|----------|--------|
+| New + existing creators found | New appended (`status=new`); existing A–N refreshed; both Slack reports posted |
+| Only existing creators re-found | A–N refreshed, statuses preserved; reports show 0 new |
+| Apify region returns nothing | `continueOnFail` — that region contributes 0; other region still processes |
+
+### Error Handling
+| Failure | Behaviour |
+|---------|-----------|
+| Apify run-sync exceeds 300s | run-sync caps at 5 min; returns partial set (continueOnFail) |
+| n8n out-of-memory | Mitigated by `fields=authorMeta,text` projection + modest volume. If it recurs, lower `REGIONS` limits |
+| Sheets write `Forbidden` | The Sheets credential account (noa@kravemedia.co) lacks Editor on the Crave sheet — grant it (the sheet is link-shared read-only by design; not world-writable because of creator PII) |
+| Claude batch returns bad JSON | `Apply Enrich` tolerates per-batch parse failures; affected new rows default niche=`other` |
 
 ---
 
