@@ -276,6 +276,8 @@ A **Customer Safety Gate** (2026-06-17) blocks creation and routes to the same m
 
 **Slack intake fields:** `Client Name or Company Name`, `Billing Address`, `Currency`, `Payout`, `Invoice Date`, `Memo / Project Description`, and freeform `Line Items`. Billing Address is captured as text and condensed into `Project Description` because the current tracker does not have a dedicated billing-address column.
 
+**Amount in the Currency field (2026-06-23):** requesters often type the amount into the single `Currency` field (e.g. `SGD 1300`). Both the Slack handler and intake split it into a clean 3-letter currency code + the embedded total and consolidate it into one line item, so the amount no longer has to live inside a line item and such requests no longer hard-fail on "missing unit_price". Live via `patch-slack-handler-currency-amount.js` + `patch-intake-currency-amount.js`.
+
 **Date rules:** blank `Payout` defaults to `7 day payout`. Supported payout phrases in v1 are `7 day payout`, `14 day payout`, `30 day payout`, `due now`, and `due on <date>` such as `due on May 1, 2026`. `Invoice Date` accepts blank, `today`, `tomorrow`, `YYYY-MM-DD`, or clear month-name dates like `May 1, 2026`, and defaults to today in `Asia/Manila`.
 
 **Webhook (manual trigger):**

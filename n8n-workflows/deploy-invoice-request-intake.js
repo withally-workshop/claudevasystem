@@ -171,11 +171,24 @@ const payoutResult = invoiceDateResult.ok
   : { ok: false, payout_raw: payload.payout_raw || '7 day payout', reason: 'unparseable invoice_date' };
 const computedDueDate = invoiceDateResult.ok && payoutResult.ok ? payoutResult.due_date : '';
 const daysUntilDue = computedDueDate ? diffDays(invoiceDateResult.value, computedDueDate) : 0;
-// If all items have null prices but a total is available in the payload, consolidate into one line item.
+// The Slack modal has a single "Currency" field. Requesters frequently type the
+// amount there too (e.g. "SGD 1300"), so the figure never reaches a line item and the
+// old validation hard-failed on "missing unit_price". Split that field into a clean
+// 3-letter currency code and any embedded total, then feed the total into the
+// line-item fallback below so the amount no longer has to live inside a line item.
+const rawCurrency = String(payload.currency || '').trim();
+const currencyCodeMatch = rawCurrency.match(/[A-Za-z]{3}/);
+const cleanCurrency = currencyCodeMatch
+  ? currencyCodeMatch[0].toUpperCase()
+  : (rawCurrency.replace(/[^A-Za-z]/g, '').toUpperCase() || rawCurrency.toUpperCase());
+const currencyEmbeddedAmount = Number((rawCurrency.match(/[0-9][0-9,.]*/g) || []).join('').replace(/,/g, '')) || 0;
+
+// If all items have null prices but a total is available (payload field or embedded in
+// the currency field), consolidate into one line item instead of failing.
 const nullPriceItems = lineItems.filter(i => i.unit_price === null || i.unit_price === undefined);
 let resolvedLineItems = lineItems;
 if (nullPriceItems.length === lineItems.length && lineItems.length > 0) {
-  const rawAmount = payload.amount || payload.total || payload.subtotal_amount || 0;
+  const rawAmount = payload.amount || payload.total || payload.subtotal_amount || currencyEmbeddedAmount || 0;
   const payloadTotal = Number(String(rawAmount).replace(/[^0-9.]/g, '')) || 0;
   if (payloadTotal > 0) {
     resolvedLineItems = [{
@@ -195,7 +208,7 @@ const subtotal = resolvedLineItems.reduce((sum, item) => {
 
 const missing = [];
 if (!payload.client_name && !payload.client_name_or_company_name) missing.push('client_name_or_company_name');
-if (!payload.currency) missing.push('currency');
+if (!cleanCurrency) missing.push('currency');
 if (!resolvedLineItems.length) missing.push('line_items');
 const stillNullPriceItems = resolvedLineItems.filter(i => i.unit_price === null || i.unit_price === undefined);
 if (stillNullPriceItems.length) missing.push('unit_price for: ' + stillNullPriceItems.map(i => i.description || 'unnamed').join(', '));
@@ -214,7 +227,7 @@ const baseRequest = {
   client_name: resolvedClientName,
   billing_address: payload.billing_address || '',
   client_email: payload.client_email || '',
-  currency: payload.currency || '',
+  currency: cleanCurrency || '',
   payout_raw: payoutResult.payout_raw || '7 day payout',
   invoice_date_input: invoiceDateInput,
   invoice_date: invoiceDateResult.ok ? invoiceDateResult.value : '',

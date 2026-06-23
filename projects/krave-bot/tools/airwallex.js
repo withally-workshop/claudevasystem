@@ -166,6 +166,20 @@ async function listCustomers({ name, email, page_size = 20 }) {
 }
 
 async function createCustomer({ name, email, country_code, address, city }) {
+  // Email-dedup backstop (2026-06-23 incident: a price reply made the bot create a
+  // second "Get Customers" customer + invoice because the only lookup was prompt-driven
+  // by name and missed on casing — "Get Customers Pte Ltd" vs stored "Get Customers PTE
+  // LTD"). Before creating, reuse any existing customer with the exact same email so we
+  // never spawn a duplicate of a real client. Mirrors assertNotTestCustomer: a
+  // deterministic code guard, not a prompt rule.
+  if (email) {
+    const wanted = String(email).toLowerCase().trim();
+    const { customers } = await listCustomers({ email, page_size: 100 });
+    const match = (customers || []).find(
+      (c) => c.email && String(c.email).toLowerCase().trim() === wanted
+    );
+    if (match) return { ...match, reused_existing: true };
+  }
   const body = { request_id: randomUUID(), name, type: 'BUSINESS' };
   if (email) body.email = email;
   const addr = {};

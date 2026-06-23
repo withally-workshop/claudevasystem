@@ -210,6 +210,16 @@ const line_items = lineItemsRaw
   .map(parseLineItem)
   .filter(Boolean);
 
+// The modal has one "Currency" field; requesters often type the amount there too
+// (e.g. "SGD 1300"). Split it into a clean 3-letter code + the embedded total so the
+// receipt reads correctly and a clean currency/amount flows to the intake.
+const rawCurrency = String(getValue('currency') || '').trim();
+const currencyCodeMatch = rawCurrency.match(/[A-Za-z]{3}/);
+const currencyCode = currencyCodeMatch
+  ? currencyCodeMatch[0].toUpperCase()
+  : (rawCurrency.replace(/[^A-Za-z]/g, '').toUpperCase() || rawCurrency.toUpperCase());
+const amount = Number((rawCurrency.match(/[0-9][0-9,.]*/g) || []).join('').replace(/,/g, '')) || 0;
+
 return {
   json: {
     origin_channel_id: originChannelId,
@@ -220,7 +230,8 @@ return {
     company_name: getValue('client_name_or_company_name'),
     client_email: getValue('client_email'),
     billing_address: getValue('billing_address'),
-    currency: getValue('currency'),
+    currency: currencyCode,
+    amount,
     payout_raw: payoutResult.payout_raw || '7 day payout',
     invoice_date_input: invoiceDateInput,
     invoice_date: invoiceDateResult.ok ? invoiceDateResult.value : '',
@@ -479,7 +490,7 @@ const workflow = {
           '\\n- Requester: ' + ($json.submitted_by_slack_user_name || $json.submitted_by_slack_user_id) +
           '\\n- Client: ' + $json.client_name_or_company_name +
           '\\n- Billing Address: ' + ($json.billing_address || '-') +
-          '\\n- Amount: ' + $json.currency + ' ' + $json.line_items.reduce((sum, item) => sum + ((Number(item.quantity || 1)) * (Number(item.unit_price || 0))), 0) +
+          '\\n- Amount: ' + $json.currency + ' ' + ($json.amount || $json.line_items.reduce((sum, item) => sum + ((Number(item.quantity || 1)) * (Number(item.unit_price || 0))), 0)) +
           '\\n- Invoice Date: ' + ($json.invoice_date || 'Needs review') +
           '\\n- Payout: ' + ($json.payout_raw || '7 day payout') +
           '\\n- Due Date: ' + ($json.due_date || 'Needs review') +

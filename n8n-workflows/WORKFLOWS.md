@@ -579,6 +579,7 @@ Handles the Slack-facing part of invoice intake. It accepts both the `/invoice-r
 - The line item helper text is freeform, with examples like `Krave Media x1 @ 1300`
 - Parses one line item per line and forwards the resulting `line_items[]` array to `krave-invoice-request-intake`
 - Defaults quantity to `1` whenever the requester omits it
+- **Currency field carries the amount (2026-06-23):** `Normalize Modal Submission` splits the single `currency` field (e.g. `SGD 1300`) into a clean 3-letter code + an `amount`, forwards both to intake, and the channel receipt shows the parsed amount (no more `SGD 1300 0`). Live via `patch-slack-handler-currency-amount.js`; also in deploy-script source.
 
 ### Outputs
 
@@ -672,6 +673,7 @@ Replaces unstructured Slack invoice requests with a Structured Slack modal intak
 - Captures `Payout` and `Invoice Date`, then computes the final `Due Date` inside intake.
 - Supports payout phrases `7 day payout`, `14 day payout`, `30 day payout`, `due now`, and `due on <date>`.
 - Supports multiple line items per request.
+- **Amount may be supplied in the `Currency` field (2026-06-23).** The modal has a single `Currency` field and requesters often type the amount there too (e.g. `SGD 1300`). `Normalize Slack Submission` splits it into a clean 3-letter currency code + the embedded total, then consolidates into one line item — so the amount no longer has to live inside a line item and a request like that no longer hard-fails on "missing unit_price". Live via `patch-intake-currency-amount.js`; also in deploy-script source. Prevents the 2026-06-23 "Get Customers" cascade where a missing line-item price triggered a price prompt and an out-of-band invoice.
 - Uses email-first Airwallex customer reuse: exact email match wins, name matching is only a fallback, and a new billing customer is created only if neither lookup resolves.
 - Posts a success receipt back to the originating Slack receipt thread via `Krave Slack Bot` when a draft is created.
 

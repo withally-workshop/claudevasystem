@@ -116,6 +116,21 @@ assert.match(
 assert.match(deploySource, /failed_validation/, 'Expected validation failure status');
 assert.match(deploySource, /intake_received/, 'Expected intake_received status');
 assert.match(deploySource, /subtotal/, 'Expected subtotal calculation');
+assert.match(
+  deploySource,
+  /currencyEmbeddedAmount/,
+  'Expected intake to recover an amount embedded in the currency field (e.g. "SGD 1300")'
+);
+assert.match(
+  deploySource,
+  /cleanCurrency/,
+  'Expected intake to normalize the currency field to a clean 3-letter code'
+);
+assert.match(
+  deploySource,
+  /currencyEmbeddedAmount\s*\|\|\s*0/,
+  'Expected the currency-embedded amount to feed the single-line-item fallback'
+);
 assert.match(deploySource, /unparseable payout/i, 'Expected explicit payout parse failures');
 assert.match(deploySource, /unparseable invoice_date/i, 'Expected explicit invoice date parse failures');
 assert.match(deploySource, /authentication\/login/, 'Expected Airwallex auth login endpoint');
