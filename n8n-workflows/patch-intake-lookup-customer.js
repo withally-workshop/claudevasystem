@@ -5,6 +5,19 @@
 //
 // Safe to re-run: skips if already patched.
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ⛔ SUPERSEDED 2026-06-23 — DO NOT RUN.
+// Live "Lookup Billing Customer" paginates ($helpers.httpRequest, page_size 50) so it
+// never misses an older record — that pagination is exactly what prevents duplicate
+// customers. This patch reverts to a single fetch() with NO pagination, which would
+// reintroduce the miss. The live version is verified in sync with
+// deploy-invoice-request-intake.js. Kept for audit trail only.
+// ─────────────────────────────────────────────────────────────────────────────
+if (require.main === module) {
+  console.error('SUPERSEDED patch (2026-06-23) — refusing to run; live already has a better Lookup Billing Customer. See banner.');
+  process.exit(1);
+}
+
 const https = require('https');
 
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';

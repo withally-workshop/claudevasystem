@@ -143,8 +143,16 @@ assert.match(deploySource, /client_email/, 'Expected customer lookup to use subm
 assert.match(deploySource, /email-first/i, 'Expected customer resolution to document email-first matching');
 assert.match(deploySource, /encodeURIComponent\(ctx\.client_email/i, 'Expected Airwallex customer lookup to query by email first');
 assert.match(deploySource, /encodeURIComponent\(ctx\.client_name/i, 'Expected Airwallex customer lookup to fall back to client name');
-assert.match(deploySource, /resolveByEmail/i, 'Expected customer resolution code to prefer email matches');
-assert.match(deploySource, /resolveByName/i, 'Expected customer resolution code to fall back to name matches');
+// Customer resolution (verified in sync with live 2026-06-23): the live + deploy-script
+// implementation uses exact-email match within results with an ambiguity block, an
+// exact-unique name fallback, and a test/internal-customer guard. (It does NOT use the
+// abandoned resolveByEmail/resolveByName/mostRecent patch approach — that was never
+// deployed and would pick a duplicate; see neutralized patch-intake-*-customer.js.)
+assert.match(deploySource, /const emailMatches = clientEmail/, 'Expected customer resolution to prefer exact email matches within results');
+assert.match(deploySource, /ambiguous_email/, 'Expected customer resolution to block on an ambiguous email (more than one match)');
+assert.match(deploySource, /const nameMatches = items\.filter/, 'Expected customer resolution to fall back to an exact unique name match');
+assert.match(deploySource, /function isTestCustomer/, 'Expected customer resolution to block internal/test customers');
+assert.match(deploySource, /hasMore = resp\.has_more/, 'Expected customer lookup to paginate all result pages (avoids missing older records)');
 assert.match(deploySource, /Create Products/, 'Expected product creation node');
 assert.match(deploySource, /Route Product Create Outcome/, 'Expected product create outcome route');
 assert.match(deploySource, /Create Prices/, 'Expected price creation node');

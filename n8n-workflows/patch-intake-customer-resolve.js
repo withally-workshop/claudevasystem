@@ -7,6 +7,20 @@
 //
 // Safe to re-run: GET → patch in memory → PUT. Skips if already patched.
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ⛔ SUPERSEDED 2026-06-23 — DO NOT RUN.
+// The live "Resolve Customer" node uses a later, better implementation (exact-email
+// match + ambiguity block + exact-unique name fallback + test/internal-customer guard)
+// that is verified in sync with deploy-invoice-request-intake.js. This patch's
+// 'mostRecent' approach would DOWNGRADE live: it picks the most-recently-updated match
+// (i.e. a duplicate, the 2026-06-23 "Get Customers" failure mode) and drops the
+// test-customer safety guard. Kept for audit trail only.
+// ─────────────────────────────────────────────────────────────────────────────
+if (require.main === module) {
+  console.error('SUPERSEDED patch (2026-06-23) — refusing to run; live already has a better Resolve Customer. See banner.');
+  process.exit(1);
+}
+
 const https = require('https');
 
 const N8N_URL = 'https://noatakhel.app.n8n.cloud';
