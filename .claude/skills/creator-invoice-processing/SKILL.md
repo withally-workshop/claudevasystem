@@ -122,7 +122,7 @@ Post the ready-to-create handoff to C0AQZGJDR38 (see Reporting). John creates th
 Only after the prep package is posted (never on receipt), and only if the sender is on the hardcoded allowlist (John, Noa, Jeneena, Amanda, Shin, Sybil). Plain confirmation, no Airwallex detail. Bounces reply immediately (same allowlist gate). Non-allowlisted sender → no reply, #ops-command flag only. See reply templates.
 
 ### Step 10 — Do NOT write the tracker at prep time
-The Creator & AP Bills Tracker is populated **only** by the EOD reconcile job (`Krave — Creator Bills EOD Reconcile`, n8n `FdtmNRozitg711BQ` → bot `/cron/reconcile-bills`), which mirrors the real Airwallex bills (fills Bill IDs by invoice#+amount+currency, appends bills not yet in the sheet). A prep-time row would duplicate or mismatch on currency-converted bills. The prep package in #ops-command is the only output here.
+The Creator & AP Bills Tracker is populated **only** by the EOD reconcile job (`Krave — Creator Bills EOD Reconcile`, n8n `FdtmNRozitg711BQ` → bot `/cron/reconcile-bills`), which mirrors the real Airwallex bills (fills Bill IDs by invoice#+amount+currency, appends bills not yet in the sheet) and posts an EOD summary of what it filled/added to #ops-command. A prep-time row would duplicate or mismatch on currency-converted bills. The prep package in #ops-command is the only output of *this* skill.
 
 ### Step 11 — Save cursor
 `slack_set_last_read(channel_id: C09HN2EBPR7, ts: <newest processed>)`.

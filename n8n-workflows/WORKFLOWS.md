@@ -1880,7 +1880,8 @@ Keeps the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24zn
 | Bill missing from sheet | Row appended |
 | Sheet row missing its Bill ID | Bill ID filled in place |
 | Bill already tracked | Skipped |
-| Endpoint returns | `{ ok, total, filled, added }` (logged by the bot) |
+| Every run (incl. no-op) | Bot posts an EOD summary to **#ops-command** (`C0AQZGJDR38`): bills-checked / filled / added counts, plus a line per filled or added bill (vendor · invoice# · amount · Bill ID) |
+| Endpoint returns | `{ ok, total, filled, added }` (also logged by the bot) |
 
 ### Error Handling
 

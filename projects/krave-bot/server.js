@@ -434,7 +434,25 @@ receiver.router.post('/cron/reconcile-bills', async (req, res) => {
   try {
     const result = await require('./tools/reconcile').reconcileBills();
     console.log('reconcile-bills:', JSON.stringify(result));
-    res.json({ ok: true, ...result });
+    // EOD summary → #ops-command so the team sees what the reconcile did (or that it was a no-op).
+    try {
+      const lines = [];
+      if (!result.filled && !result.added) {
+        lines.push(`:white_check_mark: *Creator Bills reconcile* — no changes. ${result.total} Airwallex bill(s) checked, tracker already in sync.`);
+      } else {
+        lines.push(`:white_check_mark: *Creator Bills reconcile* — ${result.total} bill(s) checked · ${result.filled} Bill ID(s) filled · ${result.added} row(s) added.`);
+        for (const f of result.filledRows || []) {
+          lines.push(`• Filled row ${f.row}: ${f.vendor} — inv ${f.invoice || '—'} · ${f.amount} ${f.currency} · \`${f.billId}\``);
+        }
+        for (const a of result.addedRows || []) {
+          lines.push(`• Added: ${a.vendor} — inv ${a.invoice || '—'} · ${a.amount} ${a.currency} · \`${a.billId}\``);
+        }
+      }
+      await require('./tools/slack').handlers.slack_post_message({ channel: DRAFTS_CHANNEL, text: lines.join('\n') });
+    } catch (e) {
+      console.error('reconcile-bills slack summary failed:', e.message);
+    }
+    res.json({ ok: true, total: result.total, filled: result.filled, added: result.added });
   } catch (e) {
     console.error('reconcile-bills error:', e);
     res.status(500).json({ error: e.message });

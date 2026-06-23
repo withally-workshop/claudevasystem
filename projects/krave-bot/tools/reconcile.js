@@ -35,24 +35,25 @@ async function reconcileBills() {
   });
 
   const today = new Date().toISOString().split('T')[0];
-  let filled = 0, added = 0;
+  const filledRows = [], addedRows = [];
   for (const b of bills) {
     if (existing.has(b.id)) continue;
     const k = `${normInv(b.invoice_number)}|${normAmt(b.amount)}|${String(b.currency || '').trim().toUpperCase()}`;
+    const vendor = vmap[b.vendor_id] || '(unknown vendor)';
     if (blank.has(k)) {
       const i = blank.get(k);
       blank.delete(k);
       await sheets.handlers.sheets_update_row({ spreadsheet_id: 'bills', sheet: TAB, range: `D${i + 2}`, values: [[b.id]] });
-      filled++;
+      filledRows.push({ row: i + 2, vendor, invoice: b.invoice_number || '', amount: b.amount || '', currency: b.currency || '', billId: b.id });
     } else {
       await sheets.handlers.sheets_append_row({
         spreadsheet_id: 'bills', sheet: TAB,
-        values: [today, vmap[b.vendor_id] || '(unknown vendor)', b.invoice_number || '', b.id, b.amount || '', b.currency || '', b.due_date ? String(b.due_date).split('T')[0] : '', '', '', 'Auto-added from Airwallex EOD reconcile'],
+        values: [today, vendor, b.invoice_number || '', b.id, b.amount || '', b.currency || '', b.due_date ? String(b.due_date).split('T')[0] : '', '', '', 'Auto-added from Airwallex EOD reconcile'],
       });
-      added++;
+      addedRows.push({ vendor, invoice: b.invoice_number || '', amount: b.amount || '', currency: b.currency || '', billId: b.id });
     }
   }
-  return { total: bills.length, filled, added };
+  return { total: bills.length, filled: filledRows.length, added: addedRows.length, filledRows, addedRows };
 }
 
 module.exports = { reconcileBills };
