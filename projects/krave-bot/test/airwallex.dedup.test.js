@@ -1,7 +1,9 @@
 'use strict';
 
 // Unit test for the createCustomer email-dedup backstop (2026-06-23 "Get Customers"
-// duplicate incident). Stubs https.request so no network is hit. Run: node airwallex.dedup.test.js
+// duplicate incident). Stubs https.request so no network is hit.
+// NOTE: lives in test/ (NOT tools/) — server.js auto-requires every tools/*.js at boot,
+// so a self-running test there would crash startup. Run: node test/airwallex.dedup.test.js
 
 const assert = require('node:assert/strict');
 const https = require('https');
@@ -10,7 +12,6 @@ process.env.AIRWALLEX_CLIENT_ID = 'test-client';
 process.env.AIRWALLEX_API_KEY = 'test-key';
 
 let createCalled = false;
-let lastCreatedBody = null;
 
 const EXISTING = {
   id: 'bcus_existing',
@@ -42,12 +43,12 @@ https.request = function stubRequest(options, cb) {
   return {
     on() { return this; },
     setTimeout() { return this; },
-    write(buf) { try { lastCreatedBody = JSON.parse(buf.toString()); } catch { /* ignore */ } },
+    write() {},
     end() {},
   };
 };
 
-const { handlers } = require('./airwallex.js');
+const { handlers } = require('../tools/airwallex.js');
 
 (async () => {
   // 1. Exact email match (case-different name) -> reuse, never create.
