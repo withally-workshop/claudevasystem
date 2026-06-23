@@ -51,7 +51,7 @@
 | 23 | Halo - Inventory Alert | `NBvfYPmjdTXzrKfb` | Active | 9 AM PHT daily (Asia/Manila) | Compare product stock vs previous run; alert #halo-home-shopify on OOS changes + newly low-stock (<10 units) |
 | 24 | Crave - Weekly Creator Scrape | `9VtIbccU1dFkoko9` | Active | 11 AM PHT Mondays | Scrape TikTok UGC creators (US + NL, all search terms) via Apify, enrich niche/first-name (Claude Haiku, NEW handles only), dedupe, status-preserving upsert to the Crave master Sheet, report to #krave-creator-outreach + #ops-command |
 | 24 | Halo - Weekly Report | `7N9gEZb7nDS0EDGu` | Active | 9 AM PHT Mondays (Asia/Manila) | Refill due list (filter buyers 75–105 days ago) + upsell gap (showerhead buyers without filters) → post to #halo-home-shopify |
-| 25 | Krave — Creator Bills EOD Reconcile | `FdtmNRozitg711BQ` | Active | 19:00 PHT Mon–Fri | POSTs krave-bot `/cron/reconcile-bills`; bot mirrors Airwallex Spend bills into the Creator & AP Bills Tracker (fills Bill IDs by invoice#+amount+currency, appends missing) |
+| 25 | Krave — Creator Bills EOD Reconcile | `FdtmNRozitg711BQ` | Active | 17:00 PHT Mon–Fri | POSTs krave-bot `/cron/reconcile-bills`; bot mirrors Airwallex Spend bills into the Creator & AP Bills Tracker (fills Bill IDs by invoice#+amount+currency, appends missing) |
 
 ---
 
@@ -1858,7 +1858,7 @@ Keeps the Creator & AP Bills Tracker (`14kiX9MnWyel_4_OxvL2TlnOAqBqFwwECf7Dm24zn
 
 | Type | Details |
 |------|---------|
-| Schedule | `0 19 * * 1-5` (Asia/Manila) — 19:00 PHT, Mon–Fri |
+| Schedule | `0 17 * * 1-5` (Asia/Manila) — 17:00 PHT, Mon–Fri |
 
 ### Node Flow
 

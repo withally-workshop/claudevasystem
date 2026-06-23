@@ -3,7 +3,7 @@
 /**
  * Krave — Creator Bills EOD Reconcile (trigger)
  *
- * Tiny scheduler: every weekday EOD (19:00 PHT) it POSTs the krave-bot endpoint
+ * Tiny scheduler: every weekday EOD (17:00 PHT) it POSTs the krave-bot endpoint
  * /cron/reconcile-bills, which mirrors Airwallex Spend bills into the Creator &
  * AP Bills Tracker (fills missing Bill IDs + appends bills not yet in the sheet).
  * All the work + credentials live in the bot; this workflow only triggers it.
@@ -31,7 +31,7 @@ const workflow = {
       id: 'n1', name: 'Schedule Trigger (EOD)',
       type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2,
       position: [260, 300],
-      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 19 * * 1-5' }] } },
+      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 17 * * 1-5' }] } },
     },
     {
       id: 'n2', name: 'POST reconcile endpoint',
