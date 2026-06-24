@@ -535,6 +535,13 @@ function invoiceIdsFromEvent(body) {
   for (const v of [obj.id, obj.invoice_id, obj.invoice, body && body.resource_id, body && body.source_id]) {
     if (typeof v === 'string' && v.startsWith('inv_')) ids.add(v);
   }
+  // Deep fallback: pull any inv_ id from anywhere in the payload, so charge /
+  // payment_attempt / payment_link events that reference the invoice in a nested
+  // field still trigger a reconcile (re-verified via the API regardless).
+  try {
+    const m = JSON.stringify(body || {}).match(/inv_[a-z0-9]{8,}/gi);
+    if (m) m.forEach((id) => ids.add(id));
+  } catch { /* ignore */ }
   return [...ids];
 }
 
