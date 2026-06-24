@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const crypto = require('crypto');
 
 // Load .env from repo root
 const envPath = path.resolve(__dirname, '../../.env');
@@ -402,7 +403,7 @@ HANDLERS['get_session_file'] = ({ session_key, filename }) => {
 // /api/chat — dashboard chatbot endpoint
 // ---------------------------------------------------------------------------
 
-receiver.router.use(require('express').json({ limit: '10mb' }));
+receiver.router.use(require('express').json({ limit: '10mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 receiver.router.use('/api/chat', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -475,6 +476,82 @@ receiver.router.post('/cron/reconcile-bills', async (req, res) => {
     res.json({ ok: true, total: result.total, filled: result.filled, added: result.added });
   } catch (e) {
     console.error('reconcile-bills error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Payment reconcile — poll Airwallex for the true paid-status of open invoices
+// and mark the paid ones in the AR tracker. Email-independent: catches card/link
+// payments that settle with NO deposit email (the gap that left INV-N06BN4Z8-0001
+// "unpaid" on 2026-06-23). Three triggers, one write path:
+//   - hourly in-bot interval (below)
+//   - POST /cron/reconcile-payments  (manual / scheduled)
+//   - POST /webhook/airwallex        (Airwallex paid event — real-time)
+// ---------------------------------------------------------------------------
+
+const payments = require('./tools/reconcile-payments');
+
+// Hourly sweep. First run 5 min after boot so a redeploy doesn't trigger an
+// immediate full sweep; then every 60 min.
+setTimeout(() => {
+  const run = () => payments.reconcilePayments().catch((e) => console.error('reconcile-payments interval error:', e.message));
+  run();
+  setInterval(run, 60 * 60 * 1000);
+}, 5 * 60 * 1000);
+
+receiver.router.post('/cron/reconcile-payments', async (req, res) => {
+  if (!process.env.CRON_SECRET || (req.headers['x-cron-secret'] || '') !== process.env.CRON_SECRET) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  try {
+    const result = await payments.reconcilePayments();
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    console.error('reconcile-payments error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Airwallex webhook → real-time mark-paid. Signature-verified when
+// AIRWALLEX_WEBHOOK_SECRET is set; reconcileInvoiceById re-verifies via the API
+// regardless, so a spoofed/duplicate event can never falsely mark anything paid.
+function airwallexSigOk(req) {
+  const secret = process.env.AIRWALLEX_WEBHOOK_SECRET;
+  if (!secret) return { ok: true, unverified: true }; // not configured yet
+  const ts = req.headers['x-timestamp'];
+  const sig = req.headers['x-signature'];
+  if (!ts || !sig) return { ok: false };
+  const raw = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body || {});
+  const expected = crypto.createHmac('sha256', secret).update(String(ts) + raw).digest('hex');
+  try {
+    return { ok: sig.length === expected.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)) };
+  } catch { return { ok: false }; }
+}
+
+function invoiceIdsFromEvent(body) {
+  const ids = new Set();
+  const obj = (body && body.data && body.data.object) || {};
+  for (const v of [obj.id, obj.invoice_id, obj.invoice, body && body.resource_id, body && body.source_id]) {
+    if (typeof v === 'string' && v.startsWith('inv_')) ids.add(v);
+  }
+  return [...ids];
+}
+
+receiver.router.post('/webhook/airwallex', async (req, res) => {
+  const sig = airwallexSigOk(req);
+  if (!sig.ok) return res.status(401).json({ error: 'bad signature' });
+  if (sig.unverified) console.warn('airwallex webhook: AIRWALLEX_WEBHOOK_SECRET not set — processing unverified');
+  try {
+    const ids = invoiceIdsFromEvent(req.body);
+    const results = [];
+    for (const id of ids) {
+      try { results.push({ id, ...(await payments.reconcileInvoiceById(id)) }); }
+      catch (e) { results.push({ id, error: e.message }); }
+    }
+    res.json({ ok: true, event: req.body && req.body.name, results });
+  } catch (e) {
+    console.error('airwallex webhook error:', e);
     res.status(500).json({ error: e.message });
   }
 });
