@@ -128,6 +128,8 @@ Runs two parallel detection paths every hour: (1) scans `noa@kravemedia.co` for 
 
 **Airwallex mark-as-paid is confidence-gated + verified (v7, 2026-06-11).** Unconditional auto-mark was removed in May 2026 after the matcher mistakenly marked a wrong invoice paid (Airwallex has no unpay API). v7 re-introduces it safely: only high-confidence full payments (invoice-number match, or exact full-amount + client match) are auto-marked, and only after re-fetching the live Airwallex invoice and verifying currency, total, and unpaid status. Everything else keeps the tracker write and gets an explicit "NEEDS MANUAL mark-as-paid" line in the Slack alert. Partial payments set Col J `Partial Payment` and update Col Q; full payments set Col J `Payment Complete`. Column N is formula-only.
 
+**Card / hosted-link payments are caught by the krave-bot Payment Reconcile (2026-06-24).** These settle net-of-fees with **no deposit email**, so the email path can't see them — this left `INV-N06BN4Z8-0001` showing unpaid on 2026-06-23 despite the client paying via the link. The bot polls each open invoice's Airwallex `payment_status` directly and marks paid ones in the tracker — hourly, plus `POST /cron/reconcile-payments` (manual) and `POST /webhook/airwallex` (real-time, HMAC-verified). Email-independent backstop; full details in WORKFLOWS.md → Payment Detection → "Complementary: krave-bot Payment Reconcile".
+
 **Workflow ID:** `NurOLZkg3J6rur5Q`
 
 **Webhook (manual trigger):**

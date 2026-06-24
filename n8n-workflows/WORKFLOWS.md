@@ -191,6 +191,22 @@ Detects client payments and updates the tracker. Runs three detection paths in p
 7. **Cross-run idempotency** — every processed `emailId` is added to `staticData.processedEmailIds` (last 500). Re-runs skip already-seen emails even if `lastRunTs` has been reset.
 8. **Time-windowing** — Gmail query uses `after:{lastRunTs}` since last run. First run falls back to `newer_than:1d`.
 
+### Complementary: krave-bot Payment Reconcile (2026-06-24)
+
+Payment Detection is **email-driven** — it only sees payments that generate an Airwallex deposit email (bank transfers). **Card / hosted-link payments** settle net-of-fees with **no deposit email**, so they are invisible to it. That left `INV-N06BN4Z8-0001` (Get Customers, SGD 1300) showing "unpaid" in the tracker on 2026-06-23 even though the client had already paid via the pay link.
+
+The **krave-bot Payment Reconcile** (`projects/krave-bot/tools/reconcile-payments.js`) closes that gap. It is **email-independent**: it polls each open invoice's Airwallex `payment_status` directly via `airwallex_get_invoice` (the raw response — `airwallex_get_billing_invoice` trims it and drops `payment_status`/`paid_at`), and marks the paid ones in the tracker (Col J → `Payment Complete`, M → paid date, Q → amount paid; **never** N). It only writes the tracker, never mutates Airwallex.
+
+Three triggers, one write path (`markPaid`):
+
+| Trigger | Detail |
+|---|---|
+| Hourly in-bot interval | `setInterval` in `server.js`; first run 5 min after boot |
+| `POST /cron/reconcile-payments` | manual / scheduled; `x-cron-secret` guard (`CRON_SECRET`) |
+| `POST /webhook/airwallex` | real-time on Airwallex paid events; HMAC-verified when `AIRWALLEX_WEBHOOK_SECRET` is set. Each invoice is **re-verified via the API**, so a spoofed/duplicate event can never falsely mark anything paid. |
+
+Posts a `#payments-invoices-updates` summary only when it newly marks something paid (silent otherwise). Idempotent — skips invoices already `Payment Complete` / `Void`. Verified live 2026-06-24 (`{checked:6, marked:0}`; webhook smoke-test idempotent-skipped the already-paid invoice).
+
 ### Hardening Notes (May 2026 incident → v4 → v5.1)
 
 In May 2026 the matcher's amount-only fallback wrongly assigned a Little Saints deposit to WELLE PTY LTD (both happened to have $4,600 USD invoices open at the same time) and the workflow then auto-mark-paid WELLE in Airwallex via API. Airwallex has **no unpay endpoint** — the only fix was a credit-note-and-replace process. The hardening rolled out in three patches:
