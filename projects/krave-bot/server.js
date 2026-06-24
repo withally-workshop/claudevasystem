@@ -41,7 +41,7 @@ fs.readdirSync(path.join(__dirname, 'tools'))
 // Anthropic client
 // ---------------------------------------------------------------------------
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 3 });
 const SYSTEM_PROMPT = buildSystemPrompt();
 const CACHED_SYSTEM = [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }];
 
@@ -107,6 +107,17 @@ async function buildUserContent(text, files) {
   return blocks.length === 1 && !supported.length ? text : blocks;
 }
 
+// Map low-level errors to a clean Slack message. A transient model-connection drop
+// (e.g. "Premature close") must never reach the channel as a raw stack — tell the
+// user to retry; the real error is still logged via console.error for debugging.
+function userFacingError(e) {
+  const msg = (e && e.message) || String(e);
+  if (/premature close|econnreset|socket hang up|fetch failed|terminated|etimedout|epipe|overloaded|connection error|529/i.test(msg)) {
+    return '⚠️ I hit a temporary connection issue reaching the model. Give it a moment and try again.';
+  }
+  return `⚠️ Something went wrong handling that — try again or rephrase. (${msg.slice(0, 140)})`;
+}
+
 async function runAgent(userContent, convKey) {
   // reset command clears corrupt/stale history
   const rawText = typeof userContent === 'string' ? userContent : (userContent.find((b) => b.type === 'text') || {}).text || '';
@@ -144,10 +155,19 @@ async function runAgent(userContent, convKey) {
           });
           break;
         } catch (e) {
-          const isOverloaded = e.status === 529 || (e.message && e.message.includes('overloaded'));
+          const emsg = (e && e.message) || '';
+          const isOverloaded = e.status === 529 || emsg.includes('overloaded');
           const isRateLimit = e.status === 429;
+          // Transient connection drops (e.g. "Premature close", ECONNRESET, fetch
+          // failed) otherwise reach Slack as a raw error — retry a few times first.
+          const isConnDrop = (e && e.name === 'APIConnectionError')
+            || /premature close|econnreset|socket hang up|fetch failed|terminated|etimedout|epipe|connection error/i.test(emsg);
           if (isOverloaded && attempt < 3) {
             await new Promise((r) => setTimeout(r, (attempt + 1) * 8000));
+            continue;
+          }
+          if (isConnDrop && attempt < 3) {
+            await new Promise((r) => setTimeout(r, (attempt + 1) * 1500));
             continue;
           }
           if (isRateLimit) {
@@ -304,7 +324,7 @@ app.event('message', async ({ event, say, client }) => {
       await say({ text: reply, thread_ts: event.thread_ts });
     } catch (e) {
       console.error('Thread follow-up error:', e);
-      await say({ text: `Error: ${e.message}`, thread_ts: event.thread_ts });
+      await say({ text: userFacingError(e), thread_ts: event.thread_ts });
     }
     return;
   }
@@ -323,7 +343,7 @@ app.event('message', async ({ event, say, client }) => {
     await say({ text: reply, thread_ts: event.ts });
   } catch (e) {
     console.error('DM handler error:', e);
-    await say({ text: `Error: ${e.message}` });
+    await say({ text: userFacingError(e) });
   }
 });
 
@@ -340,7 +360,7 @@ app.event('app_mention', async ({ event, say, client }) => {
     await say({ text: reply, thread_ts: event.thread_ts || event.ts });
   } catch (e) {
     console.error('Mention handler error:', e);
-    await say({ text: `Error: ${e.message}`, thread_ts: event.thread_ts || event.ts });
+    await say({ text: userFacingError(e), thread_ts: event.thread_ts || event.ts });
   }
 });
 
